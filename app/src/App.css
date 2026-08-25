@@ -1,105 +1,17 @@
+@import "./ui/buttons.css";
+
 .app {
   position: relative;
+  max-width: 1240px;
+  margin: 0 auto;
   height: 100vh;
   min-height: 640px;
   display: flex;
   flex-direction: column;
   background: var(--surface);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
   overflow: hidden;
-}
-
-.titlebar {
-  height: 48px;
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-
-.brand .mark {
-  width: 22px;
-  height: 22px;
-  border-radius: 6px;
-  background: linear-gradient(150deg, var(--ember), var(--ember-press));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
-  flex: 0 0 auto;
-}
-
-.brand b {
-  font-weight: 800;
-  letter-spacing: -0.02em;
-  font-size: 14px;
-}
-
-.divider {
-  width: 1px;
-  height: 20px;
-  background: var(--border-strong);
-  margin: 0 2px;
-}
-
-.modelctl {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  padding: 6px 11px;
-  border-radius: 9px;
-  border: 1px solid var(--border-strong);
-  background: var(--surface-2);
-  color: var(--ink);
-  box-shadow: var(--shadow);
-}
-
-.modelctl:hover {
-  background: var(--raised);
-}
-
-.modelctl .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--faint);
-  flex: 0 0 auto;
-}
-
-.modelctl-text {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  font-weight: 500;
-}
-
-.titlebar .spacer {
-  flex: 1;
-}
-
-.conn {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-family: var(--mono);
-  font-size: 11.5px;
-  font-weight: 500;
-  padding: 4px 10px;
-  border-radius: 999px;
-  background: var(--warn-tint);
-  color: var(--warn);
-  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
-}
-
-.conn .dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--warn);
 }
 
 .body {
@@ -108,15 +20,32 @@
   min-height: 0;
 }
 
-.sidebar {
-  width: 262px;
-  flex: 0 0 auto;
-  background: var(--bg);
-  border-right: 1px solid var(--border);
-}
-
 .main {
   flex: 1;
   min-width: 0;
   background: var(--surface);
+  overflow-y: auto;
+}
+
+.chat-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+  padding: 30px;
+}
+
+.chat-empty svg {
+  width: 26px;
+  height: 26px;
+  color: var(--faint);
+}
+
+.chat-empty b {
+  color: var(--ink);
+  font-size: 14px;
 }

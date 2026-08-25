@@ -1,36 +1,60 @@
 import "./App.css";
+import { LoadPane } from "./ui/LoadPane";
+import { OfflineBanner } from "./ui/OfflineBanner";
+import { RemudaProvider, useRemuda } from "./ui/state";
+import { Settings } from "./ui/Settings";
+import { Sidebar } from "./ui/Sidebar";
+import { TopNav } from "./ui/TopNav";
 
 /**
- * Minimal app shell: top bar (brand + model control placeholder), an empty
- * chats sidebar, and an empty main area. Styled with the Embigo tokens from
- * index.css. Later waves fill in the load pane, chat, Modelfile editor,
- * pull, and settings surfaces (see SPEC.md §5).
+ * M1 is read-only + load: there's no chat surface yet (that's M2), so the
+ * main area is the mockup's empty state pointing at the model control.
+ */
+function ChatPlaceholder() {
+  return (
+    <div className="chat-empty">
+      <svg
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={1.8}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+      </svg>
+      <b>Load a model, then start a chat</b>
+    </div>
+  );
+}
+
+function Shell() {
+  const { view } = useRemuda();
+
+  return (
+    <div className="app">
+      <TopNav />
+      <OfflineBanner />
+      <div className="body">
+        <Sidebar />
+        <main className="main">{view === "settings" ? <Settings /> : <ChatPlaceholder />}</main>
+      </div>
+      <LoadPane />
+    </div>
+  );
+}
+
+/**
+ * App shell (SPEC.md §4, §5): global top nav with the model control, the
+ * chats sidebar, the main area, and the load-pane popover. Later waves
+ * (M2+) fill in chat, the Modelfile editor, and Pull.
  */
 function App() {
   return (
-    <div className="app">
-      <header className="titlebar">
-        <div className="brand">
-          <span className="mark" aria-hidden="true" />
-          <b>Remuda</b>
-        </div>
-        <div className="divider" />
-        <button className="modelctl" type="button" title="Choose and load a model">
-          <span className="dot" aria-hidden="true" />
-          <span className="modelctl-text">No model loaded</span>
-        </button>
-        <div className="spacer" />
-        <div className="conn">
-          <span className="dot" aria-hidden="true" />
-          <span>Connecting…</span>
-        </div>
-      </header>
-
-      <div className="body">
-        <aside className="sidebar" aria-label="Chats" />
-        <main className="main" />
-      </div>
-    </div>
+    <RemudaProvider>
+      <Shell />
+    </RemudaProvider>
   );
 }
 
