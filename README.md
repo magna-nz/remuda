@@ -1,8 +1,8 @@
-# Hearth
+# Remuda
 
 A simple, chat-first desktop UI for [Ollama](https://ollama.com). Load any
 installed model, chat to test it, and tweak or fork its **Modelfile** in
-place — Hearth then has Ollama stop and reload the model with your changes.
+place — Remuda then has Ollama stop and reload the model with your changes.
 
 > **Status:** design stage. This repo currently holds the product spec and an
 > interactive mockup — no application code yet. See [`SPEC.md`](SPEC.md).
@@ -11,9 +11,9 @@ place — Hearth then has Ollama stop and reload the model with your changes.
 
 - **One place to load models.** A global model control opens a load pane
   listing every installed model; pick a model and a Modelfile (the base or a
-  tuned variant) and **Load** — Hearth loads it in Ollama.
+  tuned variant) and **Load** — Remuda loads it in Ollama.
 - **Chats down the left.** Each chat is a saved session that remembers the
-  model it ran on; if that model isn't loaded when you reopen it, Hearth says
+  model it ran on; if that model isn't loaded when you reopen it, Remuda says
   so. **New chat** opens on the currently loaded model.
 - **Edit the Modelfile without leaving the chat.** A friendly form and the
   raw Modelfile, kept in sync.
@@ -29,7 +29,7 @@ ground, indigo→violet brand) with **Inter** + **IBM Plex Mono**.
 
 ## Requirements
 
-- **Ollama** running locally (`http://127.0.0.1:11434`). Hearth is a client —
+- **Ollama** running locally (`http://127.0.0.1:11434`). Remuda is a client —
   it doesn't bundle Ollama or run inference itself.
 
 ## Install
@@ -37,7 +37,7 @@ ground, indigo→violet brand) with **Inter** + **IBM Plex Mono**.
 Planned distribution is **Homebrew** (not a DMG):
 
 ```bash
-brew install magna-nz/tap/hearth   # planned — not yet published
+brew install magna-nz/tap/remuda   # planned — not yet published
 ```
 
 ## The mockup

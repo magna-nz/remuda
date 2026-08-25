@@ -1,6 +1,6 @@
-# Hearth — Product & UX Spec
+# Remuda — Product & UX Spec
 
-> **Hearth** is a simple, chat-first desktop UI over a locally running
+> **Remuda** is a simple, chat-first desktop UI over a locally running
 > [Ollama](https://ollama.com). Browse and load models, chat to test them,
 > and tweak or fork a model's **Modelfile** in place — then have Ollama
 > stop and reload it with your changes.
@@ -22,7 +22,7 @@ A calm, local-first desktop app that lets a person:
 1. **Load a model in one place** — a global model control in the top nav
    opens a **load pane** listing every installed model. Pick a model and a
    **Modelfile** (the base/"OG", or a tuned variant), click **Load**, and
-   Hearth loads it in Ollama with a progress bar.
+   Remuda loads it in Ollama with a progress bar.
 2. **Chat to test it** — chats live down the left. Each is a saved session
    that **remembers the model it ran on**; **New chat** opens on the
    currently loaded model.
@@ -31,14 +31,14 @@ A calm, local-first desktop app that lets a person:
    prompt and parameters via a friendly form *or* the raw Modelfile.
 4. **Save or Save as** — **Save** overwrites the current Modelfile;
    **Save as…** asks for a name and a directory and creates a new tuned
-   variant. Either way Hearth **stops the model and reloads it** through
+   variant. Either way Remuda **stops the model and reloads it** through
    Ollama so your chats immediately use the new Modelfile.
 5. **Pull new models** from the registry with visible progress.
 6. **Point at an Ollama server** and manage app settings.
 
 **Non-goals (v1):** training/fine-tuning weights, multi-user/remote hosting,
 prompt libraries or eval harnesses, cloud sync, GGUF import UI (deferred —
-§12). Hearth is a *management + tinkering* surface, not an IDE.
+§12). Remuda is a *management + tinkering* surface, not an IDE.
 
 ## 2. Who it's for
 
@@ -50,20 +50,20 @@ remembering the flags.
 
 ## 3. Hard requirement: Ollama must be running
 
-Hearth is a client. It owns no models and runs no inference. If it can't
+Remuda is a client. It owns no models and runs no inference. If it can't
 reach the server, it is mostly inert and says so plainly (§9).
 
 - Default server: `http://127.0.0.1:11434` (Ollama's default).
-- The address is configurable (§8) but **defaults to loopback**, and Hearth
+- The address is configurable (§8) but **defaults to loopback**, and Remuda
   never binds a listener of its own.
-- On launch, and on a timer, Hearth health-checks the server
+- On launch, and on a timer, Remuda health-checks the server
   (`GET /api/version`).
 
 ## 4. Look & feel
 
 - **Palette: Embigo** — ShipPromptly's warm-neutral **dark** surface with an
   **indigo→violet** brand gradient (`#5f63c4 → #6b4fa8`). Because Embigo is
-  dark-committed, Hearth is **single-theme dark** by design — no light mode,
+  dark-committed, Remuda is **single-theme dark** by design — no light mode,
   no theme toggle.
 - **Type:** **Inter** for UI/prose, **IBM Plex Mono** for everything
   machine-facing — model tags, Modelfile text, parameters, the token stream.
@@ -77,7 +77,7 @@ reach the server, it is mostly inert and says so plainly (§9).
 
 ```
 ┌ Global nav ──────────────────────────────────────────────┐
-│ ● Hearth │ [ llama3.1:8b · Original ▾ ]   [connected] │   ← model control
+│ ● Remuda │ [ llama3.1:8b · Original ▾ ]   [connected] │   ← model control
 ├──────────────┬───────────────────────────────────────────┤
 │ Chats        │ Chat · Modelfile        Pull · Settings   │  ← section tabs
 │              │                                            │
@@ -128,7 +128,7 @@ Loading = a warm request (`POST /api/generate` with an empty `prompt`, or
   `Shift+Enter` newlines. A note reminds that messages *test* the model and
   don't change its saved Modelfile.
 - **Reopening a session whose model is unloaded.** A session stores its
-  effective model tag. On open, Hearth checks `/api/ps`; if that tag isn't
+  effective model tag. On open, Remuda checks `/api/ps`; if that tag isn't
   loaded (Ollama dropped it after `keep_alive`, or a *different* model is
   loaded now) it shows a **"model unloaded" banner** naming the session's
   model and what *is* loaded, with **Load now**. Opening never silently
@@ -188,7 +188,7 @@ opaque entry in `~/.ollama`. The default directory is set in Settings (§5.6);
 Save as… can override per-save.
 
 **Variants.** A model whose `FROM` is another *local* model is a tuned
-variant of that base. Hearth groups base + variants (the Modelfile picker in
+variant of that base. Remuda groups base + variants (the Modelfile picker in
 §5.1). The mapping comes from each model's `FROM` (`/api/show`) plus the
 Modelfiles found in the Modelfile directory.
 
@@ -215,7 +215,7 @@ Source: `POST /api/pull` `{ model, stream: true }`; aggregate
 - **Keep models loaded** — `keep_alive` (5 min / 30 min / forever).
 - **Models directory** — read-only `~/.ollama/models`, with *Reveal*.
 - **Modelfile directory** — where **Save as…** writes tuned Modelfiles and
-  which Hearth scans for variants. Chooseable; default `~/ollama/modelfiles`.
+  which Remuda scans for variants. Chooseable; default `~/ollama/modelfiles`.
 - **Confirm before deleting a model** — toggle.
 
 ---
@@ -299,9 +299,9 @@ Settings (kept out of v1 by default — §12).
 ## 10. Distribution
 
 - **Install via Homebrew — not a DMG.** Ship a Homebrew formula/cask (likely
-  a tap, e.g. `brew install magna-nz/tap/hearth`) so install and upgrade are
+  a tap, e.g. `brew install magna-nz/tap/remuda`) so install and upgrade are
   one command and stay current. The DMG path is explicitly out.
-- Hearth depends on Ollama at runtime but does **not** bundle it; the formula
+- Remuda depends on Ollama at runtime but does **not** bundle it; the formula
   can declare Ollama a dependency or the app can prompt to install it.
 - The desktop shell is stack-agnostic per this spec; whatever it's built on,
   the artifact is a signed macOS app delivered through the tap. (Linux/Windows
@@ -323,8 +323,10 @@ Settings (kept out of v1 by default — §12).
 
 ## 12. Open questions
 
-1. **Name.** "Hearth" is the working name; confirm before M1 (and check the
-   Homebrew formula name isn't taken).
+1. **Name.** "Remuda" — confirmed free as a Homebrew formula/cask, on npm and
+   crates.io, and with no prominent same-space GitHub project as of naming.
+   (A *remuda* is the herd of horses a ranch hand picks their mount from — the
+   stable of local models you load and swap between.)
 2. **Modelfile sync fidelity.** Which of the grammar does the form model vs.
    leave to passthrough? Proposal: `FROM`, `SYSTEM`, common `PARAMETER`s and
    `stop`; everything else passthrough + an advanced raw view.
