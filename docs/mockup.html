@@ -1,0 +1,695 @@
+<meta charset="utf-8">
+<title>Hearth</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  /* Embigo palette (ShipPromptly §50): warm-neutral dark surfaces + indigo→violet brand.
+     Embigo is dark-committed, so Hearth is single-theme by design — like the ShipPromptly shell.
+     Values taken verbatim from crates/forgehub-server/web/src/index.css. */
+  :root {
+    --bg: #191817; --surface: #1e1d1b; --surface-2: #262523; --raised: #302e2b;
+    --border: #3a3733; --border-strong: #55504a;
+    --ink: #f2efe9; --ink-2: #dcd7ce; --muted: #a29c91; --faint: #7b756a;
+    --ember: #6165c6; --ember-press: #6b4fa8; --ember-tint: #262445; --ember-ink: #a9a5ea;
+    --good: #89c360; --good-tint: #1e2a16; --warn: #f1ae27; --warn-tint: #2e2610;
+    --crit: #e75140; --crit-tint: #2f1714;
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px -10px rgba(0,0,0,.55);
+    --shadow-lg: 0 22px 60px -16px rgba(0,0,0,.7);
+    --radius: 12px;
+    --ui: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", "Cascadia Code", monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--ui); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  h1,h2,h3,h4 { margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+  button { font-family: inherit; cursor: pointer; }
+  [hidden] { display: none !important; }
+  ::selection { background: var(--ember-tint); }
+
+  .app { position: relative; max-width: 1240px; margin: 0 auto; height: 100vh; min-height: 640px; display: flex; flex-direction: column; background: var(--surface); border-left: 1px solid var(--border); border-right: 1px solid var(--border); overflow: hidden; }
+
+  /* title bar */
+  .titlebar { height: 48px; flex: 0 0 auto; display: flex; align-items: center; gap: 12px; padding: 0 14px; background: var(--surface); border-bottom: 1px solid var(--border); }
+  .traffic { display: flex; gap: 8px; }
+  .traffic i { width: 11px; height: 11px; border-radius: 50%; background: var(--border-strong); display: block; }
+  .brand { display: flex; align-items: center; gap: 9px; margin-left: 4px; }
+  .mark { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(150deg, var(--ember), var(--ember-press)); display: grid; place-items: center; color: #fff; flex: 0 0 auto; box-shadow: inset 0 1px 0 rgba(255,255,255,.3); }
+  .mark svg { width: 13px; height: 13px; }
+  .brand b { font-weight: 800; letter-spacing: -0.02em; font-size: 14px; }
+  .divider { width: 1px; height: 20px; background: var(--border-strong); margin: 0 2px; }
+  /* model control (top) */
+  .modelctl { display: inline-flex; align-items: center; gap: 9px; padding: 6px 11px; border-radius: 9px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--ink); box-shadow: var(--shadow); }
+  .modelctl:hover { background: var(--raised); }
+  .modelctl .d { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px var(--good-tint); flex: 0 0 auto; }
+  .modelctl .d.off { background: var(--faint); box-shadow: none; }
+  .modelctl .mctl-t { font-family: var(--mono); font-size: 12.5px; font-weight: 500; }
+  .modelctl svg { width: 13px; height: 13px; color: var(--muted); }
+  .titlebar .spacer { flex: 1; }
+  .conn { display: inline-flex; align-items: center; gap: 7px; font-family: var(--mono); font-size: 11.5px; font-weight: 500; padding: 4px 10px; border-radius: 999px; background: var(--good-tint); color: var(--good); border: 1px solid color-mix(in srgb, var(--good) 25%, transparent); }
+  .conn .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--good) 22%, transparent); }
+  .iconbtn { width: 30px; height: 30px; display: grid; place-items: center; border: 1px solid transparent; border-radius: 8px; background: transparent; color: var(--muted); }
+  .iconbtn:hover { background: var(--raised); color: var(--ink); }
+  .iconbtn svg { width: 16px; height: 16px; }
+
+  .body { flex: 1; display: flex; min-height: 0; }
+
+  /* buttons */
+  .btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 9px; padding: 8px 12px; font-weight: 600; font-size: 13px; border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--ink); transition: background .12s, border-color .12s, transform .04s; }
+  .btn:hover { background: var(--raised); }
+  .btn:active { transform: translateY(1px); }
+  .btn svg { width: 15px; height: 15px; }
+  .btn.primary { background: var(--ember); border-color: transparent; color: #fff; box-shadow: var(--shadow); }
+  .btn.primary:hover { background: var(--ember-press); }
+  .btn.wide { width: 100%; }
+  .btn.sm { padding: 5px 10px; font-size: 12px; border-radius: 8px; }
+  .btn.ghost { background: transparent; border-color: transparent; color: var(--muted); }
+  .btn.ghost:hover { background: var(--raised); color: var(--ink); }
+  .btn.danger { color: var(--crit); border-color: color-mix(in srgb, var(--crit) 32%, transparent); background: transparent; }
+  .btn.danger:hover { background: var(--crit-tint); }
+
+  /* sidebar = chats */
+  .sidebar { width: 262px; flex: 0 0 auto; background: var(--bg); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-height: 0; }
+  .side-search { padding: 12px 12px 6px; }
+  .search { display: flex; align-items: center; gap: 8px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 9px; padding: 7px 10px; color: var(--muted); }
+  .search svg { width: 14px; height: 14px; flex: 0 0 auto; }
+  .search input { border: 0; background: transparent; outline: none; color: var(--ink); font-family: var(--ui); font-size: 13px; width: 100%; }
+  .search input::placeholder { color: var(--faint); }
+  .side-new { padding: 4px 12px 8px; }
+  .side-label { display: flex; align-items: center; justify-content: space-between; padding: 8px 16px 6px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--faint); }
+  .sesslist { flex: 1; overflow-y: auto; padding: 0 8px 10px; }
+  .sess { display: block; width: 100%; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 10px; padding: 9px 11px; margin-bottom: 2px; }
+  .sess:hover { background: var(--raised); }
+  .sess.active { background: var(--surface-2); border-color: var(--border-strong); box-shadow: var(--shadow); }
+  .sess .stitle { font-size: 13px; font-weight: 600; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sess .smodel { display: flex; align-items: center; gap: 6px; margin-top: 4px; font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  .sess .sdot { width: 6px; height: 6px; border-radius: 50%; background: var(--good); box-shadow: 0 0 0 2px var(--good-tint); flex: 0 0 auto; }
+  .sess .sdot.off { background: transparent; border: 1px solid var(--warn); box-shadow: none; }
+  .sess .stag { color: var(--warn); font-weight: 500; }
+  .sess .stime { margin-left: auto; color: var(--faint); font-family: var(--ui); }
+  .side-foot { border-top: 1px solid var(--border); padding: 10px; display: flex; gap: 8px; }
+
+  /* main + tabs */
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; background: var(--surface); }
+  .tabs { flex: 0 0 auto; display: flex; align-items: center; gap: 2px; padding: 0 16px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .tab { position: relative; padding: 13px 12px 12px; font-size: 13px; font-weight: 600; color: var(--muted); background: transparent; border: 0; border-bottom: 2px solid transparent; }
+  .tab:hover { color: var(--ink); }
+  .tab.active { color: var(--ink); border-bottom-color: var(--ember); }
+  .tabs .spacer { flex: 1; }
+
+  .scroll { flex: 1; overflow-y: auto; min-height: 0; }
+  .panel { display: none; }
+  .panel.active { display: block; }
+  .pad { padding: 22px 26px 40px; max-width: 900px; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+
+  /* chat */
+  .chatmain { display: flex; flex-direction: column; height: 100%; }
+  .chatlog { flex: 1; overflow-y: auto; padding: 22px 24px; display: flex; flex-direction: column; gap: 18px; }
+  .msg { display: flex; gap: 12px; max-width: 90%; }
+  .msg .av { width: 28px; height: 28px; border-radius: 8px; flex: 0 0 auto; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+  .msg.user { align-self: flex-end; flex-direction: row-reverse; }
+  .msg.user .av { background: var(--ink); color: var(--surface); }
+  .msg.bot .av { background: var(--ember-tint); color: var(--ember-ink); font-family: var(--mono); }
+  .bubble { padding: 10px 13px; border-radius: 12px; font-size: 13.5px; line-height: 1.6; }
+  .msg.user .bubble { background: var(--ink); color: var(--surface); border-bottom-right-radius: 4px; }
+  .msg.bot .bubble { background: var(--surface-2); border: 1px solid var(--border); border-bottom-left-radius: 4px; }
+  .bubble code { font-family: var(--mono); font-size: 12px; background: var(--raised); padding: 1px 5px; border-radius: 5px; }
+  .caret { display: inline-block; width: 8px; height: 15px; background: var(--ember); vertical-align: -2px; border-radius: 1px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .caret { animation: none; } }
+  .chat-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--muted); text-align: center; padding: 30px; }
+  .chat-empty svg { width: 26px; height: 26px; color: var(--faint); }
+  .chat-empty b { color: var(--ink); font-size: 14px; }
+  .composer { flex: 0 0 auto; border-top: 1px solid var(--border); padding: 12px 16px; }
+  .composer .box { display: flex; align-items: flex-end; gap: 10px; border: 1px solid var(--border-strong); border-radius: 12px; padding: 8px 8px 8px 13px; background: var(--surface-2); }
+  .composer textarea { flex: 1; border: 0; outline: none; background: transparent; resize: none; font-family: var(--ui); font-size: 13.5px; color: var(--ink); max-height: 120px; }
+  .composer .send { width: 34px; height: 34px; border-radius: 9px; background: var(--ember); color: #fff; border: 0; display: grid; place-items: center; flex: 0 0 auto; }
+  .composer .send svg { width: 16px; height: 16px; }
+  .note-strip { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+  .note-strip code { font-family: var(--mono); background: var(--raised); padding: 1px 6px; border-radius: 5px; color: var(--ink-2); }
+  /* unloaded banner */
+  .chat-banner { display: none; align-items: center; gap: 11px; margin: 12px 16px 0; padding: 10px 13px; border-radius: 10px; background: var(--warn-tint); border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent); }
+  .chat-banner.show { display: flex; }
+  .chat-banner > svg { width: 17px; height: 17px; color: var(--warn); flex: 0 0 auto; }
+  .chat-banner .bt { flex: 1; font-size: 12.5px; color: var(--ink); }
+  .chat-banner .bt code { font-family: var(--mono); }
+
+  /* ---- model load pane (popover) ---- */
+  .mpane-back { position: absolute; inset: 0; z-index: 40; background: rgba(20,15,10,.28); }
+  .mpane { position: absolute; top: 54px; left: 168px; width: 392px; z-index: 50; background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: var(--shadow-lg); overflow: hidden; }
+  .mpane-h { display: flex; align-items: center; padding: 13px 15px; border-bottom: 1px solid var(--border); }
+  .mpane-h b { font-size: 13.5px; }
+  .mpane-h .sub { margin-left: 8px; font-size: 11px; color: var(--faint); font-family: var(--mono); }
+  .mpane-h .x { margin-left: auto; }
+  .mpane-b { padding: 14px 15px; display: flex; flex-direction: column; gap: 15px; }
+  .pfield > label { display: block; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--faint); margin-bottom: 8px; }
+  .pmodels { display: flex; flex-direction: column; gap: 3px; max-height: 186px; overflow-y: auto; }
+  .pmodel { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; border: 1px solid transparent; background: transparent; border-radius: 9px; padding: 8px 9px; color: var(--ink); }
+  .pmodel:hover { background: var(--raised); }
+  .pmodel.active { background: var(--ember-tint); border-color: color-mix(in srgb, var(--ember) 30%, transparent); }
+  .pmodel .pg { width: 28px; height: 28px; border-radius: 7px; flex: 0 0 auto; display: grid; place-items: center; font-family: var(--mono); font-weight: 600; font-size: 11px; background: var(--raised); color: var(--muted); }
+  .pmodel.active .pg { background: var(--ember); color: #fff; }
+  .pmodel .pn { font-family: var(--mono); font-size: 12.5px; font-weight: 500; }
+  .pmodel .ps { font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .pmodel .ptune { margin-left: auto; font-size: 10px; font-weight: 600; color: var(--good); background: var(--good-tint); padding: 2px 7px; border-radius: 999px; }
+  .pvariants { display: flex; flex-wrap: wrap; gap: 7px; }
+  .pv { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; padding: 6px 10px; border-radius: 8px; background: var(--raised); border: 1px solid var(--border); color: var(--ink-2); }
+  .pv:hover { border-color: var(--border-strong); }
+  .pv.active { background: var(--ember); border-color: transparent; color: #fff; }
+  .pv.new { border-style: dashed; color: var(--muted); background: transparent; }
+  .ploadwrap { display: flex; flex-direction: column; gap: 10px; }
+  .pprogress { display: flex; flex-direction: column; gap: 7px; }
+  .pptext { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .meter { height: 7px; border-radius: 999px; background: var(--border); overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--ember); border-radius: 999px; transition: width .12s linear; }
+
+  /* dialog (Save as…) */
+  .dlg-back { position: absolute; inset: 0; z-index: 60; background: rgba(20,15,10,.34); }
+  .dlg { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); z-index: 70; width: 430px; max-width: calc(100% - 32px); background: var(--surface-2); border: 1px solid var(--border-strong); border-radius: 14px; box-shadow: var(--shadow-lg); overflow: hidden; }
+  .dlg-h { display: flex; align-items: center; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+  .dlg-h b { font-size: 14px; }
+  .dlg-h .x { margin-left: auto; }
+  .dlg-b { padding: 16px; display: flex; flex-direction: column; gap: 15px; }
+  .dlg-b .field label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+  .dlg-row { display: flex; gap: 8px; align-items: center; }
+  .dlg-note { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  .dlg-note code { font-family: var(--mono); background: var(--raised); padding: 1px 6px; border-radius: 5px; color: var(--ink-2); }
+  .dlg-f { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface); }
+
+  /* reload toast */
+  .reloadtoast { position: absolute; left: 50%; bottom: 22px; transform: translateX(-50%); z-index: 80; display: flex; align-items: center; gap: 12px; background: var(--surface-2); color: var(--ink); border: 1px solid var(--border-strong); padding: 11px 16px; border-radius: 12px; box-shadow: var(--shadow-lg); }
+  .reloadtoast .rt-txt { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
+  .reloadtoast .meter { background: var(--border); }
+  .reloadtoast .meter i { background: var(--ember); }
+  .rspin { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border-strong); border-top-color: var(--ember); animation: spin .7s linear infinite; flex: 0 0 auto; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .rspin { animation: none; } }
+
+  /* modelfile editor */
+  .split { display: grid; grid-template-columns: 1fr 1fr; height: 100%; }
+  .split .col { min-width: 0; display: flex; flex-direction: column; }
+  .split .col.form { border-right: 1px solid var(--border); }
+  .col-h { padding: 12px 18px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+  .col-h .hint { margin-left: auto; font-size: 11px; color: var(--faint); font-family: var(--mono); }
+  .form-scroll { flex: 1; overflow-y: auto; padding: 18px; display: flex; flex-direction: column; gap: 18px; }
+  .field label { display: block; font-size: 12px; font-weight: 600; color: var(--ink-2); margin-bottom: 6px; }
+  .field .desc { font-size: 11.5px; color: var(--muted); margin: -2px 0 8px; }
+  .input, textarea.input, select.input { width: 100%; border: 1px solid var(--border-strong); background: var(--surface); color: var(--ink); border-radius: 9px; padding: 9px 11px; font-family: var(--mono); font-size: 12.5px; outline: none; }
+  .input:focus, textarea.input:focus, select.input:focus { border-color: var(--ember); box-shadow: 0 0 0 3px var(--ember-tint); }
+  textarea.input { resize: vertical; line-height: 1.6; }
+  select.input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%238A8073' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 11px center; padding-right: 30px; }
+  .slider-row { display: flex; align-items: center; gap: 12px; }
+  .slider-row .val { font-family: var(--mono); font-size: 12.5px; font-weight: 600; min-width: 48px; text-align: right; color: var(--ember-ink); font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; appearance: none; height: 5px; border-radius: 999px; background: var(--border-strong); flex: 1; outline: none; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--ember); border: 2px solid var(--surface-2); box-shadow: var(--shadow); cursor: grab; }
+  input[type=range]::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: var(--ember); border: 2px solid var(--surface-2); cursor: grab; }
+  .chips { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 6px; font-family: var(--mono); font-size: 12px; padding: 4px 8px; border-radius: 7px; background: var(--raised); border: 1px solid var(--border); color: var(--ink-2); }
+  .chip x { color: var(--faint); font-style: normal; cursor: pointer; }
+  .chip.add { border-style: dashed; color: var(--muted); cursor: pointer; }
+  .editor { flex: 1; overflow: auto; background: var(--bg); }
+  .editor pre { margin: 0; padding: 18px; font-family: var(--mono); font-size: 12.5px; line-height: 1.75; color: var(--ink-2); }
+  .editor .kw { color: var(--ember-ink); font-weight: 600; }
+  .editor .str { color: var(--good); }
+  .editor .num { color: var(--ink); font-weight: 600; }
+  .editor .cm { color: var(--faint); }
+  .savebar { flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px; padding: 11px 18px; border-top: 1px solid var(--border); background: var(--surface); }
+  .saveline { display: flex; align-items: center; gap: 10px; }
+  .saveline .eyebrow { flex: 0 0 auto; }
+  .saveline .spacer { flex: 1; }
+  .pathfield { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 6px 10px; background: var(--surface); color: var(--ink-2); font-family: var(--mono); font-size: 12px; min-width: 0; }
+  .pathfield svg { width: 14px; height: 14px; color: var(--muted); flex: 0 0 auto; }
+  .pathfield span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .savebar .note { font-size: 11.5px; color: var(--muted); }
+  .savebar .note code { font-family: var(--mono); background: var(--raised); padding: 1px 6px; border-radius: 5px; color: var(--ink-2); }
+  .namefield { display: flex; align-items: center; border: 1px solid var(--border-strong); border-radius: 9px; overflow: hidden; background: var(--surface); }
+  .namefield input { border: 0; background: transparent; padding: 8px 11px; font-family: var(--mono); font-size: 12.5px; color: var(--ink); outline: none; width: 150px; }
+
+  /* pull */
+  .pullbar { display: flex; gap: 10px; margin-bottom: 8px; }
+  .pullbar .search { flex: 1; border-radius: 9px; }
+  .reg { display: flex; flex-direction: column; }
+  .regrow { display: flex; align-items: center; gap: 13px; padding: 13px 4px; border-bottom: 1px solid var(--border); }
+  .regrow:last-child { border-bottom: 0; }
+  .regrow .ri { width: 36px; height: 36px; border-radius: 9px; background: var(--raised); display: grid; place-items: center; color: var(--muted); flex: 0 0 auto; }
+  .regrow .ri svg { width: 18px; height: 18px; }
+  .regrow .rt { min-width: 0; flex: 1; }
+  .regrow .rt b { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+  .regrow .rt div { font-size: 12px; color: var(--muted); margin-top: 1px; }
+  .regrow .sz { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .progress { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 16px; margin-bottom: 16px; }
+  .progress .top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .progress .top b { font-family: var(--mono); font-size: 13px; }
+  .progress .top .pct { margin-left: auto; font-family: var(--mono); font-size: 13px; font-weight: 600; color: var(--ember-ink); }
+  .layer { display: flex; align-items: center; gap: 10px; font-family: var(--mono); font-size: 11px; color: var(--muted); margin-bottom: 8px; }
+  .layer .lname { width: 118px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .layer .meter { flex: 1; height: 6px; }
+  .layer .meter i { background: var(--good); }
+  .layer .lpct { width: 38px; text-align: right; }
+
+  /* settings */
+  .setgrid { display: flex; flex-direction: column; gap: 14px; }
+  .setrow { display: flex; align-items: center; gap: 16px; padding: 15px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); }
+  .setrow .st { flex: 1; min-width: 0; }
+  .setrow .st b { font-size: 13px; font-weight: 600; }
+  .setrow .st div { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .toggle { width: 40px; height: 24px; border-radius: 999px; background: var(--border-strong); position: relative; border: 0; flex: 0 0 auto; transition: background .15s; }
+  .toggle::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: var(--shadow); transition: left .15s; }
+  .toggle.on { background: var(--ember); }
+  .toggle.on::after { left: 19px; }
+
+  /* disconnected banner */
+  .banner { display: none; align-items: center; gap: 12px; margin: 16px 26px 0; padding: 12px 15px; border-radius: var(--radius); background: var(--warn-tint); border: 1px solid color-mix(in srgb, var(--warn) 35%, transparent); color: var(--ink); }
+  body.offline .banner { display: flex; }
+  body.offline .conn { background: var(--warn-tint); color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
+  body.offline .conn .dot { background: var(--warn); box-shadow: 0 0 0 3px color-mix(in srgb, var(--warn) 22%, transparent); }
+  .banner .bi { width: 20px; height: 20px; flex: 0 0 auto; color: var(--warn); }
+  .banner b { font-size: 13px; }
+  .banner p { margin: 1px 0 0; font-size: 12.5px; color: var(--ink-2); }
+
+  @media (max-width: 900px) {
+    .sidebar { display: none; }
+    .split { grid-template-columns: 1fr; }
+    .split .col.form { border-right: 0; border-bottom: 1px solid var(--border); }
+    .mpane { left: 12px; right: 12px; width: auto; }
+  }
+</style>
+
+<div class="app">
+  <!-- title bar -->
+  <div class="titlebar">
+    <div class="traffic"><i></i><i></i><i></i></div>
+    <div class="brand"><span class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4-3 6-7 8-4-2-7-4-7-8V7z"/></svg></span><b>Hearth</b></div>
+    <div class="divider"></div>
+    <button class="modelctl" onclick="toggleMPane()" title="Choose and load a model">
+      <span class="d" id="mctlDot"></span>
+      <span class="mctl-t" id="mctlText">llama3.1:8b · Original</span>
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M6 9l6 6 6-6"/></svg>
+    </button>
+    <div class="spacer"></div>
+    <div class="conn"><span class="dot"></span><span>Connected · v0.5.4</span></div>
+  </div>
+
+  <!-- model load pane -->
+  <div class="mpane-back" id="mpaneBack" hidden onclick="closeMPane()"></div>
+  <div class="mpane" id="mpane" hidden>
+    <div class="mpane-h">
+      <b>Load a model</b><span class="sub">6 installed</span>
+      <button class="iconbtn x" onclick="closeMPane()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
+    </div>
+    <div class="mpane-b">
+      <div class="pfield">
+        <label>Model</label>
+        <div class="pmodels" id="pmodels">
+          <button class="pmodel" data-tag="llama3.1:8b" onclick="pickModel('llama3.1:8b')"><span class="pg">L3</span><span><div class="pn">llama3.1:8b</div><div class="ps">4.7 GB · Q4_K_M</div></span></button>
+          <button class="pmodel" data-tag="mistral:7b" onclick="pickModel('mistral:7b')"><span class="pg">Mi</span><span><div class="pn">mistral:7b</div><div class="ps">4.1 GB · Q4_0</div></span></button>
+          <button class="pmodel" data-tag="codellama:13b" onclick="pickModel('codellama:13b')"><span class="pg">Co</span><span><div class="pn">codellama:13b</div><div class="ps">7.4 GB · Q4_K_M</div></span></button>
+          <button class="pmodel" data-tag="support-bot:latest" onclick="pickModel('support-bot:latest')"><span class="pg">◆</span><span><div class="pn">support-bot:latest</div><div class="ps">custom · from llama3.1</div></span><span class="ptune">tuned</span></button>
+          <button class="pmodel" data-tag="phi3:mini" onclick="pickModel('phi3:mini')"><span class="pg">Ph</span><span><div class="pn">phi3:mini</div><div class="ps">2.2 GB · Q4_0</div></span></button>
+          <button class="pmodel" data-tag="nomic-embed-text" onclick="pickModel('nomic-embed-text')"><span class="pg">Em</span><span><div class="pn">nomic-embed-text</div><div class="ps">274 MB · embedding</div></span></button>
+        </div>
+      </div>
+      <div class="pfield">
+        <label>Modelfile</label>
+        <div class="pvariants" id="pvariants"></div>
+      </div>
+      <div class="ploadwrap">
+        <button class="btn primary wide" id="ploadBtn" onclick="loadFromPane()">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg><span id="ploadLabel">Load model</span>
+        </button>
+        <div class="pprogress" id="pprogress" hidden>
+          <div class="meter"><i id="pbar" style="width:0%"></i></div>
+          <div class="pptext" id="pptext">Loading…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save as… dialog -->
+  <div class="dlg-back" id="saveAsBack" hidden onclick="closeSaveAs()"></div>
+  <div class="dlg" id="saveAs" hidden>
+    <div class="dlg-h"><b>Save as a new Modelfile</b><button class="iconbtn x" onclick="closeSaveAs()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
+    <div class="dlg-b">
+      <div class="field">
+        <label>Name</label>
+        <div class="namefield" style="width:100%"><input id="saName" value="support-bot-v2" spellcheck="false" style="flex:1;width:auto"><span style="padding:0 11px 0 4px;color:var(--faint);font-family:var(--mono);font-size:12px">:latest</span></div>
+      </div>
+      <div class="field">
+        <label>Save Modelfile to</label>
+        <div class="dlg-row">
+          <div class="pathfield" style="flex:1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span id="saPath">~/ollama/modelfiles/</span></div>
+          <button class="btn sm">Choose…</button>
+        </div>
+      </div>
+      <div class="dlg-note">Creates a new tuned model from <code>FROM llama3.1:8b</code>, writes the Modelfile to that folder, then loads it for your chats.</div>
+    </div>
+    <div class="dlg-f"><button class="btn sm" onclick="closeSaveAs()">Cancel</button><button class="btn sm primary" onclick="confirmSaveAs()">Create &amp; load</button></div>
+  </div>
+
+  <!-- reload toast (stop → reload) -->
+  <div class="reloadtoast" id="reloadToast" hidden>
+    <span class="rspin"></span>
+    <div class="rt-txt" id="reloadTxt">Stopping…</div>
+    <div class="meter" style="width:150px;height:6px"><i id="reloadBar" style="width:0%"></i></div>
+  </div>
+
+  <div class="body">
+    <!-- sidebar = chats -->
+    <aside class="sidebar" id="sidebar">
+      <div class="side-search">
+        <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input placeholder="Search chats…"></div>
+      </div>
+      <div class="side-new"><button class="btn primary wide" onclick="newChat()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>New chat</button></div>
+      <div class="side-label">Recent</div>
+      <div class="sesslist" id="sesslist">
+        <button class="sess active" onclick="openSess(this)" data-base="llama3.1:8b" data-variant="llama3.1:8b" data-log="git">
+          <div class="stitle">Undo a git commit</div>
+          <div class="smodel"><span class="sdot"></span>llama3.1:8b<span class="stime">now</span></div>
+        </button>
+        <button class="sess" onclick="openSess(this)" data-base="codellama:13b" data-variant="regex-helper:latest" data-log="regex">
+          <div class="stitle">Explain this regex</div>
+          <div class="smodel"><span class="sdot off"></span>regex-helper <span class="stag">· unloaded</span><span class="stime">1h</span></div>
+        </button>
+        <button class="sess" onclick="openSess(this)" data-base="mistral:7b" data-variant="mistral:7b" data-log="empty">
+          <div class="stitle">Draft release notes</div>
+          <div class="smodel"><span class="sdot off"></span>mistral:7b <span class="stag">· unloaded</span><span class="stime">yst</span></div>
+        </button>
+        <button class="sess" onclick="openSess(this)" data-base="llama3.1:8b" data-variant="support-bot:latest" data-log="empty">
+          <div class="stitle">Support-bot replies</div>
+          <div class="smodel"><span class="sdot off"></span>support-bot <span class="stag">· unloaded</span><span class="stime">2d</span></div>
+        </button>
+      </div>
+      <div class="side-foot">
+        <button class="btn wide" onclick="go('pull')"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Pull models</button>
+        <button class="btn" onclick="go('settings')" title="Settings"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.6 1.6 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.6 1.6 0 0 0-2.7 1.1V21a2 2 0 1 1-4 0v-.1A1.6 1.6 0 0 0 7 19.4a1.6 1.6 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.6 1.6 0 0 0-1.1-2.7H1a2 2 0 1 1 0-4h.1A1.6 1.6 0 0 0 2.6 7a1.6 1.6 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.6 1.6 0 0 0 1.8.3H7a1.6 1.6 0 0 0 1-1.5V1a2 2 0 1 1 4 0v.1a1.6 1.6 0 0 0 2.7 1.1l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.6 1.6 0 0 0-.3 1.8V7a1.6 1.6 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.6 1.6 0 0 0-1.5 1z"/></svg></button>
+      </div>
+    </aside>
+
+    <!-- main -->
+    <main class="main">
+      <div class="tabs">
+        <button class="tab active" data-tab="chat">Chat</button>
+        <button class="tab" data-tab="modelfile">Modelfile</button>
+        <div class="spacer"></div>
+        <button class="tab" data-tab="pull">Pull</button>
+        <button class="tab" data-tab="settings">Settings</button>
+        <button class="btn ghost sm" id="offlineToggle" title="Preview the disconnected state" style="margin-left:6px;">Demo: offline</button>
+      </div>
+
+      <div class="banner">
+        <svg class="bi" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+        <div style="flex:1"><b>Ollama isn’t running.</b><p>Studio can’t reach the server at <code style="font-family:var(--mono)">127.0.0.1:11434</code>. Start it, then retry.</p></div>
+        <button class="btn sm">Retry</button><button class="btn sm primary">Start Ollama</button>
+      </div>
+
+      <div class="scroll">
+        <!-- CHAT -->
+        <section class="panel active" data-panel="chat" style="height:100%">
+          <div class="chatmain">
+            <div class="chat-banner" id="chatBanner">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+              <div class="bt"><b id="banModel">support-bot:latest</b> isn’t loaded — currently loaded: <code id="banLoaded">llama3.1:8b</code>. Load it to continue this chat.</div>
+              <button class="btn sm" onclick="loadFromBanner()">Load now</button>
+            </div>
+
+            <div class="chatlog" id="log-git">
+              <div class="msg user"><div class="av">You</div><div class="bubble">Give me a one-line git command to undo the last commit but keep the changes staged.</div></div>
+              <div class="msg bot"><div class="av">L3</div><div class="bubble"><code>git reset --soft HEAD~1</code><br>This moves <code>HEAD</code> back one commit while leaving your files exactly as they are — the changes stay staged, ready to re-commit.</div></div>
+              <div class="msg user"><div class="av">You</div><div class="bubble">And if I want them unstaged instead?</div></div>
+              <div class="msg bot"><div class="av">L3</div><div class="bubble">Use <code>--mixed</code> (the default):<br><code>git reset HEAD~1</code><span class="caret"></span></div></div>
+            </div>
+            <div class="chatlog" id="log-regex" hidden>
+              <div class="msg user"><div class="av">You</div><div class="bubble">Write a regex to pull the ISO timestamp from lines like <code>2026-08-25T14:03:11Z INFO booted</code>.</div></div>
+              <div class="msg bot"><div class="av">Rh</div><div class="bubble">Anchor at the start and capture the stamp:<br><code>^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z)</code><br>Group 1 holds the whole timestamp.</div></div>
+            </div>
+            <div class="chat-empty" id="log-empty" hidden>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+              <b>New chat</b>
+              <div id="emptyHint">Send a message to test this model.</div>
+            </div>
+
+            <div class="composer">
+              <div class="box">
+                <textarea rows="1" id="composerInput" placeholder="Message llama3.1:8b…"></textarea>
+                <button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button>
+              </div>
+              <div class="note-strip">Messages here <b style="font-weight:600">test</b> the loaded model · <span style="color:var(--muted)">they don’t change its saved Modelfile</span></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- MODELFILE -->
+        <section class="panel" data-panel="modelfile" style="height:100%">
+          <div style="display:flex;flex-direction:column;height:100%">
+            <div class="split" style="flex:1;min-height:0">
+              <div class="col form">
+                <div class="col-h"><span class="eyebrow">Settings</span><span class="hint">friendly editor</span></div>
+                <div class="form-scroll">
+                  <div class="field"><label>Base model — <span style="font-family:var(--mono);font-weight:400;color:var(--muted)">FROM</span></label><select class="input"><option>llama3.1:8b</option><option>mistral:7b</option><option>phi3:mini</option></select></div>
+                  <div class="field"><label>System prompt — <span style="font-family:var(--mono);font-weight:400;color:var(--muted)">SYSTEM</span></label><textarea class="input" rows="4">You are a concise, friendly assistant. Prefer plain language. When you show code, keep it minimal and runnable. If you are unsure, say so rather than guessing.</textarea></div>
+                  <div class="field"><label>Temperature</label><div class="desc">Higher = more creative, lower = more focused.</div><div class="slider-row"><input type="range" min="0" max="2" step="0.1" value="0.7" oninput="this.nextElementSibling.textContent=(+this.value).toFixed(1)"><span class="val">0.7</span></div></div>
+                  <div class="field"><label>Top P</label><div class="slider-row"><input type="range" min="0" max="1" step="0.05" value="0.9" oninput="this.nextElementSibling.textContent=(+this.value).toFixed(2)"><span class="val">0.90</span></div></div>
+                  <div class="field"><label>Context length — <span style="font-family:var(--mono);font-weight:400;color:var(--muted)">num_ctx</span></label><div class="slider-row"><input type="range" min="2048" max="131072" step="2048" value="8192" oninput="this.nextElementSibling.textContent=(+this.value).toLocaleString()"><span class="val">8,192</span></div></div>
+                  <div class="field"><label>Stop sequences — <span style="font-family:var(--mono);font-weight:400;color:var(--muted)">stop</span></label><div class="chips"><span class="chip">&lt;/s&gt; <x>×</x></span><span class="chip">USER: <x>×</x></span><span class="chip add">+ add</span></div></div>
+                </div>
+              </div>
+              <div class="col">
+                <div class="col-h"><span class="eyebrow">Modelfile</span><span class="hint">raw · edits sync both ways</span></div>
+                <div class="editor">
+<pre><span class="cm"># support-bot — generated by Hearth</span>
+<span class="kw">FROM</span> llama3.1:8b
+
+<span class="kw">SYSTEM</span> <span class="str">"""You are a concise, friendly assistant. Prefer plain
+language. When you show code, keep it minimal and runnable.
+If you are unsure, say so rather than guessing."""</span>
+
+<span class="kw">PARAMETER</span> temperature <span class="num">0.7</span>
+<span class="kw">PARAMETER</span> top_p <span class="num">0.9</span>
+<span class="kw">PARAMETER</span> num_ctx <span class="num">8192</span>
+<span class="kw">PARAMETER</span> stop <span class="str">"&lt;/s&gt;"</span>
+<span class="kw">PARAMETER</span> stop <span class="str">"USER:"</span>
+</pre>
+                </div>
+              </div>
+            </div>
+            <div class="savebar">
+              <div class="saveline">
+                <span class="note">On save, <b style="font-weight:700">Hearth</b> re-creates the model with <code>ollama create</code>, then <b style="font-weight:700">stops &amp; reloads</b> it so your chats use the new Modelfile.</span>
+                <div class="spacer"></div>
+                <button class="btn sm" onclick="revertModelfile()">Revert</button>
+                <button class="btn sm" onclick="saveModelfile()">Save</button>
+                <button class="btn sm primary" onclick="openSaveAs()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>Save as…</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- PULL -->
+        <section class="panel" data-panel="pull">
+          <div class="pad">
+            <div class="eyebrow" style="margin-bottom:10px">Pull a model</div>
+            <div class="pullbar">
+              <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input value="qwen2.5:14b" spellcheck="false"></div>
+              <button class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Pull</button>
+            </div>
+            <div class="note-strip" style="margin-bottom:20px">Name a model from the registry, e.g. <code>llama3.2</code>, <code>gemma2:9b</code>, or a full URL.</div>
+            <div class="progress">
+              <div class="top"><span style="width:8px;height:8px;border-radius:50%;background:var(--ember);display:block"></span><b>gemma2:9b</b><span class="pct">62%</span></div>
+              <div class="layer"><span class="lname">manifest</span><div class="meter"><i style="width:100%"></i></div><span class="lpct">done</span></div>
+              <div class="layer"><span class="lname">sha256:8b1a… weights</span><div class="meter"><i style="width:58%"></i></div><span class="lpct">58%</span></div>
+              <div class="layer"><span class="lname">sha256:f02c… params</span><div class="meter"><i style="width:100%"></i></div><span class="lpct">done</span></div>
+              <div class="note-strip" style="margin-top:4px">3.1 GB / 5.4 GB · 42 MB/s · ~55s left <div style="flex:1"></div><button class="btn sm danger">Cancel</button></div>
+            </div>
+            <div class="side-label" style="padding-left:0">Popular</div>
+            <div class="reg">
+              <div class="regrow"><div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4-3 6-7 8-4-2-7-4-7-8V7z"/></svg></div><div class="rt"><b>llama3.2</b><div>Meta · 3B · latest small Llama, fast on CPU</div></div><span class="sz">2.0 GB</span><button class="btn sm">Pull</button></div>
+              <div class="regrow"><div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg></div><div class="rt"><b>qwen2.5-coder:7b</b><div>Alibaba · strong code completion</div></div><span class="sz">4.7 GB</span><button class="btn sm">Pull</button></div>
+              <div class="regrow"><div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg></div><div class="rt"><b>gemma2:2b</b><div>Google · tiny, runs almost anywhere · installed</div></div><span class="sz">1.6 GB</span><button class="btn sm" disabled style="opacity:.5">Installed</button></div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SETTINGS -->
+        <section class="panel" data-panel="settings">
+          <div class="pad">
+            <div class="eyebrow" style="margin-bottom:14px">Settings</div>
+            <div class="setgrid">
+              <div class="setrow"><div class="st"><b>Ollama server</b><div>Where Studio sends its API calls. Local only by default.</div></div><div class="namefield"><input value="http://127.0.0.1:11434" style="width:190px" spellcheck="false"></div><button class="btn sm">Test</button></div>
+              <div class="setrow"><div class="st"><b>Connection</b><div>Server v0.5.4 · 6 models · 12.9 GB on disk</div></div><span class="conn" style="font-family:var(--ui)"><span class="dot"></span>Healthy</span></div>
+              <div class="setrow"><div class="st"><b>Keep models loaded</b><div>How long a model stays in memory after its last request (<code style="font-family:var(--mono)">keep_alive</code>).</div></div><select class="input" style="width:130px"><option>5 minutes</option><option>30 minutes</option><option>Forever</option></select></div>
+              <div class="setrow"><div class="st"><b>Models directory</b><div style="font-family:var(--mono)">~/.ollama/models · read-only</div></div><button class="btn sm">Reveal</button></div>
+              <div class="setrow"><div class="st"><b>Modelfile directory</b><div>Where <b>Save as new</b> writes tuned Modelfiles. <span style="font-family:var(--mono)">~/ollama/modelfiles</span></div></div><button class="btn sm">Choose…</button></div>
+              <div class="setrow"><div class="st"><b>Confirm before deleting a model</b><div>Ask for confirmation on destructive actions.</div></div><button class="toggle on" onclick="this.classList.toggle('on')"></button></div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+</div>
+
+<script>
+  // ---------- installed models + tunings (mock of `ollama list`) ----------
+  var TUNINGS = { 'support-bot:latest': 'llama3.1:8b', 'regex-helper:latest': 'codellama:13b' };
+  var LOADED = ['llama3.1:8b'];               // what Ollama holds in memory (mock /api/ps)
+  var current = { base: 'llama3.1:8b', variant: 'llama3.1:8b' }; // last loaded
+  var paneBase = 'llama3.1:8b', paneVariant = 'llama3.1:8b';
+  var bannerSess = null;
+
+  function shortTag(t){ return t.replace(':latest', ''); }
+  function tuningsFor(base){ return Object.keys(TUNINGS).filter(function(t){ return TUNINGS[t] === base; }); }
+  function ctlLabel(base, variant){ return variant === base ? base + ' · Original' : base + ' · ' + shortTag(variant); }
+  function updateCtl(){
+    document.getElementById('mctlText').textContent = ctlLabel(current.base, current.variant);
+    document.getElementById('mctlDot').className = 'd';
+  }
+
+  // ---------- tabs ----------
+  function go(name){
+    document.querySelectorAll('.tab').forEach(function(t){ t.classList.toggle('active', t.dataset.tab === name); });
+    document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.dataset.panel === name); });
+    // Chat + Modelfile share the same window and keep the Chats list; Pull/Settings are full-width
+    document.getElementById('sidebar').style.display = (name === 'chat' || name === 'modelfile') ? 'flex' : 'none';
+    document.querySelector('.scroll').scrollTop = 0;
+  }
+  document.querySelectorAll('.tab').forEach(function(t){ t.addEventListener('click', function(){ go(t.dataset.tab); }); });
+
+  // ---------- model load pane ----------
+  function toggleMPane(){ var p = document.getElementById('mpane'); if(p.hidden) openMPane(current.base, current.variant); else closeMPane(); }
+  function openMPane(base, variant){
+    pickModel(base, variant, true);
+    document.getElementById('mpane').hidden = false;
+    document.getElementById('mpaneBack').hidden = false;
+    resetPaneProgress();
+  }
+  function closeMPane(){ document.getElementById('mpane').hidden = true; document.getElementById('mpaneBack').hidden = true; }
+
+  function pickModel(tag, variant, keepProgress){
+    // a tuning tag resolves to its base; a base tag is its own Original
+    var base = TUNINGS[tag] ? TUNINGS[tag] : tag;
+    var wantVariant = variant || (TUNINGS[tag] ? tag : base);
+    paneBase = base; paneVariant = wantVariant;
+    // highlight the row we picked (a tuning highlights its own row; a base highlights the base row)
+    document.querySelectorAll('#pmodels .pmodel').forEach(function(m){ m.classList.toggle('active', m.dataset.tag === tag); });
+    renderVariants(base, wantVariant);
+    if(!keepProgress) resetPaneProgress();
+  }
+  function renderVariants(base, selected){
+    var wrap = document.getElementById('pvariants'); wrap.innerHTML = '';
+    var opts = [[base, 'Original (base)']];
+    tuningsFor(base).forEach(function(t){ opts.push([t, shortTag(t) + ' · tuned']); });
+    opts.forEach(function(o){
+      var b = document.createElement('button');
+      b.className = 'pv' + (o[0] === selected ? ' active' : '');
+      b.textContent = o[1];
+      b.onclick = function(){ paneVariant = o[0]; renderVariants(base, o[0]); resetPaneProgress(); };
+      wrap.appendChild(b);
+    });
+    var nw = document.createElement('button');
+    nw.className = 'pv new'; nw.textContent = '＋ New Modelfile';
+    nw.onclick = function(){ closeMPane(); go('modelfile'); };
+    wrap.appendChild(nw);
+  }
+  function resetPaneProgress(){
+    var btn = document.getElementById('ploadBtn'); btn.disabled = false; btn.style.opacity = 1;
+    document.getElementById('pprogress').hidden = true;
+    document.getElementById('pbar').style.width = '0%';
+    var loaded = LOADED.indexOf(paneVariant) >= 0;
+    document.getElementById('ploadLabel').textContent = loaded ? 'Reload model' : 'Load model';
+  }
+  function loadFromPane(){
+    var tag = paneVariant, base = paneBase;
+    var btn = document.getElementById('ploadBtn'); btn.disabled = true; btn.style.opacity = .55;
+    var prog = document.getElementById('pprogress'); prog.hidden = false;
+    var bar = document.getElementById('pbar'), txt = document.getElementById('pptext');
+    txt.textContent = 'Loading ' + tag + ' — pulling weights into memory…';
+    var w = 0;
+    var iv = setInterval(function(){
+      w += 13; if(w > 100) w = 100; bar.style.width = w + '%';
+      if(w >= 100){
+        clearInterval(iv);
+        txt.textContent = '✓ ' + tag + ' loaded and ready';
+        if(LOADED.indexOf(tag) < 0) LOADED.push(tag);
+        current = { base: base, variant: tag };
+        updateCtl();
+        setTimeout(function(){ closeMPane(); if(bannerSess && bannerSess.variant === tag){ hideBanner(); bannerSess = null; } }, 700);
+      }
+    }, 120);
+  }
+  function loadFromBanner(){ if(bannerSess) openMPane(bannerSess.base, bannerSess.variant); }
+
+  // ---------- modelfile: save / save as → stop & reload ----------
+  var editing = { base: 'llama3.1:8b', variant: 'support-bot:latest' }; // what the editor is editing
+  function revertModelfile(){ /* demo: discard edits back to last-loaded Modelfile */ }
+  function saveModelfile(){ reloadFlow(editing.base, editing.variant); }           // overwrite in place
+  function openSaveAs(){ document.getElementById('saveAs').hidden = false; document.getElementById('saveAsBack').hidden = false; }
+  function closeSaveAs(){ document.getElementById('saveAs').hidden = true; document.getElementById('saveAsBack').hidden = true; }
+  function confirmSaveAs(){
+    var name = (document.getElementById('saName').value || 'model').trim().replace(/\s+/g, '-');
+    var tag = name + ':latest';
+    TUNINGS[tag] = editing.base;                 // it's now a tuned variant of the base
+    closeSaveAs();
+    reloadFlow(editing.base, tag);
+  }
+  // stop the running model, then reload it with the new Modelfile (ollama create → keep_alive:0 → warm)
+  function reloadFlow(base, variant){
+    var toast = document.getElementById('reloadToast'); toast.hidden = false;
+    var bar = document.getElementById('reloadBar'), txt = document.getElementById('reloadTxt');
+    bar.style.width = '0%'; txt.textContent = 'Stopping ' + current.variant + '…';
+    var w = 0;
+    var iv = setInterval(function(){
+      w += 12; if(w > 100) w = 100; bar.style.width = w + '%';
+      if(w > 35) txt.textContent = 'Reloading ' + variant + ' with new Modelfile…';
+      if(w >= 100){
+        clearInterval(iv);
+        txt.textContent = '✓ ' + variant + ' reloaded';
+        if(LOADED.indexOf(variant) < 0) LOADED.push(variant);
+        current = { base: base, variant: variant }; updateCtl();
+        setTimeout(function(){ toast.hidden = true; go('chat'); }, 800);
+      }
+    }, 110);
+  }
+
+  // ---------- chat sessions ----------
+  function showLog(id){ ['git','regex','empty'].forEach(function(k){ document.getElementById('log-'+k).hidden = (k !== id); }); }
+  function setPlaceholder(tag){ var ci = document.getElementById('composerInput'); if(ci) ci.placeholder = 'Message ' + tag + '…'; }
+  function hideBanner(){ document.getElementById('chatBanner').classList.remove('show'); }
+  function showBanner(variant){
+    document.getElementById('banModel').textContent = variant;
+    document.getElementById('banLoaded').textContent = current.variant;
+    document.getElementById('chatBanner').classList.add('show');
+  }
+  function openSess(el){
+    document.querySelectorAll('.sess').forEach(function(s){ s.classList.remove('active'); });
+    el.classList.add('active');
+    var base = el.dataset.base, variant = el.dataset.variant;
+    showLog(el.dataset.log); setPlaceholder(variant);
+    if(LOADED.indexOf(variant) >= 0){ hideBanner(); bannerSess = null; }
+    else { bannerSess = { base: base, variant: variant }; showBanner(variant); }
+  }
+  function newChat(){
+    var base = current.base, variant = current.variant;
+    document.querySelectorAll('.sess').forEach(function(s){ s.classList.remove('active'); });
+    var el = document.createElement('button');
+    el.className = 'sess active'; el.setAttribute('onclick', 'openSess(this)');
+    el.dataset.base = base; el.dataset.variant = variant; el.dataset.log = 'empty';
+    var label = variant === base ? base : shortTag(variant);
+    el.innerHTML = '<div class="stitle">New chat</div><div class="smodel"><span class="sdot"></span>' + label + '<span class="stime">now</span></div>';
+    var list = document.getElementById('sesslist'); list.insertBefore(el, list.firstChild);
+    document.getElementById('emptyHint').textContent = 'Send a message to test ' + label + '.';
+    showLog('empty'); hideBanner(); bannerSess = null; setPlaceholder(variant);
+  }
+
+  // ---------- offline demo ----------
+  document.getElementById('offlineToggle').addEventListener('click', function(){
+    document.body.classList.toggle('offline');
+    this.textContent = document.body.classList.contains('offline') ? 'Demo: online' : 'Demo: offline';
+  });
+
+  // init
+  renderVariants('llama3.1:8b', 'llama3.1:8b');
+  updateCtl();
+</script>
