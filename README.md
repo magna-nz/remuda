@@ -40,6 +40,24 @@ Planned distribution is **Homebrew** (not a DMG):
 brew install magna-nz/tap/remuda   # planned — not yet published
 ```
 
+## Development
+
+Requirements: [Node](https://nodejs.org) 22+, and a [Rust](https://rustup.rs)
+toolchain for the Tauri shell.
+
+```bash
+cd app
+npm install
+npm run dev        # Vite dev server at http://localhost:5173
+```
+
+To run the full desktop shell (Vite dev server + the Tauri window together),
+use the [Tauri CLI](https://tauri.app) from `src-tauri/`:
+
+```bash
+cargo tauri dev
+```
+
 ## The mockup
 
 [`docs/mockup.html`](docs/mockup.html) — open it in a browser to click

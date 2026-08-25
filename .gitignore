@@ -1,1 +1,10 @@
 .DS_Store
+
+# app (Vite/Node)
+app/node_modules/
+app/dist/
+app/.vite/
+
+# src-tauri (Rust)
+src-tauri/target/
+src-tauri/gen/
