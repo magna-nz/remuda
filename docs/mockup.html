@@ -240,6 +240,17 @@
   .regrow .rt b { font-family: var(--mono); font-size: 13px; font-weight: 600; }
   .regrow .rt div { font-size: 12px; color: var(--muted); margin-top: 1px; }
   .regrow .sz { font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  /* Catalog search + registry probe */
+  .side-label .count { margin-left: 8px; padding: 1px 7px; border-radius: 999px; background: var(--raised); color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .probe { margin: -4px 0 10px; font-size: 12px; color: var(--good); }
+  .probe.miss { color: var(--muted); }
+  .probe code { font-family: var(--mono); }
+  .noresults { padding: 18px 2px; color: var(--muted); font-size: 13px; line-height: 1.5; }
+  .regrow .caps { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 6px; }
+  .regrow .cap { padding: 1px 6px; border-radius: 4px; background: var(--raised); color: var(--muted); font-size: 11px; }
+  .regrow .sizes { display: flex; flex-wrap: wrap; gap: 5px; justify-content: flex-end; max-width: 320px; margin-right: 10px; }
+  .btn.sm.chip { padding: 2px 8px; font-size: 11px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+  .btn.sm.chip.installed { opacity: .45; }
   .progress { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 15px 16px; margin-bottom: 16px; }
   .progress .top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
   .progress .top b { font-family: var(--mono); font-size: 13px; }
@@ -495,7 +506,13 @@ If you are unsure, say so rather than guessing."""</span>
               <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg><input value="qwen2.5:14b" spellcheck="false"></div>
               <button class="btn primary"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Pull</button>
             </div>
-            <div class="note-strip" style="margin-bottom:20px">Name a model from the registry, e.g. <code>llama3.2</code>, <code>gemma2:9b</code>, or a full URL.</div>
+            <div class="note-strip">Filters the list as you type. Pull anything by name — <code>llama3.2</code>, <code>gemma2:9b</code>, or a full URL — even if it isn’t listed below.</div>
+            <!-- Registry probe: what was typed, checked against registry.ollama.ai.
+                 A failed lookup renders nothing at all — never the .miss line. -->
+            <div class="probe">✓ <code>library/qwen2.5:14b</code> · 9.0 GB to download</div>
+            <!-- Not-found variant, for a name the registry doesn't have:
+            <div class="probe miss">✕ <code>library/qwen9:14b</code> isn’t in the registry</div>
+            -->
             <div class="progress">
               <div class="top"><span style="width:8px;height:8px;border-radius:50%;background:var(--ember);display:block"></span><b>gemma2:9b</b><span class="pct">62%</span></div>
               <div class="layer"><span class="lname">manifest</span><div class="meter"><i style="width:100%"></i></div><span class="lpct">done</span></div>
@@ -503,12 +520,67 @@ If you are unsure, say so rather than guessing."""</span>
               <div class="layer"><span class="lname">sha256:f02c… params</span><div class="meter"><i style="width:100%"></i></div><span class="lpct">done</span></div>
               <div class="note-strip" style="margin-top:4px">3.1 GB / 5.4 GB · 42 MB/s · ~55s left <div style="flex:1"></div><button class="btn sm danger">Cancel</button></div>
             </div>
-            <div class="side-label" style="padding-left:0">Popular</div>
+            <!-- Heading reads "All models" when the field is empty, "Matching" when filtering.
+                 The catalog is generated from ollama.com/library into app/src/pull/catalog.json;
+                 these rows are a hand-picked sample of the 236 it ships with. -->
+            <div class="side-label" style="padding-left:0">All models<span class="count">236</span></div>
             <div class="reg">
-              <div class="regrow"><div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4-3 6-7 8-4-2-7-4-7-8V7z"/></svg></div><div class="rt"><b>llama3.2</b><div>Meta · 3B · latest small Llama, fast on CPU</div></div><span class="sz">2.0 GB</span><button class="btn sm">Pull</button></div>
-              <div class="regrow"><div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7l8-4 8 4-8 4z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg></div><div class="rt"><b>qwen2.5-coder:7b</b><div>Alibaba · strong code completion</div></div><span class="sz">4.7 GB</span><button class="btn sm">Pull</button></div>
-              <div class="regrow"><div class="ri"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M8 12h8M12 8v8"/></svg></div><div class="rt"><b>gemma2:2b</b><div>Google · tiny, runs almost anywhere · installed</div></div><span class="sz">1.6 GB</span><button class="btn sm" disabled style="opacity:.5">Installed</button></div>
+              <div class="regrow">
+                <div class="rt">
+                  <b>qwen3</b>
+                  <div>Qwen3 is the latest generation of large language models in Qwen series, offering a comprehensive suite of dense and mixture-of-experts (MoE) models.</div>
+                  <div class="caps"><span class="cap">tools</span><span class="cap">thinking</span></div>
+                </div>
+                <div class="sizes">
+                  <button class="btn sm chip">0.6b</button><button class="btn sm chip">1.7b</button><button class="btn sm chip">4b</button><button class="btn sm chip">8b</button><button class="btn sm chip">14b</button><button class="btn sm chip">30b</button><button class="btn sm chip">32b</button><button class="btn sm chip">235b</button>
+                </div>
+                <button class="btn sm">Pull</button>
+              </div>
+              <div class="regrow">
+                <div class="rt">
+                  <b>llama3.2</b>
+                  <div>Meta’s Llama 3.2 goes small with 1B and 3B models.</div>
+                  <div class="caps"><span class="cap">tools</span></div>
+                </div>
+                <div class="sizes">
+                  <button class="btn sm chip installed" disabled title="llama3.2:1b is installed">1b</button><button class="btn sm chip">3b</button>
+                </div>
+                <button class="btn sm" disabled style="opacity:.5">Installed</button>
+              </div>
+              <div class="regrow">
+                <div class="rt">
+                  <b>mixtral</b>
+                  <div>A set of Mixture of Experts (MoE) model with open weights by Mistral AI in 8x7b and 8x22b parameter sizes.</div>
+                  <div class="caps"><span class="cap">tools</span></div>
+                </div>
+                <div class="sizes">
+                  <button class="btn sm chip">8x7b</button><button class="btn sm chip">8x22b</button>
+                </div>
+                <button class="btn sm">Pull</button>
+              </div>
+              <div class="regrow">
+                <div class="rt">
+                  <b>gemma3n</b>
+                  <div>Gemma 3n models are designed for efficient execution on everyday devices such as laptops, tablets or phones.</div>
+                </div>
+                <div class="sizes">
+                  <button class="btn sm chip">e2b</button><button class="btn sm chip">e4b</button>
+                </div>
+                <button class="btn sm">Pull</button>
+              </div>
+              <div class="regrow">
+                <div class="rt">
+                  <b>nomic-embed-text</b>
+                  <div>A high-performing open embedding model with a large token context window.</div>
+                  <div class="caps"><span class="cap">embedding</span></div>
+                </div>
+                <div class="sizes"></div>
+                <button class="btn sm">Pull</button>
+              </div>
             </div>
+            <!-- Shown in place of .reg when the query matches nothing:
+            <div class="noresults">Nothing in the bundled catalog matches “zzz”. If it’s a newer model, the name still pulls — the catalog ships with the app and doesn’t know about it yet.</div>
+            -->
           </div>
         </section>
 
