@@ -243,6 +243,8 @@ export function RemudaProvider({
   const wasConnected = useRef(false);
   /** Last observed installed-set signature; null forces a full rebuild. */
   const installedSignature = useRef<string | null>(null);
+  /** Guards against a second /api/show sweep starting before the first ends. */
+  const sweepInFlight = useRef(false);
 
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
   const [editorLoading, setEditorLoading] = useState(false);
@@ -313,8 +315,24 @@ export function RemudaProvider({
    */
   const syncModels = useCallback(async () => {
     const list = await client.listModels();
-    if (signatureOf(list) !== installedSignature.current) {
-      await refreshModels();
+    const signature = signatureOf(list);
+    if (signature !== installedSignature.current) {
+      // The poll doesn't wait for us, so a sweep slower than the interval
+      // would otherwise have the next tick launch another one on top.
+      if (sweepInFlight.current) return;
+      sweepInFlight.current = true;
+      // Claim the signature *before* sweeping, not after. If listGroups
+      // rejects — one bad /api/show is enough — an unclaimed signature would
+      // mismatch again on every subsequent tick and re-launch the sweep
+      // forever, silently. Claiming it costs a stale list until the next
+      // real change (or a reconnect, which clears the signature) and buys a
+      // hard guarantee of at most one sweep per change.
+      installedSignature.current = signature;
+      try {
+        await refreshModels();
+      } finally {
+        sweepInFlight.current = false;
+      }
       return;
     }
     const loadedTags = new Set(list.filter((m) => m.isLoaded).map((m) => m.tag));

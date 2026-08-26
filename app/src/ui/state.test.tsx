@@ -144,4 +144,51 @@ describe("model reconcile on poll", () => {
 
     expect(seen.length).toBe(afterFirstSweep);
   });
+
+  it("does not re-sweep every tick when the sweep keeps failing", async () => {
+    // One bad /api/show is enough to reject the whole listGroups sweep. If
+    // the signature were only claimed on success, every subsequent tick would
+    // mismatch and launch another N-request sweep, forever and silently.
+    const client = new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.2:latest" })],
+      failListGroups: "fake: /api/show exploded",
+    });
+    renderWithPoll(client);
+
+    await waitFor(() => expect(client.listGroupsCalls).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 120));
+
+    expect(client.listGroupsCalls).toBe(1);
+  });
+
+  it("retries a failed sweep once the installed set actually changes", async () => {
+    const client = new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.2:latest" })],
+      failListGroups: "fake: /api/show exploded",
+    });
+    renderWithPoll(client);
+
+    await waitFor(() => expect(client.listGroupsCalls).toBe(1));
+
+    client.failListGroups = undefined;
+    client.models = [...client.models, makeModel({ tag: "gemma2:2b" })];
+
+    await waitFor(() => expect(screen.getByText("gemma2:2b")).toBeInTheDocument());
+  });
+
+  it("never runs two sweeps at once when one outlasts the poll interval", async () => {
+    const client = new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.2:latest" })],
+    });
+    // Sweep takes far longer than the 10ms poll, so ticks pile up behind it.
+    client.listGroupsDelayMs = 120;
+    renderWithPoll(client);
+
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    expect(client.listGroupsCalls).toBe(1);
+  });
 });
