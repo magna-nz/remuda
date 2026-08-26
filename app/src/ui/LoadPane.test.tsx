@@ -38,7 +38,8 @@ describe("LoadPane", () => {
     // already shows Original + the support-bot variant grouped under it.
     expect(screen.getByText("Original (base)")).toBeInTheDocument();
     expect(screen.getByText("support-bot · tuned")).toBeInTheDocument();
-    expect(screen.getByText("＋ New Modelfile")).toBeDisabled();
+    // Enabled once a base is selected: it opens the editor seeded from it (M3).
+    expect(screen.getByText("＋ New Modelfile")).toBeEnabled();
   });
 
   it("clicking Load calls client.load with the selected tag and updates the control", async () => {

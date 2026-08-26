@@ -6,6 +6,7 @@
 import type {
   ChatChunk,
   ChatMessage,
+  CreateRequest,
   CreateStatus,
   KeepAlive,
   Model,
@@ -49,6 +50,15 @@ export interface FakeClientOptions {
   chatChunks?: ChatChunk[];
   /** chat() throws with this message before yielding anything. */
   failChat?: string;
+  /**
+   * show() returns this raw Modelfile text for any tag (M3 editor tests).
+   * Per-tag overrides can be set afterwards via `modelfileByTag`.
+   */
+  modelfile?: string;
+  /** create() yields these statuses in order; defaults to a single "success". */
+  createStatuses?: CreateStatus[];
+  /** create() throws with this message before yielding anything (SPEC §9). */
+  failCreate?: string;
 }
 
 function abortError(): DOMException {
@@ -68,6 +78,15 @@ export class FakeClient implements OllamaClient {
   private chatQueue: ChatChunk[] = [];
   private chatWaiter: ((chunk: ChatChunk) => void) | null = null;
 
+  /** Raw Modelfile text show() returns; keyed by tag, falling back to `modelfile`. */
+  modelfile: string;
+  modelfileByTag: Record<string, string> = {};
+  showCalls: string[] = [];
+  createStatuses: CreateStatus[];
+  failCreate: string | undefined;
+  createCalls: { name: string; request: CreateRequest }[] = [];
+  unloadCalls: string[] = [];
+
   constructor(options: FakeClientOptions = {}) {
     this.models = options.models ?? [];
     this.connected = options.connected ?? true;
@@ -76,6 +95,9 @@ export class FakeClient implements OllamaClient {
     this.failLoad = options.failLoad;
     this.chatChunks = options.chatChunks;
     this.failChat = options.failChat;
+    this.modelfile = options.modelfile ?? "";
+    this.createStatuses = options.createStatuses ?? [{ status: "success" }];
+    this.failCreate = options.failCreate;
   }
 
   async version(): Promise<ServerStatus> {
@@ -98,10 +120,11 @@ export class FakeClient implements OllamaClient {
   }
 
   async show(tag: string): Promise<ModelDetail> {
+    this.showCalls.push(tag);
     const model = this.models.find((m) => m.tag === tag);
     return {
       tag,
-      modelfile: "",
+      modelfile: this.modelfileByTag[tag] ?? this.modelfile,
       parameters: "",
       template: "",
       system: "",
@@ -123,6 +146,7 @@ export class FakeClient implements OllamaClient {
   }
 
   async unload(tag: string): Promise<void> {
+    this.unloadCalls.push(tag);
     this.models = this.models.map((m) => (m.tag === tag ? { ...m, isLoaded: false } : m));
   }
 
@@ -193,8 +217,14 @@ export class FakeClient implements OllamaClient {
     }
   }
 
-  async *create(): AsyncIterable<CreateStatus> {
-    yield { status: "success" };
+  async *create(name: string, request: CreateRequest): AsyncIterable<CreateStatus> {
+    this.createCalls.push({ name, request });
+    if (this.failCreate !== undefined) {
+      throw new Error(this.failCreate);
+    }
+    for (const status of this.createStatuses) {
+      yield status;
+    }
   }
 
   async *pull(): AsyncIterable<PullProgress> {

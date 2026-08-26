@@ -1,0 +1,44 @@
+.reloadtoast {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: var(--surface-2);
+  color: var(--ink);
+  border: 1px solid var(--border-strong);
+  padding: 11px 16px;
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+}
+
+.reloadtoast .rt-txt {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  white-space: nowrap;
+}
+
+.rspin {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--ember);
+  animation: rspin 0.7s linear infinite;
+  flex: 0 0 auto;
+}
+
+@keyframes rspin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rspin {
+    animation: none;
+  }
+}

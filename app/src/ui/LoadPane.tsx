@@ -27,7 +27,8 @@ function formatSize(bytes: number): string {
 type LoadPhase = "idle" | "loading" | "done";
 
 export function LoadPane() {
-  const { models, groups, loaded, load, loadPaneOpen, closeLoadPane, status } = useRemuda();
+  const { models, groups, loaded, load, loadPaneOpen, closeLoadPane, status, openEditorForNew } =
+    useRemuda();
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [phase, setPhase] = useState<LoadPhase>("idle");
@@ -153,7 +154,17 @@ export function LoadPane() {
                   {shortTag(v.tag)} · tuned
                 </button>
               ))}
-              <button type="button" className="pv new" disabled title="coming in M3">
+              <button
+                type="button"
+                className="pv new"
+                disabled={!selectedBase}
+                title={selectedBase ? `New Modelfile from ${selectedBase}` : "Pick a base model first"}
+                onClick={() => {
+                  if (!selectedBase) return;
+                  closeLoadPane();
+                  openEditorForNew(selectedBase);
+                }}
+              >
                 ＋ New Modelfile
               </button>
             </div>

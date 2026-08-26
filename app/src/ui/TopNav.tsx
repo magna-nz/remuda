@@ -17,7 +17,7 @@ function controlLabel(loaded: { base: string; variant: string } | null): string 
 }
 
 export function TopNav() {
-  const { status, loaded, loadPaneOpen, openLoadPane, closeLoadPane } = useRemuda();
+  const { status, loaded, loadPaneOpen, openLoadPane, closeLoadPane, openEditor } = useRemuda();
 
   return (
     <header className="titlebar">
@@ -44,6 +44,20 @@ export function TopNav() {
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
+      {loaded && (
+        <button
+          type="button"
+          className="btn iconbtn edit-modelfile"
+          title={`Edit ${loaded.variant}'s Modelfile`}
+          aria-label={`Edit ${loaded.variant}'s Modelfile`}
+          onClick={() => void openEditor(loaded.variant)}
+        >
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z" />
+          </svg>
+        </button>
+      )}
       <div className="spacer" />
       <div className={`conn${status.connected ? "" : " off"}`}>
         <span className="dot" aria-hidden="true" />

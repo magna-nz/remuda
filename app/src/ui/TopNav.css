@@ -87,6 +87,10 @@
   color: var(--muted);
 }
 
+.edit-modelfile {
+  margin-left: 2px;
+}
+
 .titlebar .spacer {
   flex: 1;
 }

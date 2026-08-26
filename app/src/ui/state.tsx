@@ -36,8 +36,39 @@ import {
   titleFor,
   type ChatSession,
 } from "../chat/sessions";
+// M3 — owned by a concurrent agent (app/src/modelfile/). Consumed here, not
+// redeclared: parseModelfile/serializeModelfile plus toCreateRequest are the
+// editor's sync contract with the raw Modelfile (SPEC.md §5.4).
+import { parseModelfile, type ModelfileDoc } from "../modelfile";
+import { toCreateRequest } from "../modelfile/createRequest";
 
-export type View = "chat" | "settings";
+export type View = "chat" | "modelfile" | "settings";
+
+/**
+ * The Modelfile editor's working copy (SPEC.md §5.4, §8).
+ *
+ * `doc` is the current (possibly unsaved) state; `savedDoc` is what was last
+ * loaded/saved, used by Revert. `targetTag` is the model Save overwrites —
+ * null for a brand-new Modelfile opened from "+ New Modelfile", which has no
+ * target until Save as… names one.
+ */
+export interface EditorDraft {
+  targetTag: string | null;
+  doc: ModelfileDoc;
+  savedDoc: ModelfileDoc;
+  dirty: boolean;
+}
+
+export type ReloadPhase = "creating" | "stopping" | "reloading" | "done";
+
+/** The bottom-center "stop & reload" toast state (SPEC §5.4). */
+export interface ReloadToastState {
+  phase: ReloadPhase;
+  oldTag: string | null;
+  newTag: string;
+  /** Latest streamed status line from `ollama create`, if any. */
+  detail?: string;
+}
 
 /** The model currently loaded in Ollama (SPEC §5.1): its base and effective tag. */
 export interface LoadedSelection {
@@ -86,6 +117,34 @@ interface RemudaContextValue {
   sendMessage: (text: string) => Promise<void>;
   /** Abort the in-flight generation, keeping the partial reply. */
   cancelGeneration: () => void;
+
+  // ---- Modelfile editor (SPEC §5.4, §8) ----
+  editorDraft: EditorDraft | null;
+  /** True while openEditor's client.show() fetch is in flight. */
+  editorLoading: boolean;
+  /** Non-null when openEditor's fetch failed. */
+  editorError: string | null;
+  /** Fetch and parse an existing model's Modelfile, then switch to it. */
+  openEditor: (tag: string) => Promise<void>;
+  /** Seed a new Modelfile (FROM baseTag) with no save target yet. */
+  openEditorForNew: (baseTag: string) => void;
+  /** Replace the draft's doc (a form or raw-text edit); marks dirty. */
+  setEditorDoc: (doc: ModelfileDoc) => void;
+  /** Discard unsaved edits back to the last-loaded/-saved doc. */
+  revertEditor: () => void;
+  /** True while a save (create → unload → load) is in flight. */
+  saving: boolean;
+  /** Verbatim error from a failed `ollama create` (SPEC §9); editor stays dirty. */
+  saveError: string | null;
+  /** The stop & reload toast's current state; null when not saving. */
+  reloadToast: ReloadToastState | null;
+  /**
+   * Save flow (SPEC §5.4): `ollama create` → stop the previously loaded
+   * model → warm-load the new one → refresh the model list. `asName` makes
+   * this "Save as…" (a new tuned variant); omitted, it overwrites
+   * `editorDraft.targetTag`.
+   */
+  saveDraft: (asName?: string) => Promise<void>;
 }
 
 const RemudaContext = createContext<RemudaContextValue | null>(null);
@@ -116,9 +175,18 @@ export function RemudaProvider({
   const [checked, setChecked] = useState(false);
   const [groups, setGroups] = useState<ModelGroup[]>([]);
   const [keepAlive, setKeepAlive] = useState<KeepAlive>("5m");
-  const [view, setView] = useState<View>("chat");
+  const [view, setViewState] = useState<View>("chat");
   const [loadPaneOpen, setLoadPaneOpen] = useState(false);
   const wasConnected = useRef(false);
+
+  const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
+  const [editorLoading, setEditorLoading] = useState(false);
+  const [editorError, setEditorError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [reloadToast, setReloadToast] = useState<ReloadToastState | null>(null);
+  const editorDraftRef = useRef<EditorDraft | null>(null);
+  editorDraftRef.current = editorDraft;
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -198,12 +266,12 @@ export function RemudaProvider({
     const session = createSession(loaded.variant);
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(session.id);
-    setView("chat");
+    setViewState("chat");
   }, [loaded]);
 
   const openSession = useCallback((id: string) => {
     setActiveSessionId(id);
-    setView("chat");
+    setViewState("chat");
   }, []);
 
   const deleteSession = useCallback((id: string) => {
@@ -286,6 +354,114 @@ export function RemudaProvider({
     [activeSessionId, client, keepAlive, refreshModels, updateSession],
   );
 
+  // ---- Modelfile editor (SPEC §5.4, §8) ----
+
+  /** SPEC §8: unsaved editor changes prompt before navigating away. */
+  const confirmUnsavedChanges = useCallback((): boolean => {
+    if (!editorDraftRef.current?.dirty) return true;
+    return window.confirm("Discard unsaved Modelfile changes?");
+  }, []);
+
+  /** Every view change — tabs, sidebar nav, session open — funnels through here. */
+  const setView = useCallback(
+    (next: View) => {
+      if (next === view) return;
+      if (view === "modelfile" && !confirmUnsavedChanges()) return;
+      setSaveError(null);
+      setViewState(next);
+    },
+    [view, confirmUnsavedChanges],
+  );
+
+  const openEditor = useCallback(
+    async (tag: string) => {
+      if (editorDraftRef.current?.targetTag !== tag && !confirmUnsavedChanges()) return;
+      setEditorError(null);
+      setEditorLoading(true);
+      try {
+        const detail = await client.show(tag);
+        const doc = parseModelfile(detail.modelfile);
+        setEditorDraft({ targetTag: tag, doc, savedDoc: doc, dirty: false });
+        setSaveError(null);
+        setViewState("modelfile");
+      } catch (err) {
+        setEditorError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setEditorLoading(false);
+      }
+    },
+    [client, confirmUnsavedChanges],
+  );
+
+  const openEditorForNew = useCallback(
+    (baseTag: string) => {
+      if (!confirmUnsavedChanges()) return;
+      // Minimal seed: FROM the chosen base, empty SYSTEM — the form fills in
+      // the rest (SPEC §5.1's "＋ New Modelfile").
+      const doc = parseModelfile(`FROM ${baseTag}\n`);
+      setEditorDraft({ targetTag: null, doc, savedDoc: doc, dirty: false });
+      setEditorError(null);
+      setSaveError(null);
+      setViewState("modelfile");
+    },
+    [confirmUnsavedChanges],
+  );
+
+  const setEditorDoc = useCallback((doc: ModelfileDoc) => {
+    setEditorDraft((prev) => (prev ? { ...prev, doc, dirty: true } : prev));
+  }, []);
+
+  const revertEditor = useCallback(() => {
+    setEditorDraft((prev) => (prev ? { ...prev, doc: prev.savedDoc, dirty: false } : prev));
+    setSaveError(null);
+  }, []);
+
+  const saveDraft = useCallback(
+    async (asName?: string) => {
+      const draft = editorDraftRef.current;
+      if (!draft) return;
+      const targetName = asName ?? draft.targetTag;
+      if (!targetName) return; // no target yet — Save as… is required to name one
+
+      // SPEC §8: destructive overwrite confirms when the Settings toggle is
+      // on. Settings' "Confirm before deleting a model" toggle (Settings.tsx)
+      // is local component state today and isn't wired into this store, so
+      // this defaults to the spec's default-on behavior for an overwrite.
+      if (!asName && !window.confirm(`Overwrite ${targetName}'s Modelfile?`)) return;
+
+      setSaving(true);
+      setSaveError(null);
+      const oldTag = loaded?.variant ?? null;
+      try {
+        const request = toCreateRequest(draft.doc);
+        setReloadToast({ phase: "creating", oldTag, newTag: targetName });
+        for await (const status of client.create(targetName, request)) {
+          setReloadToast({ phase: "creating", oldTag, newTag: targetName, detail: status.status });
+        }
+        if (oldTag) {
+          setReloadToast({ phase: "stopping", oldTag, newTag: targetName });
+          await client.unload(oldTag);
+        }
+        setReloadToast({ phase: "reloading", oldTag, newTag: targetName });
+        await client.load(targetName, keepAlive);
+        await refreshModels();
+        setReloadToast({ phase: "done", oldTag, newTag: targetName });
+        setEditorDraft({ targetTag: targetName, doc: draft.doc, savedDoc: draft.doc, dirty: false });
+        window.setTimeout(() => {
+          setReloadToast(null);
+          setViewState("chat");
+        }, 1200);
+      } catch (err) {
+        // SPEC §9: surfaced verbatim by the save bar; the editor stays intact and dirty.
+        setSaveError(err instanceof Error ? err.message : String(err));
+        setReloadToast(null);
+      } finally {
+        setSaving(false);
+      }
+    },
+    [client, loaded, keepAlive, refreshModels],
+  );
+
   const value: RemudaContextValue = {
     client,
     status,
@@ -313,6 +489,17 @@ export function RemudaProvider({
     deleteSession,
     sendMessage,
     cancelGeneration,
+    editorDraft,
+    editorLoading,
+    editorError,
+    openEditor,
+    openEditorForNew,
+    setEditorDoc,
+    revertEditor,
+    saving,
+    saveError,
+    reloadToast,
+    saveDraft,
   };
 
   return <RemudaContext.Provider value={value}>{children}</RemudaContext.Provider>;

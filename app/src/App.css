@@ -24,6 +24,21 @@
   flex: 1;
   min-width: 0;
   background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/*
+ * ViewTabs sits above whichever view is active (chat/modelfile/settings).
+ * Those views size themselves with `height: 100%` (ChatView.css, this
+ * component's own CSS) — this wrapper is what gives that 100% a definite,
+ * tab-strip-aware height to resolve against, and is the fallback scroller
+ * for views (Settings) that don't manage their own internal overflow.
+ */
+.viewbody {
+  flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
