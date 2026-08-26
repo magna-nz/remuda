@@ -34,7 +34,7 @@ function formatSize(bytes: number): string {
   return `${Math.round(bytes / 1_000_000)} MB`;
 }
 
-type LoadPhase = "idle" | "loading" | "done";
+type LoadPhase = "idle" | "loading" | "ejecting" | "done";
 
 export function LoadPane() {
   const {
@@ -50,6 +50,8 @@ export function LoadPane() {
     refreshModels,
     confirmDeleteModel,
     setView,
+    unload,
+    streamingSessionId,
   } = useRemuda();
 
   const entries = useMemo(() => groupByModel(groups), [groups]);
@@ -150,6 +152,28 @@ export function LoadPane() {
       }, 500);
     } catch (err) {
       // SPEC §9: surface the server's error text verbatim, don't reset quietly.
+      setPhase("idle");
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /**
+   * Hand the loaded model's memory back (SPEC §7, `keep_alive: 0`).
+   *
+   * Unlike Load, this always acts on what's *in memory* — not on the pane's
+   * current selection — so the button names the tag it frees. The pane stays
+   * open: the quant's "in memory" note and the Load/Reload label flip on the
+   * refresh, which is the confirmation that it worked.
+   */
+  async function handleEject() {
+    if (!loaded) return;
+    setPhase("ejecting");
+    setLoadError(null);
+    try {
+      await unload();
+      setPhase("idle");
+    } catch (err) {
+      // SPEC §9: the server's text, verbatim.
       setPhase("idle");
       setLoadError(err instanceof Error ? err.message : String(err));
     }
@@ -391,15 +415,43 @@ export function LoadPane() {
               </div>
 
               <div className="ploadwrap">
-                <button
-                  type="button"
-                  className="btn primary wide"
-                  onClick={() => void handleLoad()}
-                  disabled={phase === "loading" || !variantTag || !status.connected}
-                  title={status.connected ? undefined : "Ollama isn't running"}
-                >
-                  {phase === "loading" ? "Loading…" : isReload ? "Reload model" : "Load model"}
-                </button>
+                <div className="pactions">
+                  <button
+                    type="button"
+                    className="btn primary wide"
+                    onClick={() => void handleLoad()}
+                    disabled={phase === "loading" || phase === "ejecting" || !variantTag || !status.connected}
+                    title={status.connected ? undefined : "Ollama isn't running"}
+                  >
+                    {phase === "loading" ? "Loading…" : isReload ? "Reload model" : "Load model"}
+                  </button>
+                  {/* Ejecting is about what's in memory, so this shows
+                      whenever anything is loaded — including while another
+                      model's detail is on screen — and names the tag it
+                      frees rather than the one Load would send. */}
+                  {loaded !== null && (
+                    <button
+                      type="button"
+                      className="btn eject"
+                      onClick={() => void handleEject()}
+                      disabled={phase !== "idle" || !status.connected || streamingSessionId !== null}
+                      aria-label={`Eject ${loaded.variant}`}
+                      title={
+                        !status.connected
+                          ? "Ollama isn't running"
+                          : streamingSessionId !== null
+                            ? "Wait for the reply to finish"
+                            : `Unload ${loaded.variant} from memory`
+                      }
+                    >
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M12 4l7 9H5z" />
+                        <path d="M5 18h14" />
+                      </svg>
+                      {phase === "ejecting" ? "Ejecting…" : "Eject"}
+                    </button>
+                  )}
+                </div>
                 {variantTag !== null && (
                   <div className="psummary">
                     loads <code>{variantTag}</code>
@@ -410,7 +462,9 @@ export function LoadPane() {
                     {loadError}
                   </div>
                 )}
-                {phase !== "idle" && (
+                {/* Load's meter only. Ejecting is a single fast call with
+                    nothing to measure — its button label carries the state. */}
+                {(phase === "loading" || phase === "done") && (
                   <div className="pprogress">
                     <div className="meter">
                       <i

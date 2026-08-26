@@ -131,6 +131,8 @@ interface RemudaContextValue {
   refreshModels: () => Promise<void>;
   /** Load a model with the configured keep_alive, then refresh the model list. */
   load: (tag: string) => Promise<void>;
+  /** Free the loaded model's weights (keep_alive: 0), then refresh the list. */
+  unload: () => Promise<void>;
   /** Re-run the health check immediately (e.g. Retry on the offline banner). */
   checkHealth: () => Promise<void>;
 
@@ -400,6 +402,20 @@ export function RemudaProvider({
   );
   const loaded = useMemo(() => deriveLoaded(models), [models]);
 
+  /**
+   * Eject whatever is loaded (SPEC §7: `/api/generate` with `keep_alive: 0`).
+   *
+   * Not a mode — Ollama re-loads on demand, so this only hands the weights'
+   * memory back; the next chat or Load warms them again. Rejections
+   * propagate to the caller, which owns the error surface (LoadPane).
+   */
+  const unload = useCallback(async () => {
+    const tag = loaded?.variant;
+    if (tag === undefined) return;
+    await client.unload(tag);
+    await refreshModels();
+  }, [client, loaded, refreshModels]);
+
   /** Apply fn to one session and keep the list sorted most-recent first. */
   const updateSession = useCallback((id: string, fn: (s: ChatSession) => ChatSession) => {
     setSessions((prev) => sortSessions(prev.map((s) => (s.id === id ? fn(s) : s))));
@@ -648,6 +664,7 @@ export function RemudaProvider({
     closeLoadPane,
     refreshModels,
     load,
+    unload,
     checkHealth,
     sessions,
     activeSessionId,
@@ -673,7 +690,7 @@ export function RemudaProvider({
   }), [
     client, status, checked, models, groups, loaded, keepAlive,
     confirmDeleteModel, setConfirmDeleteModel, view, setView, loadPaneOpen,
-    openLoadPane, closeLoadPane, refreshModels, load, checkHealth, sessions,
+    openLoadPane, closeLoadPane, refreshModels, load, unload, checkHealth, sessions,
     activeSessionId, streamingSessionId, streamError, lastStats, newChat,
     openSession, deleteSession, sendMessage, cancelGeneration, editorDraft,
     editorLoading, editorError, openEditor, openEditorForNew, setEditorDoc,

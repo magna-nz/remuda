@@ -109,10 +109,19 @@ The load pane is how a model becomes the *loaded* model.
 - **Load** — loads the effective model in Ollama, showing a progress bar
   (`loading… → loaded`). **Choosing and loading a model is the explicit act**
   — the top control then reflects it.
+- **Eject** — hands the loaded model's memory back without waiting for
+  `keep_alive` to expire. It sits beside Load and appears **only while
+  something is loaded**, naming the tag it frees — which is whatever is in
+  memory, not the pane's current selection. Ejecting isn't a mode: Ollama
+  re-loads on demand, so the next chat or Load warms the weights again. It's
+  unavailable while a reply is streaming (§8) and while the server is
+  unreachable; a failure surfaces verbatim in the pane (§9) and the model
+  stays loaded.
 
 Source: `GET /api/tags` for the list, `GET /api/ps` for what's loaded.
 Loading = a warm request (`POST /api/generate` with an empty `prompt`, or
-`/api/chat`) with the configured `keep_alive`.
+`/api/chat`) with the configured `keep_alive`. Ejecting = the same request
+with `keep_alive: 0`.
 
 ## 5.2 Chats (left)
 

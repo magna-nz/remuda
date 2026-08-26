@@ -524,3 +524,19 @@
   padding: 8px 10px;
   overflow-wrap: anywhere;
 }
+
+/* Load sits beside Eject: Load takes the room, Eject stays at its own width. */
+.pactions {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.pactions .btn.eject {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.pactions .btn.eject:hover:not(:disabled) {
+  color: var(--ink);
+}
