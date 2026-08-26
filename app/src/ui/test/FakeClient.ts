@@ -5,6 +5,7 @@
  */
 import type {
   ChatChunk,
+  ChatMessage,
   CreateStatus,
   KeepAlive,
   Model,
@@ -40,6 +41,18 @@ export interface FakeClientOptions {
   failVersion?: boolean;
   /** load() rejects with this message, simulating a failed load request. */
   failLoad?: string;
+  /**
+   * Scripted chat replies: chat() yields these chunks in order (stopping
+   * after a done chunk), checking the abort signal between chunks. Without
+   * this, chat() streams whatever the test pushes via emitChat().
+   */
+  chatChunks?: ChatChunk[];
+  /** chat() throws with this message before yielding anything. */
+  failChat?: string;
+}
+
+function abortError(): DOMException {
+  return new DOMException("The operation was aborted.", "AbortError");
 }
 
 export class FakeClient implements OllamaClient {
@@ -49,6 +62,11 @@ export class FakeClient implements OllamaClient {
   failVersion: boolean;
   failLoad: string | undefined;
   loadCalls: { tag: string; keepAlive: KeepAlive }[] = [];
+  chatChunks: ChatChunk[] | undefined;
+  failChat: string | undefined;
+  chatCalls: { tag: string; messages: ChatMessage[]; keepAlive: KeepAlive }[] = [];
+  private chatQueue: ChatChunk[] = [];
+  private chatWaiter: ((chunk: ChatChunk) => void) | null = null;
 
   constructor(options: FakeClientOptions = {}) {
     this.models = options.models ?? [];
@@ -56,6 +74,8 @@ export class FakeClient implements OllamaClient {
     this.versionString = options.version === undefined ? "0.5.4" : options.version;
     this.failVersion = options.failVersion ?? false;
     this.failLoad = options.failLoad;
+    this.chatChunks = options.chatChunks;
+    this.failChat = options.failChat;
   }
 
   async version(): Promise<ServerStatus> {
@@ -106,8 +126,71 @@ export class FakeClient implements OllamaClient {
     this.models = this.models.map((m) => (m.tag === tag ? { ...m, isLoaded: false } : m));
   }
 
-  async *chat(): AsyncIterable<ChatChunk> {
-    yield { content: "", done: true };
+  /** Push a chunk into a live (unscripted) chat stream. */
+  emitChat(chunk: ChatChunk): void {
+    if (this.chatWaiter) {
+      const waiter = this.chatWaiter;
+      this.chatWaiter = null;
+      waiter(chunk);
+    } else {
+      this.chatQueue.push(chunk);
+    }
+  }
+
+  private nextChatChunk(signal?: AbortSignal): Promise<ChatChunk> {
+    const queued = this.chatQueue.shift();
+    if (queued !== undefined) return Promise.resolve(queued);
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(abortError());
+        return;
+      }
+      signal?.addEventListener(
+        "abort",
+        () => {
+          this.chatWaiter = null;
+          reject(abortError());
+        },
+        { once: true },
+      );
+      this.chatWaiter = resolve;
+    });
+  }
+
+  async *chat(
+    tag: string,
+    messages: ChatMessage[],
+    opts: { keepAlive: KeepAlive; signal?: AbortSignal },
+  ): AsyncIterable<ChatChunk> {
+    this.chatCalls.push({ tag, messages: messages.map((m) => ({ ...m })), keepAlive: opts.keepAlive });
+    if (this.failChat !== undefined) {
+      throw new Error(this.failChat);
+    }
+    const finish = () => {
+      // Ollama loads the chatted model on demand; mirror that in /api/ps.
+      this.models = this.models.map((m) => ({ ...m, isLoaded: m.tag === tag }));
+    };
+    if (this.chatChunks !== undefined) {
+      for (const chunk of this.chatChunks) {
+        await Promise.resolve();
+        if (opts.signal?.aborted) throw abortError();
+        yield chunk;
+        if (chunk.done) {
+          finish();
+          return;
+        }
+      }
+      finish();
+      return;
+    }
+    for (;;) {
+      const chunk = await this.nextChatChunk(opts.signal);
+      yield chunk;
+      if (chunk.done) {
+        finish();
+        return;
+      }
+    }
   }
 
   async *create(): AsyncIterable<CreateStatus> {

@@ -1,0 +1,227 @@
+/* Chat surface (docs/mockup.html: .chatmain / .chatlog / .composer / .chat-banner). */
+
+.chatmain {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.chatlog {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.msg {
+  display: flex;
+  gap: 12px;
+  max-width: 90%;
+}
+
+.msg .av {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.msg.user {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+
+.msg.user .av {
+  background: var(--ink);
+  color: var(--surface);
+}
+
+.msg.bot .av {
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+  font-family: var(--mono);
+}
+
+.bubble {
+  padding: 10px 13px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.msg.user .bubble {
+  background: var(--ink);
+  color: var(--surface);
+  border-bottom-right-radius: 4px;
+}
+
+.msg.bot .bubble {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-bottom-left-radius: 4px;
+}
+
+.bubble.warming {
+  color: var(--muted);
+}
+
+.modeltag {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.caret {
+  display: inline-block;
+  width: 8px;
+  height: 15px;
+  background: var(--ember);
+  vertical-align: -2px;
+  border-radius: 1px;
+  animation: blink 1s steps(2) infinite;
+}
+
+@keyframes blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .caret {
+    animation: none;
+  }
+}
+
+.tokstat {
+  align-self: flex-start;
+  margin: -8px 0 0 40px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.chat-error {
+  align-self: flex-start;
+  margin-left: 40px;
+  font-size: 12px;
+  color: var(--crit);
+}
+
+/* composer */
+.composer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--border);
+  padding: 12px 16px;
+}
+
+.composer .box {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  padding: 8px 8px 8px 13px;
+  background: var(--surface-2);
+}
+
+.composer textarea {
+  flex: 1;
+  border: 0;
+  outline: none;
+  background: transparent;
+  resize: none;
+  font-family: var(--ui);
+  font-size: 13.5px;
+  color: var(--ink);
+  max-height: 120px;
+}
+
+.composer textarea::placeholder {
+  color: var(--faint);
+}
+
+.composer .send {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--ember);
+  color: #fff;
+  border: 0;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.composer .send:hover {
+  background: var(--ember-press);
+}
+
+.composer .send svg {
+  width: 16px;
+  height: 16px;
+}
+
+.composer .send.stop {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  color: var(--ink);
+}
+
+.composer .send.stop:hover {
+  background: var(--raised);
+}
+
+.note-strip {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.note-strip b {
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+/* unloaded banner (SPEC §5.3) */
+.chat-banner {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin: 12px 16px 0;
+  padding: 10px 13px;
+  border-radius: 10px;
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 34%, transparent);
+}
+
+.chat-banner > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--warn);
+  flex: 0 0 auto;
+}
+
+.chat-banner .bt {
+  flex: 1;
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.chat-banner .bt b,
+.chat-banner .bt code {
+  font-family: var(--mono);
+}
