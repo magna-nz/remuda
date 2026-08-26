@@ -405,6 +405,23 @@ describe("error handling", () => {
     expect(bodies[1]).toMatchObject({ model: "support-bot", modelfile: req.rawModelfile });
   });
 
+  it("create() rethrows the ORIGINAL structured error when the legacy retry also fails", async () => {
+    // A current server rejecting content 400s on BOTH bodies; the structured
+    // error is the accurate one and must be what surfaces.
+    stubFetch({
+      "/api/create": (init) =>
+        "modelfile" in bodyOf(init)
+          ? jsonResponse({ error: "modelfile is unsupported" }, 400)
+          : jsonResponse({ error: "invalid parameter: num_ctx" }, 400),
+    });
+    const iterate = async () => {
+      await collect(
+        createClient().create("bad:1b", { from: "x", rawModelfile: "FROM x" }),
+      );
+    };
+    await expect(iterate()).rejects.toThrow(/invalid parameter: num_ctx/);
+  });
+
   it("create() surfaces a 400 with the server's error text", async () => {
     stubFetch({
       "/api/create": () =>

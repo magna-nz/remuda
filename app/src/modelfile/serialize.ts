@@ -82,7 +82,26 @@ function renderParameter(key: string, value: string): string {
     value === "" || /\s/.test(value) || value.startsWith('"')
       ? `"${value}"`
       : value;
-  return `PARAMETER ${key} ${quoted}\n`;
+  const line = `PARAMETER ${key} ${quoted}\n`;
+  // Self-check: the grammar has no escaping, so some quote-runs (a value of
+  // `"""`, say) render to text that re-parses as a DIFFERENT value — and
+  // compound on every save. Fidelity is this module's cardinal rule: refuse
+  // loudly instead of corrupting silently.
+  const reparsed = parseModelfile(line);
+  const seg = reparsed.segments[0];
+  if (
+    reparsed.segments.length !== 1 ||
+    seg.kind !== "parameter" ||
+    seg.key !== key ||
+    seg.value !== value
+  ) {
+    throw new Error(
+      `PARAMETER ${key} value ${JSON.stringify(value)} cannot be represented ` +
+        "in the Modelfile grammar without changing it; adjust the value or " +
+        "edit the raw Modelfile instead.",
+    );
+  }
+  return line;
 }
 
 /**

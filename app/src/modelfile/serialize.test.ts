@@ -187,4 +187,17 @@ describe("value fidelity through an update round trip", () => {
       /line break/,
     );
   });
+
+  it("refuses parameter values that would not survive a round-trip (quote runs)", () => {
+    // A stop of `"""` used to render as PARAMETER stop """"" — five quotes —
+    // which re-parsed to a DIFFERENT value and compounded on every save.
+    // The renderer now self-checks render→parse fidelity and refuses.
+    const doc = parseModelfile("FROM x\n");
+    expect(() => setStops(doc, ['"""'])).toThrow(/cannot be represented/);
+    expect(() => setParameter(doc, "stop", '""')).toThrow(/cannot be represented/);
+    // Values that DO survive keep working, quotes included.
+    const ok = setStops(doc, ['</s>', "two words"]);
+    expect(serializeModelfile(ok)).toContain('PARAMETER stop </s>');
+    expect(serializeModelfile(ok)).toContain('PARAMETER stop "two words"');
+  });
 });

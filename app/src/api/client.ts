@@ -381,19 +381,27 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       try {
         res = await send("POST", "/api/create", structured, signal);
       } catch (err) {
-        // Only a 400-class rejection suggests the server predates the
-        // structured form; retry once with the legacy body. Anything else
-        // (404 model missing, network) propagates verbatim.
+        // A 400-class rejection is ambiguous: an old server that predates
+        // the structured form, OR a current server rejecting the content
+        // for a real reason. Retry once with the legacy body — a genuinely
+        // old server accepts it — but if the retry ALSO fails, surface the
+        // ORIGINAL structured error: on a current server it is the accurate
+        // one, and the legacy failure ("modelfile is unsupported") would
+        // only mislead. Anything non-400 (404, network) propagates as-is.
         const message = err instanceof Error ? err.message : "";
         if (!/\((400|422)\)/.test(message)) {
           throw err;
         }
-        res = await send(
-          "POST",
-          "/api/create",
-          { model: name, modelfile: request.rawModelfile, stream: true },
-          signal,
-        );
+        try {
+          res = await send(
+            "POST",
+            "/api/create",
+            { model: name, modelfile: request.rawModelfile, stream: true },
+            signal,
+          );
+        } catch {
+          throw err;
+        }
       }
       const body = requireBody(res, "/api/create");
       for await (const line of ndjson<WireStreamLine>(body, signal)) {

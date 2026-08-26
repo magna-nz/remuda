@@ -60,6 +60,8 @@ export function EditorView() {
   } = useRemuda();
 
   const [rawText, setRawText] = useState("");
+  /** A form edit the Modelfile grammar can't represent (e.g. `"""`). */
+  const [formError, setFormError] = useState<string | null>(null);
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
   const [stopDraft, setStopDraft] = useState("");
@@ -97,9 +99,18 @@ export function EditorView() {
   const doc = editorDraft.doc;
 
   function applyDocUpdate(updater: (doc: ModelfileDoc) => ModelfileDoc) {
-    const newDoc = updater(doc);
-    setEditorDoc(newDoc);
-    setRawText(serializeModelfile(newDoc));
+    // The updaters refuse values the grammar can't represent faithfully
+    // (`"""` in prose, newlines or pathological quote-runs in parameters).
+    // Surface that refusal instead of letting it escape the event handler
+    // and silently eat the keystroke.
+    try {
+      const newDoc = updater(doc);
+      setEditorDoc(newDoc);
+      setRawText(serializeModelfile(newDoc));
+      setFormError(null);
+    } catch (err) {
+      setFormError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   function handleRawChange(text: string) {
@@ -116,9 +127,15 @@ export function EditorView() {
   }
 
   const params = parameters(doc) as ParamMap;
-  const temperature = Number(paramString(params, "temperature", "0.7"));
-  const topP = Number(paramString(params, "top_p", "0.9"));
-  const numCtx = Number(paramString(params, "num_ctx", "8192"));
+  // A hand-edited `PARAMETER temperature abc` parses fine as a string;
+  // guard the numeric projection so the sliders never receive NaN.
+  const paramNumber = (key: string, fallback: number): number => {
+    const n = Number(paramString(params, key, String(fallback)));
+    return Number.isFinite(n) ? n : fallback;
+  };
+  const temperature = paramNumber("temperature", 0.7);
+  const topP = paramNumber("top_p", 0.9);
+  const numCtx = paramNumber("num_ctx", 8192);
   const stops = paramStops(params);
   // FROM is required to save (toCreateRequest throws without one) but a
   // brand-new doc mid-edit could transiently lack it, so fall back to "".
@@ -324,9 +341,9 @@ export function EditorView() {
             Save as…
           </button>
         </div>
-        {saveError !== null && (
+        {(formError ?? saveError) !== null && (
           <div className="save-error" role="alert">
-            {saveError}
+            {formError ?? saveError}
           </div>
         )}
       </div>

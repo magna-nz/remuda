@@ -218,6 +218,11 @@ export function RemudaProvider({
     saveSettings({ confirmDeleteModel: value });
   }, []);
   const [view, setViewState] = useState<View>("chat");
+  // Callbacks declared before setView (newChat/openSession) also need the
+  // current view without taking it as a dep; a ref avoids both the TDZ and
+  // the churn.
+  const viewRef = useRef<View>("chat");
+  viewRef.current = view;
   const [loadPaneOpen, setLoadPaneOpen] = useState(false);
   const wasConnected = useRef(false);
 
@@ -229,6 +234,12 @@ export function RemudaProvider({
   const [reloadToast, setReloadToast] = useState<ReloadToastState | null>(null);
   const editorDraftRef = useRef<EditorDraft | null>(null);
   editorDraftRef.current = editorDraft;
+
+  /** SPEC §8: unsaved editor changes prompt before navigating away. */
+  const confirmUnsavedChanges = useCallback((): boolean => {
+    if (!editorDraftRef.current?.dirty) return true;
+    return window.confirm("Discard unsaved Modelfile changes?");
+  }, []);
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
@@ -250,6 +261,34 @@ export function RemudaProvider({
     const id = window.setTimeout(() => saveSessions(sessions), 300);
     return () => window.clearTimeout(id);
   }, [sessions]);
+  // The debounce's blind spot: closing the window inside the 300ms window
+  // would drop the tail. Flush synchronously on the way out (and on
+  // provider unmount) so what the user last saw is what restores.
+  useEffect(() => {
+    const flush = () => saveSessions(sessionsRef.current);
+    window.addEventListener("beforeunload", flush);
+    return () => {
+      window.removeEventListener("beforeunload", flush);
+      flush();
+    };
+  }, []);
+
+  /**
+   * Cheap loaded-state refresh: /api/tags + /api/ps only (no per-model
+   * /api/show sweep). Structural facts (bases, variants, context length)
+   * can't change from merely chatting, so remap isLoaded onto the groups
+   * we already have. Full refreshModels stays for create/delete/pull.
+   */
+  const refreshLoaded = useCallback(async () => {
+    const list = await client.listModels();
+    const loadedTags = new Set(list.filter((m) => m.isLoaded).map((m) => m.tag));
+    setGroups((prev) =>
+      prev.map((g) => ({
+        base: { ...g.base, isLoaded: loadedTags.has(g.base.tag) },
+        variants: g.variants.map((v) => ({ ...v, isLoaded: loadedTags.has(v.tag) })),
+      })),
+    );
+  }, [client]);
 
   const refreshModels = useCallback(async () => {
     const list = await client.listGroups();
@@ -305,16 +344,24 @@ export function RemudaProvider({
     // §5.2: New chat opens on the *currently loaded* model — nothing loaded,
     // nothing to bind the session to.
     if (!loaded) return;
+    // The sidebar stays visible while the Modelfile editor is open, so this
+    // is a navigation away from it — same unsaved-changes gate as setView
+    // (SPEC §8), not a silent discard.
+    if (viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
     const session = createSession(loaded.variant);
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(session.id);
+    setStreamError(null);
     setViewState("chat");
-  }, [loaded]);
+  }, [loaded, confirmUnsavedChanges]);
 
   const openSession = useCallback((id: string) => {
+    if (viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
     setActiveSessionId(id);
+    // A previous session's failure isn't this one's (it renders globally).
+    setStreamError(null);
     setViewState("chat");
-  }, []);
+  }, [confirmUnsavedChanges]);
 
   const deleteSession = useCallback((id: string) => {
     if (streamRef.current?.sessionId === id) {
@@ -379,7 +426,7 @@ export function RemudaProvider({
         // Completed exchange: bump updatedAt (§6) and re-check /api/ps —
         // Ollama loads on demand, so the session's model may be loaded now.
         updateSession(sessionId, (s) => ({ ...s, updatedAt: new Date().toISOString() }));
-        void refreshModels().catch(() => {});
+        void refreshLoaded().catch(() => {});
       } catch (err) {
         // Cancel keeps the partial reply and isn't an error (SPEC §5.3).
         const aborted =
@@ -393,16 +440,10 @@ export function RemudaProvider({
         setStreamingSessionId(null);
       }
     },
-    [activeSessionId, client, keepAlive, refreshModels, updateSession],
+    [activeSessionId, client, keepAlive, refreshLoaded, updateSession],
   );
 
   // ---- Modelfile editor (SPEC §5.4, §8) ----
-
-  /** SPEC §8: unsaved editor changes prompt before navigating away. */
-  const confirmUnsavedChanges = useCallback((): boolean => {
-    if (!editorDraftRef.current?.dirty) return true;
-    return window.confirm("Discard unsaved Modelfile changes?");
-  }, []);
 
   /** Every view change — tabs, sidebar nav, session open — funnels through here. */
   const setView = useCallback(
@@ -496,10 +537,17 @@ export function RemudaProvider({
         await client.load(targetName, keepAlive);
         await refreshModels();
         setReloadToast({ phase: "done", oldTag, newTag: targetName });
-        setEditorDraft({ targetTag: targetName, doc: draft.doc, savedDoc: draft.doc, dirty: false });
+        // Only restore the saved draft if the editor still holds it — the
+        // user may have opened another model's Modelfile mid-save, and
+        // clobbering that draft with this one would discard their edits.
+        if (editorDraftRef.current === draft) {
+          setEditorDraft({ targetTag: targetName, doc: draft.doc, savedDoc: draft.doc, dirty: false });
+        }
         window.setTimeout(() => {
           setReloadToast(null);
-          setViewState("chat");
+          // Snap back to chat only if the user is still where the save left
+          // them; navigating away mid-save shouldn't be yanked back.
+          if (viewRef.current === "modelfile") setViewState("chat");
         }, 1200);
       } catch (err) {
         // SPEC §9: surfaced verbatim by the save bar; the editor stays intact and dirty.
@@ -512,7 +560,12 @@ export function RemudaProvider({
     [client, loaded, keepAlive, refreshModels, confirmDeleteModel],
   );
 
-  const value: RemudaContextValue = {
+  // Memoized: chat streaming updates `sessions` once per token, and an
+  // unmemoized literal here would re-render every consumer app-wide on each
+  // one. The inline pane open/close closures are hoisted for the same reason.
+  const openLoadPane = useCallback(() => setLoadPaneOpen(true), []);
+  const closeLoadPane = useCallback(() => setLoadPaneOpen(false), []);
+  const value: RemudaContextValue = useMemo(() => ({
     client,
     status,
     checked,
@@ -526,8 +579,8 @@ export function RemudaProvider({
     view,
     setView,
     loadPaneOpen,
-    openLoadPane: () => setLoadPaneOpen(true),
-    closeLoadPane: () => setLoadPaneOpen(false),
+    openLoadPane,
+    closeLoadPane,
     refreshModels,
     load,
     checkHealth,
@@ -552,7 +605,15 @@ export function RemudaProvider({
     saveError,
     reloadToast,
     saveDraft,
-  };
+  }), [
+    client, status, checked, models, groups, loaded, keepAlive,
+    confirmDeleteModel, setConfirmDeleteModel, view, setView, loadPaneOpen,
+    openLoadPane, closeLoadPane, refreshModels, load, checkHealth, sessions,
+    activeSessionId, streamingSessionId, streamError, lastStats, newChat,
+    openSession, deleteSession, sendMessage, cancelGeneration, editorDraft,
+    editorLoading, editorError, openEditor, openEditorForNew, setEditorDoc,
+    revertEditor, saving, saveError, reloadToast, saveDraft,
+  ]);
 
   return <RemudaContext.Provider value={value}>{children}</RemudaContext.Provider>;
 }
