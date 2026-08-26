@@ -6,6 +6,7 @@
 import type {
   ChatChunk,
   ChatMessage,
+  CreateRequest,
   CreateStatus,
   KeepAlive,
   Model,
@@ -360,15 +361,39 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
 
     async *create(
       name: string,
-      modelfile: string,
+      request: CreateRequest,
       signal?: AbortSignal,
     ): AsyncIterable<CreateStatus> {
-      const res = await send(
-        "POST",
-        "/api/create",
-        { model: name, modelfile, stream: true },
-        signal,
-      );
+      // Structured body first (current Ollama); legacy `modelfile` string as
+      // the fallback for older servers (SPEC §9 version skew).
+      const structured: Record<string, unknown> = {
+        model: name,
+        from: request.from,
+        stream: true,
+      };
+      if (request.system !== undefined) structured.system = request.system;
+      if (request.template !== undefined) structured.template = request.template;
+      if (request.license !== undefined) structured.license = request.license;
+      if (request.parameters !== undefined) structured.parameters = request.parameters;
+
+      let res: Response;
+      try {
+        res = await send("POST", "/api/create", structured, signal);
+      } catch (err) {
+        // Only a 400-class rejection suggests the server predates the
+        // structured form; retry once with the legacy body. Anything else
+        // (404 model missing, network) propagates verbatim.
+        const message = err instanceof Error ? err.message : "";
+        if (!/\((400|422)\)/.test(message)) {
+          throw err;
+        }
+        res = await send(
+          "POST",
+          "/api/create",
+          { model: name, modelfile: request.rawModelfile, stream: true },
+          signal,
+        );
+      }
       const body = requireBody(res, "/api/create");
       for await (const line of ndjson<WireStreamLine>(body, signal)) {
         if (typeof line.error === "string") {

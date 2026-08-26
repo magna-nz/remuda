@@ -360,13 +360,60 @@ describe("error handling", () => {
     );
   });
 
+  it("create() sends the structured body, and falls back to legacy modelfile on 400", async () => {
+    // First server: accepts structured — assert the body carries `from`,
+    // not `modelfile`.
+    let structuredBody: Record<string, unknown> | null = null;
+    stubFetch({
+      "/api/create": (init) => {
+        structuredBody = bodyOf(init);
+        return streamResponse(['{"status":"success"}\n']);
+      },
+    });
+    const req = {
+      from: "llama3.1:8b",
+      system: "Be brief.",
+      parameters: { temperature: 0.7, stop: ["</s>"] },
+      rawModelfile: "FROM llama3.1:8b\nSYSTEM Be brief.",
+    };
+    const statuses = await collect(createClient().create("support-bot", req));
+    expect(statuses).toEqual([{ status: "success" }]);
+    expect(structuredBody).toMatchObject({
+      model: "support-bot",
+      from: "llama3.1:8b",
+      system: "Be brief.",
+      parameters: { temperature: 0.7, stop: ["</s>"] },
+    });
+    expect(structuredBody).not.toHaveProperty("modelfile");
+
+    // Second server: rejects structured with 400 → the client retries once
+    // with the legacy body.
+    const bodies: Record<string, unknown>[] = [];
+    stubFetch({
+      "/api/create": (init) => {
+        const body = bodyOf(init);
+        bodies.push(body);
+        if ("modelfile" in body) {
+          return streamResponse(['{"status":"success"}\n']);
+        }
+        return jsonResponse({ error: "unknown field from" }, 400);
+      },
+    });
+    const legacy = await collect(createClient().create("support-bot", req));
+    expect(legacy).toEqual([{ status: "success" }]);
+    expect(bodies).toHaveLength(2);
+    expect(bodies[1]).toMatchObject({ model: "support-bot", modelfile: req.rawModelfile });
+  });
+
   it("create() surfaces a 400 with the server's error text", async () => {
     stubFetch({
       "/api/create": () =>
         jsonResponse({ error: "error parsing modelfile" }, 400),
     });
     const iterate = async () => {
-      await collect(createClient().create("bad:1b", "FRUM nothing"));
+      await collect(
+        createClient().create("bad:1b", { from: "nothing", rawModelfile: "FRUM nothing" }),
+      );
     };
     await expect(iterate()).rejects.toThrow(/400.*error parsing modelfile/);
   });

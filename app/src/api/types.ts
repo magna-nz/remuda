@@ -76,6 +76,24 @@ export interface CreateStatus {
   status: string;
 }
 
+/**
+ * Payload for POST /api/create. Current Ollama (≥0.5.x) takes structured
+ * fields; older servers take a raw `modelfile` string. The client sends the
+ * structured form first and falls back to the legacy form on rejection
+ * (SPEC §9 version skew). Both derive from the same raw Modelfile — the
+ * modelfile module (M3) produces this from parsed text.
+ */
+export interface CreateRequest {
+  from: string;
+  system?: string;
+  template?: string;
+  license?: string;
+  /** PARAMETER lines; repeatable keys (stop) become arrays. */
+  parameters?: Record<string, string | number | boolean | Array<string | number>>;
+  /** The raw Modelfile text, for the legacy fallback. */
+  rawModelfile: string;
+}
+
 /** keep_alive values Remuda exposes (SPEC §5.6). */
 export type KeepAlive = "5m" | "30m" | -1;
 
@@ -104,10 +122,11 @@ export interface OllamaClient {
     messages: ChatMessage[],
     opts: { keepAlive: KeepAlive; signal?: AbortSignal },
   ): AsyncIterable<ChatChunk>;
-  /** POST /api/create with stream: true. */
+  /** POST /api/create with stream: true — structured body first, legacy
+   * `modelfile` fallback for older servers (SPEC §9). */
   create(
     name: string,
-    modelfile: string,
+    request: CreateRequest,
     signal?: AbortSignal,
   ): AsyncIterable<CreateStatus>;
   /** POST /api/pull with stream: true. */
