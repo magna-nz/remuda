@@ -50,6 +50,11 @@ every installed model — with **tuned variants grouped under their base** — p
 picker (*Original* or any variant) and a **Load** button with real progress. Loading is always
 the explicit act: the model you picked is the model that's hot.
 
+Next to Load, **Eject** hands the loaded model's memory straight back instead of waiting out
+`keep_alive` — useful when you want the VRAM for something else. It only shows while something
+is loaded, and it names the tag it frees. Nothing is lost: the next chat or Load warms the
+weights again.
+
 ## What you can do
 
 ### 💬 Chat with the model you loaded

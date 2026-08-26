@@ -1,9 +1,11 @@
 import "../chat/test/localStorage";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoadPane } from "./LoadPane";
 import { TopNav } from "./TopNav";
 import { ViewTabs } from "../editor/ViewTabs";
+import { ChatView } from "../chat/ChatView";
+import { Sidebar } from "./Sidebar";
 import { RemudaProvider } from "./state";
 import { FakeClient, makeModel } from "./test/FakeClient";
 
@@ -42,6 +44,18 @@ async function openDetail(client: FakeClient) {
   await openPane(client);
   fireEvent.click(screen.getByText("llama3.1:8b"));
   await screen.findByText("Q4_K_M");
+}
+
+/**
+ * Load the Q4 weights, then reopen the pane — which lands back on the live
+ * quant's detail step, where Eject lives.
+ */
+async function openDetailWithLoaded(client: FakeClient) {
+  await openDetail(client);
+  fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
+  fireEvent.click(screen.getByTitle("Choose and load a model"));
+  await screen.findByRole("button", { name: "Reload model" });
 }
 
 beforeEach(() => {
@@ -263,5 +277,118 @@ describe("LoadPane", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pull" })).toHaveAttribute("aria-current", "true");
+  });
+
+  it("ejects the loaded model, freeing its memory without closing the pane", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    await openDetailWithLoaded(client);
+
+    fireEvent.click(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" }));
+
+    // keep_alive: 0 against the tag that was in memory (SPEC §7).
+    await waitFor(() => expect(client.unloadCalls).toEqual(["llama3.1:8b-q4_K_M"]));
+    // The pane stays put and re-reads as nothing-loaded: the top control
+    // resets, the reload offer becomes a plain load, and the "in memory"
+    // note on the quant is gone.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText("No model loaded")).toBeInTheDocument());
+    expect(screen.getByRole("button", { name: "Load model" })).toBeInTheDocument();
+    expect(screen.queryByText(/in memory/)).not.toBeInTheDocument();
+    // Nothing loaded, nothing to eject.
+    expect(screen.queryByRole("button", { name: /^Eject/ })).not.toBeInTheDocument();
+  });
+
+  it("offers no Eject until something is actually loaded", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    await openDetail(client);
+
+    expect(screen.getByRole("button", { name: "Load model" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Eject/ })).not.toBeInTheDocument();
+  });
+
+  it("ejects what is in memory even while another model's detail is open", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    await openDetailWithLoaded(client);
+
+    // Walk over to mistral: the selection changes, the loaded model doesn't.
+    fireEvent.click(screen.getByRole("button", { name: "Back to model list" }));
+    fireEvent.click(await screen.findByText("mistral:7b"));
+    await screen.findByText("Original (base)");
+
+    // Load would send mistral; Eject still names — and frees — the llama tag.
+    expect(screen.getByRole("button", { name: "Load model" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" }));
+
+    await waitFor(() => expect(client.unloadCalls).toEqual(["llama3.1:8b-q4_K_M"]));
+  });
+
+  it("surfaces a failed eject's error text verbatim and keeps the model loaded (SPEC §9)", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    await openDetailWithLoaded(client);
+    client.failUnload = "Ollama /api/generate failed (500): unable to stop model";
+
+    fireEvent.click(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("unable to stop model");
+    // Still loaded, and the button is back for a retry.
+    expect(screen.getByRole("button", { name: "Reload model" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeEnabled();
+  });
+
+  it("disables Eject while a reply is streaming (SPEC §8: one generation at a time)", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <TopNav />
+        <LoadPane />
+        <Sidebar />
+        <ChatView />
+      </RemudaProvider>,
+    );
+    // Load a model so New chat has something to bind to, then start a reply
+    // and leave it mid-stream.
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    fireEvent.click(await screen.findByText("llama3.1:8b"));
+    await screen.findByText("Q4_K_M");
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
+
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "hello" } });
+    fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
+    await act(async () => {});
+    client.emitChat({ content: "Hel", done: false });
+    await screen.findByText("Hel");
+
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    const eject = await screen.findByRole("button", { name: "Eject llama3.1:8b-q4_K_M" });
+    expect(eject).toBeDisabled();
+    expect(eject).toHaveAttribute("title", "Wait for the reply to finish");
+
+    // Once the stream ends, it comes back.
+    client.emitChat({ content: "lo!", done: true });
+    await waitFor(() => expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeEnabled());
+  });
+
+  it("disables Eject while the server is disconnected", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    // Fast poll so the dropped connection is noticed without UI interaction.
+    render(
+      <RemudaProvider client={client} pollIntervalMs={25}>
+        <TopNav />
+        <LoadPane />
+      </RemudaProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    fireEvent.click(await screen.findByText("llama3.1:8b"));
+    await screen.findByText("Q4_K_M");
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    await screen.findByRole("button", { name: "Eject llama3.1:8b-q4_K_M" });
+
+    client.connected = false;
+    await waitFor(() => expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeDisabled());
   });
 });

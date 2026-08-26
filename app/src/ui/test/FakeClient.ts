@@ -42,6 +42,8 @@ export interface FakeClientOptions {
   failVersion?: boolean;
   /** load() rejects with this message, simulating a failed load request. */
   failLoad?: string;
+  /** unload() rejects with this message, simulating a failed eject (SPEC §9). */
+  failUnload?: string;
   /**
    * Scripted chat replies: chat() yields these chunks in order (stopping
    * after a done chunk), checking the abort signal between chunks. Without
@@ -86,6 +88,7 @@ export class FakeClient implements OllamaClient {
   versionString: string | null;
   failVersion: boolean;
   failLoad: string | undefined;
+  failUnload: string | undefined;
   loadCalls: { tag: string; keepAlive: KeepAlive }[] = [];
   chatChunks: ChatChunk[] | undefined;
   failChat: string | undefined;
@@ -115,6 +118,7 @@ export class FakeClient implements OllamaClient {
     this.versionString = options.version === undefined ? "0.5.4" : options.version;
     this.failVersion = options.failVersion ?? false;
     this.failLoad = options.failLoad;
+    this.failUnload = options.failUnload;
     this.chatChunks = options.chatChunks;
     this.failChat = options.failChat;
     this.modelfile = options.modelfile ?? "";
@@ -196,6 +200,9 @@ export class FakeClient implements OllamaClient {
   }
 
   async unload(tag: string): Promise<void> {
+    if (this.failUnload !== undefined) {
+      throw new Error(this.failUnload);
+    }
     this.unloadCalls.push(tag);
     this.models = this.models.map((m) => (m.tag === tag ? { ...m, isLoaded: false } : m));
   }
