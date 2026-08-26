@@ -6,7 +6,7 @@
  * for the legacy fallback (SPEC §9 version skew).
  */
 
-import type { CreateRequest } from "../api/types";
+import type { ChatMessage, CreateRequest } from "../api/types";
 import { from, parameters, system, template, type ModelfileDoc } from "./parse";
 import { serializeModelfile } from "./serialize";
 
@@ -53,5 +53,39 @@ export function toCreateRequest(doc: ModelfileDoc): CreateRequest {
     }
     request.parameters = out;
   }
+
+  // The structured body is the DEFAULT path on current Ollama, so LICENSE
+  // and MESSAGE instructions noted on passthrough segments must ride it
+  // too — leaving them only in rawModelfile would silently drop them
+  // whenever the legacy fallback isn't taken (the cardinal rule, at the
+  // wire). Plain comments and blank lines are legitimately absent from
+  // the created model on either path: Ollama's own create discards them.
+  const licenses: string[] = [];
+  const messages: ChatMessage[] = [];
+  for (const segment of doc.segments) {
+    if (segment.kind !== "passthrough" || segment.instructions === undefined) {
+      continue;
+    }
+    for (const instruction of segment.instructions) {
+      if (instruction.keyword === "adapter") {
+        // The structured body has no adapter field, and silently creating
+        // a model without its LoRA would be a discard. Refuse loudly.
+        throw new Error(
+          "ADAPTER isn't supported by Remuda's save yet — edit and " +
+            "create this model with the ollama CLI.",
+        );
+      }
+      if (instruction.keyword === "license") {
+        licenses.push(instruction.value);
+      } else if (instruction.role !== undefined) {
+        messages.push({ role: instruction.role, content: instruction.value });
+      }
+    }
+  }
+  // Multiple LICENSE instructions are legal (one per license layer); the
+  // structured field is a single string, so they concatenate.
+  if (licenses.length > 0) request.license = licenses.join("\n");
+  if (messages.length > 0) request.messages = messages;
+
   return request;
 }

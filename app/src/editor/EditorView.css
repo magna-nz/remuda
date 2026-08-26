@@ -284,3 +284,12 @@
   border-radius: 8px;
   padding: 8px 11px;
 }
+
+/* The form column is a <fieldset> so one `disabled` freezes every control
+   during a save; strip the element's default chrome. */
+fieldset.form-scroll {
+  border: 0;
+  margin: 0;
+  /* .form-scroll's own padding: 18px applies; just kill UA extras. */
+  min-width: 0;
+}

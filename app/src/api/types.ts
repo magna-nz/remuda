@@ -88,6 +88,8 @@ export interface CreateRequest {
   system?: string;
   template?: string;
   license?: string;
+  /** MESSAGE instructions, in order (structured create's `messages`). */
+  messages?: ChatMessage[];
   /** PARAMETER lines; repeatable keys (stop) become arrays. */
   parameters?: Record<string, string | number | boolean | Array<string | number>>;
   /** The raw Modelfile text, for the legacy fallback. */

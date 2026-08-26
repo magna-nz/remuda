@@ -374,6 +374,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       if (request.system !== undefined) structured.system = request.system;
       if (request.template !== undefined) structured.template = request.template;
       if (request.license !== undefined) structured.license = request.license;
+      if (request.messages !== undefined) structured.messages = request.messages;
       if (request.parameters !== undefined) structured.parameters = request.parameters;
 
       let res: Response;

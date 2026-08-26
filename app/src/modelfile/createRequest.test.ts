@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { parseModelfile } from "./parse";
 import { toCreateRequest } from "./createRequest";
-import { DECORATED, ONLY_COMMENTS, TYPICAL } from "./fixtures";
+import {
+  DECORATED,
+  DECORATED_NO_ADAPTER,
+  EXTRAS,
+  ONLY_COMMENTS,
+  TYPICAL,
+} from "./fixtures";
 
 describe("toCreateRequest", () => {
   it("projects a typical file, parsing numbers and collecting stops", () => {
@@ -42,7 +48,49 @@ describe("toCreateRequest", () => {
   });
 
   it("carries the byte-exact raw Modelfile for the legacy fallback", () => {
-    expect(toCreateRequest(parseModelfile(DECORATED)).rawModelfile).toBe(DECORATED);
+    expect(toCreateRequest(parseModelfile(DECORATED_NO_ADAPTER)).rawModelfile).toBe(
+      DECORATED_NO_ADAPTER,
+    );
+  });
+
+  it("carries a triple-quoted LICENSE block and MESSAGEs from a decorated file", () => {
+    const request = toCreateRequest(parseModelfile(DECORATED_NO_ADAPTER));
+    expect(request.license).toBe(
+      "MIT License\nFROM inside license is prose, not an instruction\n\nCopyright (c) 2026",
+    );
+    expect(request.messages).toEqual([
+      { role: "user", content: "Hello there" },
+      { role: "assistant", content: "Hi! How can I help?" },
+    ]);
+  });
+
+  it("carries a single-line LICENSE", () => {
+    const request = toCreateRequest(
+      parseModelfile("FROM x\nLICENSE Apache-2.0\n"),
+    );
+    expect(request.license).toBe("Apache-2.0");
+  });
+
+  it("keeps MESSAGE order and roles, including triple-quoted bodies", () => {
+    const request = toCreateRequest(
+      parseModelfile(
+        'FROM x\nMESSAGE system Be nice\nMESSAGE user """\nHi\nthere\n"""\nMESSAGE assistant Yo\n',
+      ),
+    );
+    expect(request.messages).toEqual([
+      { role: "system", content: "Be nice" },
+      { role: "user", content: "Hi\nthere" },
+      { role: "assistant", content: "Yo" },
+    ]);
+  });
+
+  it("refuses ADAPTER rather than silently dropping the LoRA", () => {
+    expect(() => toCreateRequest(parseModelfile(DECORATED))).toThrow(
+      /ADAPTER isn't supported/,
+    );
+    expect(() => toCreateRequest(parseModelfile(EXTRAS))).toThrow(
+      /ollama CLI/,
+    );
   });
 
   it("throws a descriptive error when there is no FROM", () => {

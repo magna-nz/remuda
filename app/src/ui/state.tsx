@@ -39,7 +39,7 @@ import {
 // M3 — owned by a concurrent agent (app/src/modelfile/). Consumed here, not
 // redeclared: parseModelfile/serializeModelfile plus toCreateRequest are the
 // editor's sync contract with the raw Modelfile (SPEC.md §5.4).
-import { parseModelfile, type ModelfileDoc } from "../modelfile";
+import { parseModelfile, serializeModelfile, type ModelfileDoc } from "../modelfile";
 import { toCreateRequest } from "../modelfile/createRequest";
 
 export type View = "chat" | "modelfile" | "settings";
@@ -375,7 +375,9 @@ export function RemudaProvider({
 
   const openEditor = useCallback(
     async (tag: string) => {
-      if (editorDraftRef.current?.targetTag !== tag && !confirmUnsavedChanges()) return;
+      // A dirty draft asks before being replaced — including re-opening the
+      // SAME tag, which would otherwise silently reset the edits (SPEC §8).
+      if (editorDraftRef.current?.dirty && !confirmUnsavedChanges()) return;
       setEditorError(null);
       setEditorLoading(true);
       try {
@@ -412,7 +414,14 @@ export function RemudaProvider({
   }, []);
 
   const revertEditor = useCallback(() => {
-    setEditorDraft((prev) => (prev ? { ...prev, doc: prev.savedDoc, dirty: false } : prev));
+    // Re-parse into a FRESH doc object: the editor's raw-pane resync effect
+    // is keyed on savedDoc's identity, so reverting must change it or the
+    // pane keeps showing the discarded edit (source-of-truth desync).
+    setEditorDraft((prev) => {
+      if (!prev) return prev;
+      const fresh = parseModelfile(serializeModelfile(prev.savedDoc));
+      return { ...prev, doc: fresh, savedDoc: fresh, dirty: false };
+    });
     setSaveError(null);
   }, []);
 

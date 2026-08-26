@@ -68,6 +68,16 @@ function renderProse(keyword: string, value: string): string {
 }
 
 function renderParameter(key: string, value: string): string {
+  // A PARAMETER is a single-line instruction; a value with a line break
+  // would re-parse as something else entirely. Refuse loudly rather than
+  // silently mangle — mirrors renderProse's `"""` refusal.
+  if (/[\r\n]/.test(value)) {
+    throw new Error(
+      `PARAMETER ${key} value contains a line break, which the Modelfile ` +
+        "grammar cannot represent in a parameter; remove it or edit the " +
+        "raw Modelfile instead.",
+    );
+  }
   const quoted =
     value === "" || /\s/.test(value) || value.startsWith('"')
       ? `"${value}"`

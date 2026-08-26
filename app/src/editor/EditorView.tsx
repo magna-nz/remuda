@@ -150,7 +150,9 @@ export function EditorView() {
             <span className="eyebrow">Settings</span>
             <span className="hint">friendly editor</span>
           </div>
-          <div className="form-scroll">
+          {/* Freeze all editing while a save is in flight — edits made
+              mid-save would be overwritten when the saved doc lands. */}
+          <fieldset className="form-scroll" disabled={saving}>
             <div className="field">
               <label htmlFor="ed-from">
                 Base model — <span className="kwhint">FROM</span>
@@ -276,7 +278,7 @@ export function EditorView() {
                 Advanced content preserved (not shown here): {kinds.join(", ")}.
               </div>
             )}
-          </div>
+          </fieldset>
         </div>
         <div className="col">
           <div className="col-h">
@@ -290,6 +292,7 @@ export function EditorView() {
               spellCheck={false}
               value={rawText}
               onChange={(e) => handleRawChange(e.target.value)}
+              disabled={saving}
             />
           </div>
         </div>
@@ -333,7 +336,9 @@ export function EditorView() {
           onCancel={() => setSaveAsOpen(false)}
           onConfirm={(name) => {
             setSaveAsOpen(false);
-            void saveDraft(`${name}:latest`);
+            // A name that already carries a tag (support:v2) keeps it; only
+            // bare names get the conventional :latest.
+            void saveDraft(name.includes(":") ? name : `${name}:latest`);
           }}
         />
       )}

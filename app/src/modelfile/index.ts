@@ -18,6 +18,7 @@ export {
   type ParameterSegment,
   type TemplateSegment,
   type PassthroughSegment,
+  type PassthroughInstruction,
 } from "./parse";
 export {
   serializeModelfile,

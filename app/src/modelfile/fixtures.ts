@@ -55,6 +55,26 @@ Copyright (c) 2026
 # trailing comment
 `;
 
+/**
+ * DECORATED without its ADAPTER line — the create-request tests need a
+ * decorated file that toCreateRequest accepts (ADAPTER makes it throw).
+ */
+export const DECORATED_NO_ADAPTER = DECORATED.replace(
+  "ADAPTER ./lora.safetensors\n",
+  "",
+);
+
+/** Single-line LICENSE, triple-quoted MESSAGE, ADAPTER — all unmanaged. */
+export const EXTRAS = `FROM llama3
+LICENSE Apache-2.0
+MESSAGE user """
+What is
+a remuda?
+"""
+MESSAGE assistant A string of saddle horses.
+ADAPTER ./lora.safetensors
+`;
+
 /** Triple-quoted SYSTEM with embedded quotes and blank lines. */
 export const TRIPLE_SYSTEM = `FROM gemma2:9b
 SYSTEM """
@@ -101,6 +121,8 @@ export const CRLF = "FROM llama3\r\nPARAMETER temperature 1\r\n";
 export const ROUND_TRIP_FIXTURES: Array<[string, string]> = [
   ["typical", TYPICAL],
   ["decorated", DECORATED],
+  ["decorated without adapter", DECORATED_NO_ADAPTER],
+  ["license + block message + adapter", EXTRAS],
   ["triple-quoted system", TRIPLE_SYSTEM],
   ["only comments", ONLY_COMMENTS],
   ["empty", EMPTY],

@@ -178,4 +178,13 @@ describe("value fidelity through an update round trip", () => {
     const doc = parseModelfile("FROM x\n");
     expect(() => setSystem(doc, 'has\n"""\ninside')).toThrow(/cannot represent/);
   });
+
+  it("refuses parameter values containing a line break instead of mangling them", () => {
+    const doc = parseModelfile("FROM x\n");
+    expect(() => setStops(doc, ["a\nb"])).toThrow(/line break/);
+    expect(() => setParameter(doc, "stop", "a\nb")).toThrow(/line break/);
+    expect(() => setParameter(doc, "temperature", "0.7\nSYSTEM pwned")).toThrow(
+      /line break/,
+    );
+  });
 });

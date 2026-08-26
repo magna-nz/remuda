@@ -51,6 +51,20 @@ export interface TemplateSegment extends ManagedBase {
 }
 
 /**
+ * A well-formed LICENSE / ADAPTER / MESSAGE instruction found inside a
+ * passthrough run. The editor still doesn't manage its bytes — the text
+ * stays verbatim in the segment — but the structured /api/create payload
+ * must carry these (createRequest.ts), so the parse notes what it saw
+ * rather than losing it at the wire (the cardinal rule).
+ */
+export interface PassthroughInstruction {
+  keyword: "license" | "adapter" | "message";
+  /** MESSAGE only: the role preceding the content. */
+  role?: "system" | "user" | "assistant";
+  value: string;
+}
+
+/**
  * Verbatim lines the editor does not manage: comments, blank runs,
  * LICENSE / ADAPTER / MESSAGE instructions, and malformed input.
  */
@@ -60,6 +74,12 @@ export interface PassthroughSegment {
   text: string;
   startLine: number;
   endLine: number;
+  /**
+   * LICENSE / ADAPTER / MESSAGE instructions within this run, in source
+   * order. Absent when the run is only comments, blanks, or malformed
+   * input.
+   */
+  instructions?: PassthroughInstruction[];
 }
 
 export type ModelfileSegment =
@@ -122,23 +142,82 @@ export function parseModelfile(rawText: string): ModelfileDoc {
   // exact input — including a missing trailing newline.
   const lines = rawText.split(/(?<=\n)/);
 
-  // Consecutive passthrough lines coalesce into one segment.
+  // Consecutive passthrough lines coalesce into one segment; well-formed
+  // LICENSE / ADAPTER / MESSAGE instructions inside the run are noted in
+  // source order so createRequest.ts can carry them to /api/create.
   let passStart = -1;
   const passLines: string[] = [];
+  const passInstructions: PassthroughInstruction[] = [];
   const pushPass = (index: number): void => {
     if (passStart === -1) passStart = index;
     passLines.push(lines[index]);
   };
   const flushPass = (): void => {
     if (passStart === -1) return;
-    segments.push({
+    const segment: PassthroughSegment = {
       kind: "passthrough",
       text: passLines.join(""),
       startLine: passStart,
       endLine: passStart + passLines.length - 1,
-    });
+    };
+    if (passInstructions.length > 0) {
+      segment.instructions = [...passInstructions];
+    }
+    segments.push(segment);
     passStart = -1;
     passLines.length = 0;
+    passInstructions.length = 0;
+  };
+
+  /**
+   * Resolve an instruction value starting at `text` on line `lineIndex`,
+   * consuming further lines when it opens a `"""` block. Returns null when
+   * the block never closes.
+   */
+  const resolveValue = (
+    text: string,
+    lineIndex: number,
+  ): { value: string; consumed: number } | null => {
+    if (!text.startsWith('"""')) {
+      return { value: stripQuotes(text), consumed: 1 };
+    }
+    const afterOpen = text.slice(3);
+    const closeInline = afterOpen.indexOf('"""');
+    if (closeInline !== -1) {
+      return { value: afterOpen.slice(0, closeInline), consumed: 1 };
+    }
+    const parts = [afterOpen];
+    for (let j = lineIndex + 1; j < lines.length; j += 1) {
+      const lineContent = stripEol(lines[j]);
+      const at = lineContent.indexOf('"""');
+      if (at === -1) {
+        parts.push(lineContent);
+        continue;
+      }
+      parts.push(lineContent.slice(0, at));
+      let value = parts.join("\n");
+      // The line break after an opening """ and the one before a closing
+      // """ on its own line are delimiters, not content. This mirrors how
+      // serialize.ts renders block values, so our own output re-parses to
+      // the exact same value.
+      if (parts[0] === "" && value.startsWith("\n")) {
+        value = value.slice(1);
+      }
+      if (parts[parts.length - 1] === "" && value.endsWith("\n")) {
+        value = value.slice(0, -1);
+      }
+      return { value, consumed: j - lineIndex + 1 };
+    }
+    return null;
+  };
+
+  /**
+   * Unterminated """ block: conservatively keep the rest of the file
+   * verbatim rather than guess at instruction boundaries inside what was
+   * meant to be quoted prose.
+   */
+  const passRemainder = (start: number): void => {
+    for (let k = start; k < lines.length; k += 1) pushPass(k);
   };
 
   let i = 0;
@@ -175,52 +254,39 @@ export function parseModelfile(rawText: string): ModelfileDoc {
       continue;
     }
 
+    if (keyword === "message") {
+      // MESSAGE <role> <content>: a role comes before the (possibly
+      // triple-quoted) content. An unknown role is malformed →
+      // passthrough, unannotated.
+      const mm = /^(system|user|assistant)\s+(\S[\s\S]*)$/i.exec(rest);
+      if (mm === null) {
+        pushPass(i);
+        i += 1;
+        continue;
+      }
+      const resolved = resolveValue(mm[2], i);
+      if (resolved === null) {
+        passRemainder(i);
+        break;
+      }
+      for (let k = i; k < i + resolved.consumed; k += 1) pushPass(k);
+      passInstructions.push({
+        keyword: "message",
+        role: mm[1].toLowerCase() as "system" | "user" | "assistant",
+        value: resolved.value,
+      });
+      i += resolved.consumed;
+      continue;
+    }
+
     // Remaining keywords take the rest of the line as their value,
     // possibly triple-quoted across multiple lines.
-    let value: string;
-    let consumed = 1;
-    if (rest.startsWith('"""')) {
-      const afterOpen = rest.slice(3);
-      const closeInline = afterOpen.indexOf('"""');
-      if (closeInline !== -1) {
-        value = afterOpen.slice(0, closeInline);
-      } else {
-        const parts = [afterOpen];
-        let closed = false;
-        let j = i + 1;
-        for (; j < lines.length; j += 1) {
-          const lineContent = stripEol(lines[j]);
-          const at = lineContent.indexOf('"""');
-          if (at !== -1) {
-            parts.push(lineContent.slice(0, at));
-            closed = true;
-            break;
-          }
-          parts.push(lineContent);
-        }
-        if (!closed) {
-          // Unterminated """ block: conservatively keep the rest of the
-          // file verbatim rather than guess at instruction boundaries
-          // inside what was meant to be quoted prose.
-          for (let k = i; k < lines.length; k += 1) pushPass(k);
-          break;
-        }
-        value = parts.join("\n");
-        // The line break after an opening """ and the one before a
-        // closing """ on its own line are delimiters, not content. This
-        // mirrors how serialize.ts renders block values, so our own
-        // output re-parses to the exact same value.
-        if (parts[0] === "" && value.startsWith("\n")) {
-          value = value.slice(1);
-        }
-        if (parts[parts.length - 1] === "" && value.endsWith("\n")) {
-          value = value.slice(0, -1);
-        }
-        consumed = j - i + 1;
-      }
-    } else {
-      value = stripQuotes(rest);
+    const resolved = resolveValue(rest, i);
+    if (resolved === null) {
+      passRemainder(i);
+      break;
     }
+    const { value, consumed } = resolved;
 
     const managed =
       MANAGED_KEYWORDS.has(keyword) &&
@@ -230,9 +296,13 @@ export function parseModelfile(rawText: string): ModelfileDoc {
       !(rest === "" || (keyword === "from" && value.trim() === ""));
 
     if (!managed) {
-      // LICENSE / ADAPTER / MESSAGE, or a malformed managed instruction:
-      // the whole span (including a triple-quoted body) is passthrough.
+      // LICENSE / ADAPTER, or a malformed managed instruction: the whole
+      // span (including a triple-quoted body) is passthrough. Well-formed
+      // LICENSE / ADAPTER additionally get noted for the create payload.
       for (let k = i; k < i + consumed; k += 1) pushPass(k);
+      if ((keyword === "license" || keyword === "adapter") && rest !== "") {
+        passInstructions.push({ keyword, value });
+      }
       i += consumed;
       continue;
     }

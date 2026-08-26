@@ -10,6 +10,7 @@ import { serializeModelfile } from "./serialize";
 import {
   DECORATED,
   EMPTY,
+  EXTRAS,
   JUNK,
   ODD_SPACING,
   ROUND_TRIP_FIXTURES,
@@ -58,6 +59,51 @@ describe("parseModelfile", () => {
     expect(passText).toContain("MESSAGE user Hello there");
     expect(passText).toContain("MIT License");
     expect(passText).toContain("# trailing comment");
+  });
+
+  it("notes LICENSE / ADAPTER / MESSAGE instructions in source order", () => {
+    const doc = parseModelfile(DECORATED);
+    const noted = doc.segments.flatMap((s) =>
+      s.kind === "passthrough" ? (s.instructions ?? []) : [],
+    );
+    expect(noted).toEqual([
+      { keyword: "adapter", value: "./lora.safetensors" },
+      { keyword: "message", role: "user", value: "Hello there" },
+      { keyword: "message", role: "assistant", value: "Hi! How can I help?" },
+      {
+        keyword: "license",
+        value:
+          "MIT License\nFROM inside license is prose, not an instruction\n\nCopyright (c) 2026",
+      },
+    ]);
+  });
+
+  it("resolves a triple-quoted MESSAGE body as content, not instructions", () => {
+    const doc = parseModelfile(EXTRAS);
+    const noted = doc.segments.flatMap((s) =>
+      s.kind === "passthrough" ? (s.instructions ?? []) : [],
+    );
+    expect(noted).toEqual([
+      { keyword: "license", value: "Apache-2.0" },
+      { keyword: "message", role: "user", value: "What is\na remuda?" },
+      {
+        keyword: "message",
+        role: "assistant",
+        value: "A string of saddle horses.",
+      },
+      { keyword: "adapter", value: "./lora.safetensors" },
+    ]);
+  });
+
+  it("leaves a MESSAGE with an unknown role as unannotated passthrough", () => {
+    const doc = parseModelfile("FROM x\nMESSAGE narrator Once upon a time\n");
+    const pass = doc.segments.find((s) => s.kind === "passthrough");
+    expect(pass).toMatchObject({ text: "MESSAGE narrator Once upon a time\n" });
+    expect(
+      pass !== undefined && pass.kind === "passthrough"
+        ? pass.instructions
+        : null,
+    ).toBeUndefined();
   });
 
   it("does not treat instruction-like prose inside a LICENSE block as an instruction", () => {
