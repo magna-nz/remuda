@@ -25,6 +25,8 @@ interface WireDetails {
   family?: string;
   parameter_size?: string;
   quantization_level?: string;
+  /** Tag this model was created FROM; "" for a model that isn't derived. */
+  parent_model?: string;
 }
 
 interface WireTagsResponse {
@@ -114,6 +116,12 @@ function normalizeTag(tag: string): string {
  * resolves to another local model, shows up in a `# FROM <name>` comment
  * line instead. Prefer that comment; fall back to a FROM line whose value
  * doesn't look like a path.
+ *
+ * Note this is only the *fallback* for deriving a base: current Ollama names
+ * the parent outright in `details.parent_model`, and the `# FROM` comment it
+ * writes today is the model's own tag rather than its parent's, so on those
+ * servers this function contributes nothing. It stays for servers that
+ * predate `parent_model`.
  */
 function parseFrom(modelfile: string): string | null {
   let fallback: string | null = null;
@@ -183,7 +191,15 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
     return (await res.json()) as WireShowResponse;
   }
 
-  async function listModels(): Promise<Model[]> {
+  /**
+   * The models from /api/tags, plus the parent each one declares.
+   *
+   * `details.parent_model` is Ollama's own answer to "was this built FROM
+   * another local model?" — it names the exact tag `ollama create` used. It's
+   * kept out of Model (a tag's own facts) and handed to listGroups, which is
+   * where derivation matters; unresolvable parents don't survive that far.
+   */
+  async function fetchModels(): Promise<{ models: Model[]; parents: Map<string, string> }> {
     const [tags, ps] = await Promise.all([
       getJson<WireTagsResponse>("/api/tags"),
       getJson<WirePsResponse>("/api/ps"),
@@ -191,8 +207,13 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
     const loaded = new Set(
       (ps.models ?? []).map((m) => normalizeTag(m.name ?? m.model ?? "")),
     );
-    return (tags.models ?? []).map((m) => {
+    const parents = new Map<string, string>();
+    const models = (tags.models ?? []).map((m) => {
       const tag = m.name ?? m.model ?? "";
+      const parent = m.details?.parent_model ?? "";
+      if (parent.trim() !== "") {
+        parents.set(tag, parent.trim());
+      }
       return {
         tag,
         family: m.details?.family ?? "",
@@ -206,6 +227,11 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         modifiedAt: m.modified_at ?? "",
       };
     });
+    return { models, parents };
+  }
+
+  async function listModels(): Promise<Model[]> {
+    return (await fetchModels()).models;
   }
 
   return {
@@ -227,7 +253,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
     listModels,
 
     async listGroups(): Promise<ModelGroup[]> {
-      const models = await listModels();
+      const { models, parents } = await fetchModels();
       const byNorm = new Map<string, Model>();
       for (const m of models) {
         byNorm.set(normalizeTag(m.tag), m);
@@ -241,12 +267,21 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       );
       const resolved: Model[] = models.map((m) => {
         const raw = shows.get(m.tag);
-        const from = raw?.modelfile ? parseFrom(raw.modelfile) : null;
+        // The declared parent is authoritative; the Modelfile scan is the
+        // fallback for servers that don't report one. A parent naming a model
+        // that isn't installed (deleted since, or pulled ready-made) leaves
+        // this tag a base — there's nothing here to nest it under.
+        const candidates = [
+          parents.get(m.tag) ?? null,
+          raw?.modelfile ? parseFrom(raw.modelfile) : null,
+        ];
         let base: string | null = null;
-        if (from !== null) {
+        for (const from of candidates) {
+          if (from === null) continue;
           const target = byNorm.get(normalizeTag(from));
           if (target && target.tag !== m.tag) {
             base = target.tag;
+            break;
           }
         }
         return {

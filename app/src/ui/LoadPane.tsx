@@ -285,11 +285,18 @@ export function LoadPane() {
                             {tuned === 0 ? "base only" : `${tuned} Modelfile${tuned === 1 ? "" : "s"}`}
                           </span>
                         </span>
-                        {live ? (
-                          <span className="ppill loaded">loaded</span>
-                        ) : tuned > 0 ? (
-                          <span className="ppill tuned">tuned</span>
-                        ) : null}
+                        {/* Both pills can show at once: "tuned" is a fact
+                            about the model, "loaded" about right now. A
+                            loaded model shouldn't stop advertising that it
+                            has Modelfiles inside. */}
+                        <span className="ppills">
+                          {tuned > 0 && (
+                            <span className="ppill tuned" title={`${tuned} tuned Modelfile${tuned === 1 ? "" : "s"}`}>
+                              tuned
+                            </span>
+                          )}
+                          {live && <span className="ppill loaded">loaded</span>}
+                        </span>
                         <span className="pchev" aria-hidden="true">
                           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                             <path d="M9 6l6 6-6 6" />

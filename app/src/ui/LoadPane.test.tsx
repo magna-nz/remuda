@@ -65,6 +65,29 @@ describe("LoadPane", () => {
     expect(screen.queryByText("Original (base)")).not.toBeInTheDocument();
   });
 
+  it("badges a model that has Modelfiles, and keeps the badge once it's loaded", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    await openPane(client);
+
+    // Nothing loaded: the model with a tuning is badged, the base-only one
+    // isn't, and no row claims to be in memory.
+    expect(screen.getByText("tuned")).toBeInTheDocument();
+    expect(screen.queryByText("loaded")).not.toBeInTheDocument();
+  });
+
+  it("shows tuned and loaded together — one is a fact, the other a state", async () => {
+    const models = fixtureModels().map((m) =>
+      m.tag === "llama3.1:8b-q4_K_M" ? { ...m, isLoaded: true } : m,
+    );
+    const client = new FakeClient({ models });
+    // A loaded model opens on its detail step; step back to see the row.
+    await openPane(client);
+    fireEvent.click(screen.getByLabelText("Back to model list"));
+
+    expect(screen.getByText("tuned")).toBeInTheDocument();
+    expect(screen.getByText("loaded")).toBeInTheDocument();
+  });
+
   it("drilling in shows each quantisation with its literal tag, and that quant's Modelfiles", async () => {
     const client = new FakeClient({ models: fixtureModels() });
     await openDetail(client);
