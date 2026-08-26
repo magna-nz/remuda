@@ -4,10 +4,11 @@
  * A small React context — no external state library. Holds the OllamaClient
  * instance, server status (polled every 5s), the installed model list
  * (grouped into base + variants for the load pane), the currently loaded
- * selection, keep_alive, which top-level view is showing (chat vs.
- * settings), and the saved chat sessions (SPEC §5.2, §6) with the one
- * in-flight generation (SPEC §8). The model list refreshes on connect,
- * after load(), and after a completed chat exchange.
+ * selection, keep_alive, which top-level view is showing (chat, modelfile,
+ * pull, or settings), persisted settings (SPEC §5.6), and the saved chat
+ * sessions (SPEC §5.2, §6) with the one in-flight generation (SPEC §8). The
+ * model list refreshes on connect, after load(), and after a completed chat
+ * exchange.
  */
 import {
   createContext,
@@ -42,7 +43,38 @@ import {
 import { parseModelfile, serializeModelfile, type ModelfileDoc } from "../modelfile";
 import { toCreateRequest } from "../modelfile/createRequest";
 
-export type View = "chat" | "modelfile" | "settings";
+export type View = "chat" | "modelfile" | "pull" | "settings";
+
+/** Settings persisted across restarts (SPEC §5.6), separate from chat sessions. */
+const SETTINGS_STORAGE_KEY = "remuda.settings.v1";
+
+interface PersistedSettings {
+  /** "Confirm before deleting a model" (SPEC §5.6, §8): also gates Save-over-existing. */
+  confirmDeleteModel: boolean;
+}
+
+const DEFAULT_SETTINGS: PersistedSettings = { confirmDeleteModel: true };
+
+function loadSettings(): PersistedSettings {
+  try {
+    const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
+    if (raw === null) return DEFAULT_SETTINGS;
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null) return DEFAULT_SETTINGS;
+    const value = (parsed as Record<string, unknown>).confirmDeleteModel;
+    return { confirmDeleteModel: typeof value === "boolean" ? value : DEFAULT_SETTINGS.confirmDeleteModel };
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
+}
+
+function saveSettings(settings: PersistedSettings): void {
+  try {
+    window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(settings));
+  } catch {
+    // Quota/private-mode failures: the setting simply won't survive a restart.
+  }
+}
 
 /**
  * The Modelfile editor's working copy (SPEC.md §5.4, §8).
@@ -87,6 +119,9 @@ interface RemudaContextValue {
   loaded: LoadedSelection | null;
   keepAlive: KeepAlive;
   setKeepAlive: (keepAlive: KeepAlive) => void;
+  /** "Confirm before deleting a model" (SPEC §5.6): persisted, default on. */
+  confirmDeleteModel: boolean;
+  setConfirmDeleteModel: (value: boolean) => void;
   view: View;
   setView: (view: View) => void;
   loadPaneOpen: boolean;
@@ -175,6 +210,13 @@ export function RemudaProvider({
   const [checked, setChecked] = useState(false);
   const [groups, setGroups] = useState<ModelGroup[]>([]);
   const [keepAlive, setKeepAlive] = useState<KeepAlive>("5m");
+  const [confirmDeleteModel, setConfirmDeleteModelState] = useState<boolean>(
+    () => loadSettings().confirmDeleteModel,
+  );
+  const setConfirmDeleteModel = useCallback((value: boolean) => {
+    setConfirmDeleteModelState(value);
+    saveSettings({ confirmDeleteModel: value });
+  }, []);
   const [view, setViewState] = useState<View>("chat");
   const [loadPaneOpen, setLoadPaneOpen] = useState(false);
   const wasConnected = useRef(false);
@@ -432,11 +474,10 @@ export function RemudaProvider({
       const targetName = asName ?? draft.targetTag;
       if (!targetName) return; // no target yet — Save as… is required to name one
 
-      // SPEC §8: destructive overwrite confirms when the Settings toggle is
-      // on. Settings' "Confirm before deleting a model" toggle (Settings.tsx)
-      // is local component state today and isn't wired into this store, so
-      // this defaults to the spec's default-on behavior for an overwrite.
-      if (!asName && !window.confirm(`Overwrite ${targetName}'s Modelfile?`)) return;
+      // SPEC §8: destructive overwrite confirms when the Settings "Confirm
+      // before deleting a model" toggle is on (default on) — the same toggle
+      // that gates model delete (LoadPane.tsx).
+      if (!asName && confirmDeleteModel && !window.confirm(`Overwrite ${targetName}'s Modelfile?`)) return;
 
       setSaving(true);
       setSaveError(null);
@@ -468,7 +509,7 @@ export function RemudaProvider({
         setSaving(false);
       }
     },
-    [client, loaded, keepAlive, refreshModels],
+    [client, loaded, keepAlive, refreshModels, confirmDeleteModel],
   );
 
   const value: RemudaContextValue = {
@@ -480,6 +521,8 @@ export function RemudaProvider({
     loaded,
     keepAlive,
     setKeepAlive,
+    confirmDeleteModel,
+    setConfirmDeleteModel,
     view,
     setView,
     loadPaneOpen,

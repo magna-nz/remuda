@@ -1,7 +1,8 @@
 /**
- * Settings view (SPEC.md §5.6). Server URL + Test connection are live;
- * the model/Modelfile directory rows and delete-confirmation toggle are
- * static placeholders for M1 (no filesystem access or persistence yet).
+ * Settings view (SPEC.md §5.6). Server URL + Test connection are live; the
+ * delete-confirmation toggle is real, persisted state (state.tsx) — it also
+ * gates Save-over-existing (SPEC §8). The model/Modelfile directory rows are
+ * still static placeholders (no filesystem access yet).
  */
 import { useState } from "react";
 import "./Settings.css";
@@ -17,10 +18,9 @@ function parseKeepAlive(value: string): KeepAlive {
 }
 
 export function Settings() {
-  const { status, models, keepAlive, setKeepAlive } = useRemuda();
+  const { status, models, keepAlive, setKeepAlive, confirmDeleteModel, setConfirmDeleteModel } = useRemuda();
   const [serverUrl, setServerUrl] = useState(DEFAULT_BASE_URL);
   const [testResult, setTestResult] = useState<TestResult>("idle");
-  const [confirmDelete, setConfirmDelete] = useState(true);
 
   async function handleTest() {
     setTestResult("testing");
@@ -118,11 +118,11 @@ export function Settings() {
           </div>
           <button
             type="button"
-            className={`toggle${confirmDelete ? " on" : ""}`}
+            className={`toggle${confirmDeleteModel ? " on" : ""}`}
             role="switch"
-            aria-checked={confirmDelete}
+            aria-checked={confirmDeleteModel}
             aria-label="Confirm before deleting a model"
-            onClick={() => setConfirmDelete((v) => !v)}
+            onClick={() => setConfirmDeleteModel(!confirmDeleteModel)}
           />
         </div>
       </div>

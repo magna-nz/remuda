@@ -1,7 +1,9 @@
+import "../chat/test/localStorage";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoadPane } from "./LoadPane";
 import { TopNav } from "./TopNav";
+import { ViewTabs } from "../editor/ViewTabs";
 import { RemudaProvider } from "./state";
 import { FakeClient, makeModel } from "./test/FakeClient";
 
@@ -23,6 +25,10 @@ async function openPane(client: FakeClient) {
   fireEvent.click(screen.getByTitle("Choose and load a model"));
   await screen.findByText("mistral:7b");
 }
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 describe("LoadPane", () => {
   it("lists all installed models and groups the tuned variant under its base", async () => {
@@ -87,5 +93,55 @@ describe("LoadPane", () => {
     // Connection drops after the pane opened with a model list present.
     client.connected = false;
     await waitFor(() => expect(screen.getByRole("button", { name: "Load model" })).toBeDisabled());
+  });
+
+  it("shows Delete only on the selected row and confirms before deleting (toggle on by default, SPEC §8)", async () => {
+    vi.spyOn(window, "confirm").mockReturnValue(true);
+    const client = new FakeClient({ models: fixtureModels() });
+    await openPane(client);
+
+    // llama3.1:8b is the default-selected base — it gets a Delete button;
+    // an unselected row (mistral:7b) doesn't.
+    expect(screen.getByRole("button", { name: "Delete llama3.1:8b" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Delete mistral:7b" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete llama3.1:8b" }));
+
+    expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("llama3.1:8b"));
+    await waitFor(() => expect(client.deleteCalls).toEqual(["llama3.1:8b"]));
+    // The deleted tag (and its variant, grouped under it) is gone from the list.
+    await waitFor(() => expect(screen.queryByText("llama3.1:8b")).not.toBeInTheDocument());
+  });
+
+  it("skips window.confirm when 'Confirm before deleting a model' is off", async () => {
+    // The toggle is real, persisted store state (state.tsx) — seed it off
+    // the way Settings.tsx would leave it.
+    window.localStorage.setItem("remuda.settings.v1", JSON.stringify({ confirmDeleteModel: false }));
+    const confirmSpy = vi.spyOn(window, "confirm");
+    const client = new FakeClient({ models: fixtureModels() });
+    await openPane(client);
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete llama3.1:8b" }));
+
+    expect(confirmSpy).not.toHaveBeenCalled();
+    await waitFor(() => expect(client.deleteCalls).toEqual(["llama3.1:8b"]));
+  });
+
+  it("prompts toward Pull when no models are installed (SPEC §5.5)", async () => {
+    const client = new FakeClient({ models: [] });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <TopNav />
+        <LoadPane />
+        <ViewTabs />
+      </RemudaProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+
+    const pullButton = await screen.findByRole("button", { name: "Pull your first model" });
+    fireEvent.click(pullButton);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pull" })).toHaveAttribute("aria-current", "true");
   });
 });

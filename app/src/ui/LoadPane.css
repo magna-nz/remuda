@@ -83,6 +83,15 @@
   overflow-y: auto;
 }
 
+/* Wraps a .pmodel row + its .pdelete affordance (a sibling, not nested —
+   buttons can't nest per a11y) so the delete icon only takes the space it
+   needs on the currently selected row. */
+.pmodel-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
 .pmodel {
   display: flex;
   align-items: center;
@@ -94,6 +103,49 @@
   border-radius: 9px;
   padding: 8px 9px;
   color: var(--ink);
+}
+
+/* Delete affordance (SPEC §5.6, §8): shown only on the selected model row. */
+.pdelete {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.pdelete:hover {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+.pdelete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pdelete svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Empty install (SPEC §5.5): points toward Pull instead of an empty list. */
+.pempty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 4px;
+}
+
+.pempty p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
 }
 
 .pmodel:hover {

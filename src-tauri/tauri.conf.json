@@ -25,7 +25,10 @@
   },
   "bundle": {
     "active": true,
-    "targets": "all",
-    "icon": []
+    "targets": ["app"],
+    "icon": [],
+    "macOS": {
+      "minimumSystemVersion": "12.0"
+    }
   }
 }

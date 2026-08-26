@@ -1,0 +1,240 @@
+/* Pull view (SPEC.md §5.5; docs/mockup.html `.pullbar`, `.progress`, `.reg`). */
+
+.pullview {
+  padding: 22px 26px 40px;
+  max-width: 900px;
+}
+
+.pullview .eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 10px;
+}
+
+.pullbar {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.pull-input {
+  flex: 1;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--ink);
+  border-radius: 9px;
+  padding: 9px 12px;
+  font-family: var(--mono);
+  font-size: 13px;
+  outline: none;
+}
+
+.pull-input:focus {
+  border-color: var(--ember);
+  box-shadow: 0 0 0 3px var(--ember-tint);
+}
+
+.pull-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.note-strip {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.note-strip code {
+  font-family: var(--mono);
+  background: var(--raised);
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: var(--ink-2);
+}
+
+.pullview .note-strip {
+  margin-bottom: 20px;
+}
+
+.pull-foot {
+  margin-top: 4px;
+  margin-bottom: 0;
+}
+
+.pull-foot .spacer {
+  flex: 1;
+}
+
+.progress {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 15px 16px;
+  margin-bottom: 16px;
+}
+
+.progress .top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.progress .top b {
+  font-family: var(--mono);
+  font-size: 13px;
+}
+
+.progress .dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ember);
+  flex: 0 0 auto;
+}
+
+.progress .dot.err {
+  background: var(--crit);
+}
+
+.progress .pct {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ember-ink);
+}
+
+.layer-status {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.layer {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.layer:last-of-type {
+  margin-bottom: 4px;
+}
+
+.layer .lname {
+  width: 130px;
+  flex: 0 0 auto;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.layer-meter {
+  flex: 1;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.layer-meter i {
+  display: block;
+  height: 100%;
+  background: var(--good);
+  border-radius: 999px;
+  transition: width 0.15s linear;
+}
+
+.layer .lpct {
+  width: 38px;
+  flex: 0 0 auto;
+  text-align: right;
+}
+
+/* Pull failure (SPEC §9): the server's error text, verbatim, + Retry. */
+.perror {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--crit);
+  background: var(--crit-tint);
+  border: 1px solid var(--crit);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  overflow-wrap: anywhere;
+}
+
+.btn.danger {
+  color: var(--crit);
+  border-color: color-mix(in srgb, var(--crit) 32%, transparent);
+  background: transparent;
+}
+
+.btn.danger:hover {
+  background: var(--crit-tint);
+}
+
+.pullview .side-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.reg {
+  display: flex;
+  flex-direction: column;
+}
+
+.regrow {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.regrow:last-child {
+  border-bottom: 0;
+}
+
+.regrow .rt {
+  min-width: 0;
+  flex: 1;
+}
+
+.regrow .rt b {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.regrow .rt div {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 1px;
+}
+
+.regrow .sz {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}

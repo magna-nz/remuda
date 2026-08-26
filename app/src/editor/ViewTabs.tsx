@@ -1,8 +1,7 @@
 /**
  * Section tabs under the top nav (SPEC.md §5, docs/mockup.html `.tabs`):
- * Chat · Modelfile on the left, Settings on the right. Pull is M5 and isn't
- * wired here yet — it stays reachable from the sidebar's "Pull models" spot
- * (disabled, per Sidebar.tsx) until then.
+ * Chat · Modelfile on the left, Pull · Settings on the right. Pull is also
+ * reachable from the sidebar's "Pull models" footer button (Sidebar.tsx).
  */
 import "./ViewTabs.css";
 import { useRemuda } from "../ui/state";
@@ -46,6 +45,7 @@ export function ViewTabs() {
         onClick: openModelfileTab,
       })}
       <div className="spacer" />
+      {tab("pull", "Pull")}
       {tab("settings", "Settings")}
     </div>
   );

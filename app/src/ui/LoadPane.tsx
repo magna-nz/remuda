@@ -27,8 +27,20 @@ function formatSize(bytes: number): string {
 type LoadPhase = "idle" | "loading" | "done";
 
 export function LoadPane() {
-  const { models, groups, loaded, load, loadPaneOpen, closeLoadPane, status, openEditorForNew } =
-    useRemuda();
+  const {
+    models,
+    groups,
+    loaded,
+    load,
+    loadPaneOpen,
+    closeLoadPane,
+    status,
+    openEditorForNew,
+    client,
+    refreshModels,
+    confirmDeleteModel,
+    setView,
+  } = useRemuda();
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [phase, setPhase] = useState<LoadPhase>("idle");
@@ -87,6 +99,24 @@ export function LoadPane() {
     }
   }
 
+  // SPEC §5.6, §8: Delete confirms when the Settings toggle is on (default
+  // on). `refreshModels` naturally clears the top control if the deleted tag
+  // was loaded — deleteModel() itself doesn't unload it, but /api/tags no
+  // longer lists it. Clearing the pane's own selection here is what "clear
+  // selection" refers to: it can't keep pointing at a tag that's gone.
+  async function handleDelete(tag: string) {
+    if (confirmDeleteModel && !window.confirm(`Delete ${tag}? This can't be undone.`)) return;
+    setLoadError(null);
+    try {
+      await client.deleteModel(tag);
+      await refreshModels();
+      setSelectedBase((prev) => (prev === tag ? null : prev));
+      setSelectedVariant((prev) => (prev === tag ? null : prev));
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   const currentGroup = groups.find((g) => g.base.tag === selectedBase) ?? null;
   const isReload = loaded?.variant === selectedVariant;
 
@@ -105,96 +135,136 @@ export function LoadPane() {
           </button>
         </div>
         <div className="mpane-b">
-          <div className="pfield">
-            <label htmlFor="pane-models">Model</label>
-            <div className="pmodels" id="pane-models">
-              {models.map((m) => {
-                const active = m.isVariant ? m.tag === selectedVariant : m.tag === selectedBase;
-                return (
-                  <button
-                    key={m.tag}
-                    type="button"
-                    className={`pmodel${active ? " active" : ""}`}
-                    onClick={() => pickModel(m)}
-                  >
-                    <span className="pg" aria-hidden="true">
-                      {glyph(m.tag)}
-                    </span>
-                    <span>
-                      <span className="pn">{m.tag}</span>
-                      <span className="ps">
-                        {m.isVariant ? `custom · from ${m.base}` : `${formatSize(m.sizeBytes)} · ${m.quantization}`}
-                      </span>
-                    </span>
-                    {m.isVariant && <span className="ptune">tuned</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <div className="pfield">
-            <label htmlFor="pane-variants">Modelfile</label>
-            <div className="pvariants" id="pane-variants">
-              {currentGroup && (
-                <button
-                  type="button"
-                  className={`pv${selectedVariant === currentGroup.base.tag ? " active" : ""}`}
-                  onClick={() => pickVariant(currentGroup.base.tag)}
-                >
-                  Original (base)
-                </button>
-              )}
-              {currentGroup?.variants.map((v) => (
-                <button
-                  key={v.tag}
-                  type="button"
-                  className={`pv${selectedVariant === v.tag ? " active" : ""}`}
-                  onClick={() => pickVariant(v.tag)}
-                >
-                  {shortTag(v.tag)} · tuned
-                </button>
-              ))}
+          {models.length === 0 ? (
+            <div className="pempty">
+              <p>No models installed yet.</p>
               <button
                 type="button"
-                className="pv new"
-                disabled={!selectedBase}
-                title={selectedBase ? `New Modelfile from ${selectedBase}` : "Pick a base model first"}
+                className="btn sm primary"
                 onClick={() => {
-                  if (!selectedBase) return;
                   closeLoadPane();
-                  openEditorForNew(selectedBase);
+                  setView("pull");
                 }}
               >
-                ＋ New Modelfile
+                Pull your first model
               </button>
             </div>
-          </div>
-          <div className="ploadwrap">
-            <button
-              type="button"
-              className="btn primary wide"
-              onClick={() => void handleLoad()}
-              disabled={phase === "loading" || !selectedVariant || !status.connected}
-              title={status.connected ? undefined : "Ollama isn't running"}
-            >
-              {phase === "loading" ? "Loading…" : isReload ? "Reload model" : "Load model"}
-            </button>
-            {loadError !== null && (
-              <div className="perror" role="alert">
-                {loadError}
+          ) : (
+            <div className="pfield">
+              <label htmlFor="pane-models">Model</label>
+              <div className="pmodels" id="pane-models">
+                {models.map((m) => {
+                  const active = m.isVariant ? m.tag === selectedVariant : m.tag === selectedBase;
+                  return (
+                    <div key={m.tag} className="pmodel-wrap">
+                      <button
+                        type="button"
+                        className={`pmodel${active ? " active" : ""}`}
+                        onClick={() => pickModel(m)}
+                      >
+                        <span className="pg" aria-hidden="true">
+                          {glyph(m.tag)}
+                        </span>
+                        <span>
+                          <span className="pn">{m.tag}</span>
+                          <span className="ps">
+                            {m.isVariant ? `custom · from ${m.base}` : `${formatSize(m.sizeBytes)} · ${m.quantization}`}
+                          </span>
+                        </span>
+                        {m.isVariant && <span className="ptune">tuned</span>}
+                      </button>
+                      {active && (
+                        <button
+                          type="button"
+                          className="pdelete"
+                          title={`Delete ${m.tag}`}
+                          aria-label={`Delete ${m.tag}`}
+                          disabled={!status.connected}
+                          onClick={() => void handleDelete(m.tag)}
+                        >
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                            <path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
-            )}
-            {phase !== "idle" && (
-              <div className="pprogress">
-                <div className="meter">
-                  <i className={phase === "loading" ? "indeterminate" : undefined} style={{ width: phase === "done" ? "100%" : "55%" }} />
-                </div>
-                <div className="pptext">
-                  {phase === "done" ? `✓ ${selectedVariant} loaded and ready` : `Loading ${selectedVariant} — pulling weights into memory…`}
+            </div>
+          )}
+          {models.length > 0 && (
+            <>
+              <div className="pfield">
+                <label htmlFor="pane-variants">Modelfile</label>
+                <div className="pvariants" id="pane-variants">
+                  {currentGroup && (
+                    <button
+                      type="button"
+                      className={`pv${selectedVariant === currentGroup.base.tag ? " active" : ""}`}
+                      onClick={() => pickVariant(currentGroup.base.tag)}
+                    >
+                      Original (base)
+                    </button>
+                  )}
+                  {currentGroup?.variants.map((v) => (
+                    <button
+                      key={v.tag}
+                      type="button"
+                      className={`pv${selectedVariant === v.tag ? " active" : ""}`}
+                      onClick={() => pickVariant(v.tag)}
+                    >
+                      {shortTag(v.tag)} · tuned
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="pv new"
+                    disabled={!selectedBase}
+                    title={selectedBase ? `New Modelfile from ${selectedBase}` : "Pick a base model first"}
+                    onClick={() => {
+                      if (!selectedBase) return;
+                      closeLoadPane();
+                      openEditorForNew(selectedBase);
+                    }}
+                  >
+                    ＋ New Modelfile
+                  </button>
                 </div>
               </div>
-            )}
-          </div>
+              <div className="ploadwrap">
+                <button
+                  type="button"
+                  className="btn primary wide"
+                  onClick={() => void handleLoad()}
+                  disabled={phase === "loading" || !selectedVariant || !status.connected}
+                  title={status.connected ? undefined : "Ollama isn't running"}
+                >
+                  {phase === "loading" ? "Loading…" : isReload ? "Reload model" : "Load model"}
+                </button>
+                {loadError !== null && (
+                  <div className="perror" role="alert">
+                    {loadError}
+                  </div>
+                )}
+                {phase !== "idle" && (
+                  <div className="pprogress">
+                    <div className="meter">
+                      <i
+                        className={phase === "loading" ? "indeterminate" : undefined}
+                        style={{ width: phase === "done" ? "100%" : "55%" }}
+                      />
+                    </div>
+                    <div className="pptext">
+                      {phase === "done"
+                        ? `✓ ${selectedVariant} loaded and ready`
+                        : `Loading ${selectedVariant} — pulling weights into memory…`}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </>
+          )}
         </div>
       </div>
     </>

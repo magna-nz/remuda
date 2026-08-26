@@ -59,6 +59,19 @@ export interface FakeClientOptions {
   createStatuses?: CreateStatus[];
   /** create() throws with this message before yielding anything (SPEC §9). */
   failCreate?: string;
+  /**
+   * Scripted pull events: pull() yields these in order, checking the abort
+   * signal between events. Without this, pull() streams whatever the test
+   * pushes via emitPull() (live/unscripted, mirrors chatChunks/emitChat).
+   */
+  pullEvents?: PullProgress[];
+  /**
+   * pull() throws with this message (SPEC §9). With `pullEvents` set, the
+   * scripted events yield first, then the throw — so a test can show partial
+   * layer progress before the failure. Without `pullEvents`, it throws
+   * immediately, before yielding anything.
+   */
+  failPull?: string;
 }
 
 function abortError(): DOMException {
@@ -87,6 +100,13 @@ export class FakeClient implements OllamaClient {
   createCalls: { name: string; request: CreateRequest }[] = [];
   unloadCalls: string[] = [];
 
+  pullEvents: PullProgress[] | undefined;
+  failPull: string | undefined;
+  pullCalls: string[] = [];
+  deleteCalls: string[] = [];
+  private pullQueue: PullProgress[] = [];
+  private pullWaiter: ((event: PullProgress) => void) | null = null;
+
   constructor(options: FakeClientOptions = {}) {
     this.models = options.models ?? [];
     this.connected = options.connected ?? true;
@@ -98,6 +118,8 @@ export class FakeClient implements OllamaClient {
     this.modelfile = options.modelfile ?? "";
     this.createStatuses = options.createStatuses ?? [{ status: "success" }];
     this.failCreate = options.failCreate;
+    this.pullEvents = options.pullEvents;
+    this.failPull = options.failPull;
   }
 
   async version(): Promise<ServerStatus> {
@@ -227,11 +249,65 @@ export class FakeClient implements OllamaClient {
     }
   }
 
-  async *pull(): AsyncIterable<PullProgress> {
-    yield { status: "success" };
+  /** Push an event into a live (unscripted) pull stream. */
+  emitPull(event: PullProgress): void {
+    if (this.pullWaiter) {
+      const waiter = this.pullWaiter;
+      this.pullWaiter = null;
+      waiter(event);
+    } else {
+      this.pullQueue.push(event);
+    }
   }
 
-  async deleteModel(): Promise<void> {}
+  private nextPullEvent(signal?: AbortSignal): Promise<PullProgress> {
+    const queued = this.pullQueue.shift();
+    if (queued !== undefined) return Promise.resolve(queued);
+    return new Promise((resolve, reject) => {
+      if (signal?.aborted) {
+        reject(abortError());
+        return;
+      }
+      signal?.addEventListener(
+        "abort",
+        () => {
+          this.pullWaiter = null;
+          reject(abortError());
+        },
+        { once: true },
+      );
+      this.pullWaiter = resolve;
+    });
+  }
+
+  async *pull(tag: string, signal?: AbortSignal): AsyncIterable<PullProgress> {
+    this.pullCalls.push(tag);
+    if (this.pullEvents !== undefined) {
+      if (signal?.aborted) throw abortError();
+      for (const event of this.pullEvents) {
+        await Promise.resolve();
+        if (signal?.aborted) throw abortError();
+        yield event;
+      }
+      if (this.failPull !== undefined) {
+        throw new Error(this.failPull);
+      }
+      return;
+    }
+    if (this.failPull !== undefined) {
+      throw new Error(this.failPull);
+    }
+    for (;;) {
+      const event = await this.nextPullEvent(signal);
+      yield event;
+      if (event.status === "success") return;
+    }
+  }
+
+  async deleteModel(tag: string): Promise<void> {
+    this.deleteCalls.push(tag);
+    this.models = this.models.filter((m) => m.tag !== tag);
+  }
 
   async copy(): Promise<void> {}
 }

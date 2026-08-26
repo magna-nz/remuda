@@ -1,8 +1,11 @@
+import "../chat/test/localStorage";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Settings } from "./Settings";
 import { RemudaProvider } from "./state";
 import { FakeClient } from "./test/FakeClient";
+
+const SETTINGS_KEY = "remuda.settings.v1";
 
 /** A minimal Response-shaped object covering what client.ts's version() touches. */
 function jsonResponse(data: unknown, status = 200): Response {
@@ -14,6 +17,10 @@ function jsonResponse(data: unknown, status = 200): Response {
     json: async () => JSON.parse(text) as unknown,
   } as unknown as Response;
 }
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -89,5 +96,35 @@ describe("Settings", () => {
 
     await waitFor(() => expect(screen.getByText(/^Connected ·/)).toBeInTheDocument());
     expect(screen.queryByText(/vnull/)).not.toBeInTheDocument();
+  });
+
+  it("'Confirm before deleting a model' defaults on and persists across a fresh mount (SPEC §5.6)", () => {
+    const client = new FakeClient({ connected: true });
+    const { unmount } = render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    const toggle = screen.getByRole("switch", { name: "Confirm before deleting a model" });
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute("aria-checked", "false");
+    expect(JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? "{}")).toEqual({
+      confirmDeleteModel: false,
+    });
+    unmount();
+
+    // A fresh provider (new mount, same localStorage) picks up the persisted value.
+    render(
+      <RemudaProvider client={new FakeClient({ connected: true })} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+    expect(screen.getByRole("switch", { name: "Confirm before deleting a model" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
   });
 });

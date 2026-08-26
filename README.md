@@ -34,11 +34,33 @@ ground, indigo→violet brand) with **Inter** + **IBM Plex Mono**.
 
 ## Install
 
-Planned distribution is **Homebrew** (not a DMG):
+Distribution is **Homebrew, not a DMG** (see [`SPEC.md` §10](SPEC.md)):
 
 ```bash
-brew install magna-nz/tap/remuda   # planned — not yet published
+brew install --cask magna-nz/tap/remuda
 ```
+
+This becomes available from the first tagged release (the tap repo,
+`magna-nz/homebrew-tap`, is created then — see
+[`packaging/homebrew/README.md`](packaging/homebrew/README.md)). Until a
+release exists, run from source instead:
+
+```bash
+git clone https://github.com/magna-nz/remuda.git
+cd remuda/app
+npm install
+npm run dev        # Vite dev server at http://localhost:5173
+```
+
+or, for the full desktop shell (Vite dev server + the Tauri window
+together), from `src-tauri/`:
+
+```bash
+cargo tauri dev
+```
+
+Either way requires [Ollama](https://ollama.com) running locally — see
+[Requirements](#requirements) above.
 
 ## Development
 
