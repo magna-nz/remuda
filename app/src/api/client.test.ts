@@ -572,9 +572,13 @@ describe("chat", () => {
     return bodyOf(stub.mock.calls[0][1]);
   }
 
-  it("omits `think` entirely for undefined and for \"off\"", async () => {
+  it("omits `think` when unset, but sends false for an explicit \"off\"", async () => {
+    // Ollama declares `think` omitempty on a nil-distinguishable type, so
+    // absent means "model's default" — which is reasoning ON for models it
+    // treats as always-thinking. Omitting for an explicit "off" would leave
+    // the control unable to do the one thing it is named for.
     expect(await chatBody({ keepAlive: "5m" })).not.toHaveProperty("think");
-    expect(await chatBody({ keepAlive: "5m", think: "off" })).not.toHaveProperty("think");
+    expect(await chatBody({ keepAlive: "5m", think: "off" })).toMatchObject({ think: false });
   });
 
   it("sends a set think level verbatim", async () => {

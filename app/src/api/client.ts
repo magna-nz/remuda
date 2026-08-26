@@ -258,9 +258,24 @@ function wireMessage(message: ChatMessage): Record<string, unknown> {
   return out;
 }
 
-/** "off"/undefined means: don't send `think` at all. */
-function wireThink(think: ThinkLevel | undefined): string | null {
-  return think === undefined || think === "off" ? null : think;
+/**
+ * `think` has three states on the wire, not two.
+ *
+ * Ollama declares it `json:"think,omitempty"` on a nil-distinguishable type,
+ * so **absent and `false` are different values to the server** — absent means
+ * "use the model's default", which for a model Ollama treats as always
+ * thinking is *on*. A control labelled "off" that merely omitted the field
+ * would therefore not reliably turn reasoning off.
+ *
+ *   undefined  → omit. Nothing was ever chosen (a model with no thinking
+ *                capability never renders the control), so don't opine.
+ *   "off"      → `false`. The user explicitly asked for no reasoning, and
+ *                only a thinking-capable model can reach this state.
+ *   a level    → the string, verbatim.
+ */
+function wireThink(think: ThinkLevel | undefined): string | boolean | null {
+  if (think === undefined) return null;
+  return think === "off" ? false : think;
 }
 
 /* ── Factory ────────────────────────────────────────────────────────────── */

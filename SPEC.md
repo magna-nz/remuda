@@ -422,9 +422,16 @@ load-bearing:
   "this model can do nothing" — every gate keyed off capabilities is
   one-sided for that reason (§8).
 
-`think` is omitted entirely rather than sent as `false` when reasoning is
-off, `options` keys that aren't set are omitted rather than sent as `null`,
-and assistant `thinking` is stripped from outbound history — Ollama does not
+`think` has **three** wire states, not two. Ollama declares it
+`omitempty` on a nil-distinguishable type, so *absent* and `false` are
+different values: absent means "use the model's default", and that default
+is reasoning **on** for models Ollama treats as always-thinking. So Remuda
+omits `think` only when nothing was ever chosen, and sends an explicit
+`false` when the user selects **off** — otherwise the control would not do
+the one thing it is named for. Levels go verbatim.
+
+`options` keys that aren't set are omitted rather than sent as `null`, and
+assistant `thinking` is stripped from outbound history — Ollama does not
 take reasoning back as conversation context.
 
 All Ollama requests are same-origin to the configured loopback host. Default
