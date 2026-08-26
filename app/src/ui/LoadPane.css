@@ -231,12 +231,21 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Pills sit tighter to each other than to the row's other columns. */
+.ppills {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+}
+
 .ppill {
   flex: 0 0 auto;
   font-size: 10px;
   font-weight: 600;
   padding: 2px 7px;
   border-radius: 999px;
+  border: 1px solid transparent;
 }
 
 .ppill.loaded {
@@ -244,9 +253,12 @@
   background: var(--good-tint);
 }
 
+/* The active row is ember-tinted too, so this one needs an outline to stay a
+   chip rather than dissolving into the row behind it. */
 .ppill.tuned {
   color: var(--ember-ink);
   background: var(--ember-tint);
+  border-color: color-mix(in srgb, var(--ember) 40%, transparent);
 }
 
 .pmodel .pchev {
