@@ -1,17 +1,23 @@
 name: CI
 
 on:
+  # Restricted to main so a PR branch doesn't build twice — once for the
+  # push, once for the pull_request. Branch pushes are covered by the PR
+  # event once a PR is open.
   push:
+    branches: [main]
   pull_request:
+
+# Supersede in-flight runs for the same ref: only the newest commit on a
+# branch is worth a runner.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   web:
     name: Web (app/)
     runs-on: ubuntu-latest
-    # Only the Vite/React SPA runs in CI for now. The Tauri shell in
-    # src-tauri/ links WebKitGTK + GTK on Linux, which this runner doesn't
-    # have installed, so `cargo check`/`cargo build` for the Rust side is
-    # left for a later workflow that provisions those system packages.
     defaults:
       run:
         working-directory: app
@@ -28,3 +34,46 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+  rust:
+    name: Rust (src-tauri/)
+    # macOS, not ubuntu-latest: the Tauri shell links WebKitGTK + GTK on
+    # Linux and the Ubuntu runner doesn't have those system packages. On a
+    # macOS runner the system webview is already present, so the Rust side
+    # needs no extra provisioning.
+    #
+    # macos-14 matches the release runner (arm64), so what CI checks is the
+    # target the release actually builds for.
+    runs-on: macos-14
+    defaults:
+      run:
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Cache Cargo registry & build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-check-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-check-
+
+      - name: Formatting
+        run: cargo fmt --all --check
+
+      # No `npm run build` beforehand: `cargo check`/`clippy` don't need
+      # app/dist to exist — only `tauri build` reads the bundled frontend.
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Check
+        run: cargo check --all-targets

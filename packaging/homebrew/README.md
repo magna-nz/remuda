@@ -22,27 +22,66 @@ After that, `brew install --cask magna-nz/tap/remuda` works: `tap` here is
 short for `magna-nz/tap`, i.e. `homebrew-tap` with the `homebrew-` prefix
 dropped, per Homebrew's tap-naming shorthand.
 
-## Updating the cask for a release
+## Cutting a release
+
+Versions live in three files and the release workflow refuses to build when
+any of them disagrees with the tag — so bump them first, in one commit:
+
+- `src-tauri/tauri.conf.json` (`version`) — this is what stamps the .app
+- `src-tauri/Cargo.toml` (`[package] version`)
+- `app/package.json` (`version`)
+
+Then tag and push:
+
+```bash
+git tag v0.2.0 && git push origin v0.2.0
+```
 
 `.github/workflows/release.yml` builds the app and publishes a GitHub
-release on this repo (`magna-nz/remuda`) when a `v*` tag is pushed, with a
-`Remuda-<version>-aarch64.tar.gz` asset and a `.sha256` file alongside it.
-The cask in the tap repo needs to be updated by hand to point at each new
-release:
+release on this repo (`magna-nz/remuda`) with three assets:
 
-1. Wait for the release workflow to finish and find the published release
-   for the tag (e.g. `v0.1.0`).
-2. Copy the SHA-256 from the release body, or the `.sha256` asset it
-   uploaded.
-3. In the tap repo's `Casks/remuda.rb` (copied from `remuda.rb` here), set:
-   - `version` to the tag without its `v` prefix (e.g. `"0.1.0"`).
-   - `sha256` to the value from step 2, replacing the
-     `"REPLACE_ON_RELEASE"` placeholder.
-4. Commit and push to the tap repo.
+- `Remuda-<version>-aarch64.tar.gz` — the app bundle the cask points at
+- `Remuda-<version>-aarch64.tar.gz.sha256` — its checksum
+- `remuda.rb` — **the cask, already rendered** for this release: the
+  `remuda.rb` template in this directory with `version` and `sha256`
+  substituted, and the substitution asserted before the release publishes
 
-The `url` line is already parameterized on `#{version}` and doesn't need
-hand-editing per release — it always resolves to this repo's release asset
-for that version.
+The `url` line is parameterized on `#{version}` and never needs
+hand-editing — it always resolves to this repo's release asset for that
+version.
+
+## Updating the tap
+
+**Automatically** — if the `TAP_GITHUB_TOKEN` secret is set on this repo,
+the release workflow pushes the rendered cask to
+`magna-nz/homebrew-tap` as `Casks/remuda.rb` and commits it as
+`remuda <version>`. This happens *after* the release publishes, so the
+tap never points at an asset URL that doesn't exist yet.
+
+To enable it: create a fine-grained PAT with **Contents: read and write**
+on `magna-nz/homebrew-tap` only, and add it to this repo under
+*Settings → Secrets and variables → Actions* as `TAP_GITHUB_TOKEN`. The
+built-in `GITHUB_TOKEN` can't do this — it's scoped to `magna-nz/remuda`
+and cannot push to another repo.
+
+**By hand** — without that secret the workflow skips the push and logs a
+notice. Download the `remuda.rb` asset from the release and commit it to
+the tap repo as `Casks/remuda.rb`. No editing required; it is already
+filled in.
+
+## Download counts
+
+Homebrew's own analytics only cover casks in the official `homebrew/cask`
+tap, so a third-party tap like `magna-nz/tap` reports nothing there. The
+number to watch instead is GitHub release-asset downloads — which *does*
+include Homebrew installs, because the cask fetches the tarball straight
+from the release URL. The README carries a badge for the total; for exact
+per-asset figures:
+
+```bash
+gh api repos/magna-nz/remuda/releases \
+  --jq '.[] | .tag_name as $t | .assets[] | "\($t)  \(.name)  \(.download_count)"'
+```
 
 ## Install (once the tap exists)
 

@@ -6,6 +6,7 @@
   <p>
     <a href="https://github.com/magna-nz/remuda/actions/workflows/ci.yml"><img src="https://github.com/magna-nz/remuda/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
     <a href="https://github.com/magna-nz/remuda/releases/latest"><img src="https://img.shields.io/github/v/release/magna-nz/remuda?sort=semver&label=release" alt="Latest release" /></a>
+    <a href="https://github.com/magna-nz/remuda/releases"><img src="https://img.shields.io/github/downloads/magna-nz/remuda/total?label=downloads" alt="Total downloads" /></a>
     <!-- PLACEHOLDER: swap for a real license badge once a LICENSE is chosen -->
     <img src="https://img.shields.io/badge/license-TBD-lightgrey" alt="License TBD" />
   </p>
@@ -154,8 +155,12 @@ npm test            # vitest
 npm run build       # tsc && vite build
 ```
 
-Desktop shell, from `src-tauri/`: `cargo check` / `cargo tauri dev`. CI runs the web gates on
-every push; the release workflow builds the macOS app on a `v*` tag.
+Desktop shell, from `src-tauri/`: `cargo check` / `cargo tauri dev`.
+
+CI runs both sets of gates — the web ones above, plus `cargo fmt --check`, `cargo clippy -D
+warnings` and `cargo check` — on every pull request and on pushes to `main`. The release
+workflow builds the macOS app on a `v*` tag, and refuses to build if the tag disagrees with
+the versions in `tauri.conf.json`, `Cargo.toml` and `package.json`.
 
 ## License
 
