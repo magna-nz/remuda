@@ -13,21 +13,49 @@ import "./SaveAsDialog.css";
 
 const DEFAULT_MODELFILE_DIR = "~/ollama/modelfiles/";
 
+/** Common re-quantisation levels `ollama create -q` accepts (SPEC §5.4, §9). */
+const QUANT_LEVELS = ["q8_0", "q4_K_M", "q4_K_S"];
+
+/** Sentinel for "don't pass -q at all" — see the `quantize` contract note below. */
+const KEEP = "keep";
+
 export interface SaveAsDialogProps {
   baseTag: string;
+  /**
+   * The base model's current quantisation (`Model.quantization`, e.g.
+   * "Q4_K_M"), matched by tag — the same source the load pane already
+   * displays. Null/undefined when it can't be determined; `Keep` still
+   * works, it just can't name the level.
+   */
+  baseQuantization?: string | null;
   onCancel: () => void;
-  onConfirm: (name: string) => void;
+  /**
+   * `quantize` is the exact value to forward to `saveDraft`/`/api/create`.
+   * `undefined` means "Keep" was selected — no `-q` flag at all, not the
+   * inherited level spelled out. Re-quantising to the level a model already
+   * is wastes CPU and can degrade it further, so `Keep` must never resolve
+   * to an explicit string.
+   */
+  onConfirm: (name: string, quantize?: string) => void;
 }
 
-export function SaveAsDialog({ baseTag, onCancel, onConfirm }: SaveAsDialogProps) {
+export function SaveAsDialog({ baseTag, baseQuantization, onCancel, onConfirm }: SaveAsDialogProps) {
   const [name, setName] = useState("");
+  const [quant, setQuant] = useState<string>(KEEP);
 
   const trimmed = name.trim();
   const canCreate = trimmed !== "";
+  // Keep ⇒ undefined, always — see the onConfirm contract note above.
+  const quantize = quant === KEEP ? undefined : quant;
+  const keepLabel = baseQuantization ? `Keep · ${baseQuantization}` : "Keep";
+  const previewName = trimmed !== "" ? trimmed : "<name>";
+  const previewCommand = quantize
+    ? `ollama create ${previewName} -q ${quantize}`
+    : `ollama create ${previewName}`;
 
   function submit() {
     if (!canCreate) return;
-    onConfirm(trimmed);
+    onConfirm(trimmed, quantize);
   }
 
   return (
@@ -61,6 +89,31 @@ export function SaveAsDialog({ baseTag, onCancel, onConfirm }: SaveAsDialogProps
             </div>
           </div>
           <div className="field">
+            <label htmlFor="sa-quant">Quantisation</label>
+            <div className="desc">Re-quantise while creating. Leave as <b>Keep</b> to inherit the base.</div>
+            <div className="qgrid" id="sa-quant" role="group" aria-label="Quantisation">
+              <button
+                type="button"
+                className={`q${quant === KEEP ? " on" : ""}`}
+                aria-pressed={quant === KEEP}
+                onClick={() => setQuant(KEEP)}
+              >
+                {keepLabel}
+              </button>
+              {QUANT_LEVELS.map((level) => (
+                <button
+                  key={level}
+                  type="button"
+                  className={`q${quant === level ? " on" : ""}`}
+                  aria-pressed={quant === level}
+                  onClick={() => setQuant(level)}
+                >
+                  {level}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="field">
             <label htmlFor="sa-path">Save Modelfile to</label>
             <div className="dlg-row">
               <div className="pathfield" id="sa-path">
@@ -76,6 +129,8 @@ export function SaveAsDialog({ baseTag, onCancel, onConfirm }: SaveAsDialogProps
           </div>
           <div className="dlg-note">
             Creates a new tuned model from <code>FROM {baseTag}</code>, writes the Modelfile to that folder, then loads it for your chats.
+            <br />
+            Runs <code>{previewCommand}</code>.
           </div>
         </div>
         <div className="dlg-f">

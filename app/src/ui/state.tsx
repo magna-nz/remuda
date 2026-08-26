@@ -27,8 +27,12 @@ import type {
   Model,
   ModelGroup,
   OllamaClient,
+  RunOptions,
+  RunningModel,
   ServerStatus,
+  ThinkLevel,
 } from "../api/types";
+import { RUN_OPTION_KEYS } from "../api/types";
 import {
   createSession,
   loadSessions,
@@ -40,7 +44,7 @@ import {
 // M3 — owned by a concurrent agent (app/src/modelfile/). Consumed here, not
 // redeclared: parseModelfile/serializeModelfile plus toCreateRequest are the
 // editor's sync contract with the raw Modelfile (SPEC.md §5.4).
-import { parseModelfile, serializeModelfile, type ModelfileDoc } from "../modelfile";
+import { parseModelfile, serializeModelfile, setParameter, type ModelfileDoc } from "../modelfile";
 import { toCreateRequest } from "../modelfile/createRequest";
 
 export type View = "chat" | "modelfile" | "pull" | "settings";
@@ -108,7 +112,33 @@ export interface LoadedSelection {
   variant: string;
 }
 
-interface RemudaContextValue {
+/**
+ * Timings of the last completed reply, tied to its session.
+ *
+ * `sessionId` and `tokPerSec` are the original contract and stay exactly as
+ * they were — ChatView renders `tokPerSec` today. Everything after them comes
+ * from the newer `done` fields, which not every server sends: null means "the
+ * server didn't say", never zero.
+ */
+export interface LastStats {
+  sessionId: string;
+  /** Generation throughput, tok/s (eval_count ÷ eval_duration). */
+  tokPerSec: number;
+  /** Tokens generated. */
+  evalCount: number;
+  /** Prefill throughput, tok/s; null when the server omits prompt timings. */
+  promptTokPerSec: number | null;
+  /** Prompt tokens evaluated; null when the server omits it. */
+  promptEvalCount: number | null;
+  /** Context used = prompt + generated tokens; null without a prompt count. */
+  contextTokens: number | null;
+  /** Time spent loading the model, ms; null when the server omits it. */
+  loadMs: number | null;
+  /** Wall time for the whole request, ms; null when the server omits it. */
+  totalMs: number | null;
+}
+
+export interface RemudaContextValue {
   client: OllamaClient;
   /** Latest health check result. */
   status: ServerStatus;
@@ -116,6 +146,12 @@ interface RemudaContextValue {
   checked: boolean;
   models: Model[];
   groups: ModelGroup[];
+  /**
+   * The full GET /api/ps readout — size, VRAM split, context, keep_alive
+   * expiry (SPEC §5.1). Refreshed by the same health/sync poll that already
+   * reads /api/ps for `isLoaded`; no extra request, no second timer.
+   */
+  running: RunningModel[];
   loaded: LoadedSelection | null;
   keepAlive: KeepAlive;
   setKeepAlive: (keepAlive: KeepAlive) => void;
@@ -144,14 +180,33 @@ interface RemudaContextValue {
   streamingSessionId: string | null;
   /** Non-abort failure from the last generation, if any. */
   streamError: string | null;
-  /** tok/s of the last completed reply, tied to its session. */
-  lastStats: { sessionId: string; tokPerSec: number } | null;
+  /** Timings of the last completed reply, tied to its session. */
+  lastStats: LastStats | null;
   /** New session on the currently loaded model; no-op when nothing is loaded. */
   newChat: () => void;
   openSession: (id: string) => void;
   deleteSession: (id: string) => void;
-  /** Append the user message and stream the assistant reply (SPEC §5.3). */
-  sendMessage: (text: string) => Promise<void>;
+  /**
+   * Append the user message and stream the assistant reply (SPEC §5.3).
+   * `images` are raw base64 for the wire; `imageThumbs` are the small data:
+   * URLs that get persisted in their place.
+   */
+  sendMessage: (text: string, images?: string[], imageThumbs?: string[]) => Promise<void>;
+  /** Per-session sampling overrides, sent on every request for that session. */
+  setSessionOptions: (sessionId: string, options: RunOptions) => void;
+  /** Per-session reasoning effort; "off" omits `think` from the request. */
+  setSessionThink: (sessionId: string, level: ThinkLevel) => void;
+  /**
+   * "Bake into Modelfile" (SPEC §5.3): open `tag`'s Modelfile in the editor
+   * with the chat's per-session overrides written in as PARAMETER lines.
+   *
+   * It opens the editor itself rather than switching to it, because a
+   * chat-only user has no draft — navigating to the Modelfile view without
+   * one lands on an empty placeholder, which is where the values would have
+   * been silently dropped. Nothing is saved: the draft is dirty and the user
+   * still presses Save or Save as… deliberately (SPEC §5.4).
+   */
+  bakeOptionsIntoEditor: (tag: string, options: RunOptions) => Promise<void>;
   /** Abort the in-flight generation, keeping the partial reply. */
   cancelGeneration: () => void;
 
@@ -179,9 +234,10 @@ interface RemudaContextValue {
    * Save flow (SPEC §5.4): `ollama create` → stop the previously loaded
    * model → warm-load the new one → refresh the model list. `asName` makes
    * this "Save as…" (a new tuned variant); omitted, it overwrites
-   * `editorDraft.targetTag`.
+   * `editorDraft.targetTag`. `quantize` (e.g. "q4_K_M") asks Ollama to
+   * quantise on the way in; omitted, the weights are copied as-is.
    */
-  saveDraft: (asName?: string) => Promise<void>;
+  saveDraft: (asName?: string, quantize?: string) => Promise<void>;
 }
 
 const RemudaContext = createContext<RemudaContextValue | null>(null);
@@ -200,6 +256,46 @@ function signatureOf(models: Model[]): string {
 
 function signatureOfGroups(groups: ModelGroup[]): string {
   return signatureOf(groups.flatMap((g) => [g.base, ...g.variants]));
+}
+
+/**
+ * Field-wise equality for the /api/ps readout. The poll re-parses it every
+ * 5s into fresh objects; without this every consumer of `running` would
+ * re-render twice a minute to be handed identical numbers.
+ */
+function sameRunning(a: RunningModel[], b: RunningModel[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every((m, i) => {
+    const other = b[i];
+    return (
+      m.tag === other.tag &&
+      m.sizeBytes === other.sizeBytes &&
+      m.sizeVramBytes === other.sizeVramBytes &&
+      m.contextLength === other.contextLength &&
+      m.expiresAt === other.expiresAt
+    );
+  });
+}
+
+/**
+ * A stored message as the model should see it.
+ *
+ * `thinking` is dropped: Ollama does not take reasoning back as context, and
+ * feeding an assistant's scratchpad in as history corrupts the conversation.
+ * `imageThumbs` goes too — it's the persisted display copy, not input; the
+ * raw base64 in `images` is what the wire wants.
+ */
+function forWire(message: ChatMessage): ChatMessage {
+  if (message.thinking === undefined && message.imageThumbs === undefined) {
+    return message;
+  }
+  const { thinking: _thinking, imageThumbs: _thumbs, ...rest } = message;
+  return rest;
+}
+
+/** ns → whole ms, for the timings ChatView renders. */
+function toMs(ns: number | undefined): number | null {
+  return typeof ns === "number" ? Math.round(ns / 1e6) : null;
 }
 
 function deriveLoaded(models: Model[]): LoadedSelection | null {
@@ -227,6 +323,7 @@ export function RemudaProvider({
   const [status, setStatus] = useState<ServerStatus>({ connected: false, version: null });
   const [checked, setChecked] = useState(false);
   const [groups, setGroups] = useState<ModelGroup[]>([]);
+  const [running, setRunning] = useState<RunningModel[]>([]);
   const [keepAlive, setKeepAlive] = useState<KeepAlive>("5m");
   const [confirmDeleteModel, setConfirmDeleteModelState] = useState<boolean>(
     () => loadSettings().confirmDeleteModel,
@@ -267,9 +364,7 @@ export function RemudaProvider({
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
-  const [lastStats, setLastStats] = useState<{ sessionId: string; tokPerSec: number } | null>(
-    null,
-  );
+  const [lastStats, setLastStats] = useState<LastStats | null>(null);
   /** The in-flight generation; also the synchronous one-at-a-time guard (SPEC §8). */
   const streamRef = useRef<{ controller: AbortController; sessionId: string } | null>(null);
   const sessionsRef = useRef(sessions);
@@ -295,11 +390,20 @@ export function RemudaProvider({
     };
   }, []);
 
+  const applyRunning = useCallback((next: RunningModel[]) => {
+    setRunning((prev) => (sameRunning(prev, next) ? prev : next));
+  }, []);
+
   const refreshModels = useCallback(async () => {
-    const list = await client.listGroups();
+    // listGroups() reduces /api/ps to isLoaded and drops the rest, so the
+    // runtime numbers need their own read here. This runs on explicit acts
+    // only — Load, Eject, a completed pull, a save — never on a poll tick,
+    // which gets both out of one listModelsWithRunning() call below.
+    const [list, live] = await Promise.all([client.listGroups(), client.listRunning()]);
     setGroups(list);
+    applyRunning(live);
     installedSignature.current = signatureOfGroups(list);
-  }, [client]);
+  }, [client, applyRunning]);
 
   /**
    * Cheap reconcile against the server: /api/tags + /api/ps only.
@@ -316,7 +420,10 @@ export function RemudaProvider({
    * connection dropped and came back.
    */
   const syncModels = useCallback(async () => {
-    const list = await client.listModels();
+    // listModelsWithRunning is listModels' two requests, keeping the /api/ps
+    // body instead of throwing it away — the runtime readout is free here.
+    const { models: list, running: live } = await client.listModelsWithRunning();
+    applyRunning(live);
     const signature = signatureOf(list);
     if (signature !== installedSignature.current) {
       // The poll doesn't wait for us, so a sweep slower than the interval
@@ -353,7 +460,7 @@ export function RemudaProvider({
         variants: g.variants.map((v) => ({ ...v, isLoaded: loadedTags.has(v.tag) })),
       }));
     });
-  }, [client, refreshModels]);
+  }, [client, refreshModels, applyRunning]);
 
   const checkHealth = useCallback(async () => {
     try {
@@ -371,14 +478,18 @@ export function RemudaProvider({
       } else {
         wasConnected.current = false;
         installedSignature.current = null;
+        // Unreachable server: we no longer know what's resident, and a stale
+        // list would read as fact. Say nothing rather than something wrong.
+        applyRunning([]);
       }
     } catch {
       setStatus({ connected: false, version: null });
       setChecked(true);
       wasConnected.current = false;
       installedSignature.current = null;
+      applyRunning([]);
     }
-  }, [client, syncModels]);
+  }, [client, syncModels, applyRunning]);
 
   useEffect(() => {
     void checkHealth();
@@ -458,16 +569,26 @@ export function RemudaProvider({
   }, []);
 
   const sendMessage = useCallback(
-    async (text: string) => {
+    async (text: string, images?: string[], imageThumbs?: string[]) => {
       const trimmed = text.trim();
       const sessionId = activeSessionId;
+      // An attachment is content in its own right: "what is this?" is often
+      // just the picture. Empty text with no images is still a no-op.
+      const hasImages = images !== undefined && images.length > 0;
       // One streamed generation at a time (SPEC §8).
-      if (trimmed === "" || sessionId === null || streamRef.current !== null) return;
+      if ((trimmed === "" && !hasImages) || sessionId === null || streamRef.current !== null)
+        return;
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) return;
 
       const userMessage: ChatMessage = { role: "user", content: trimmed };
-      const outbound = [...session.messages, userMessage];
+      if (hasImages) {
+        userMessage.images = images;
+      }
+      if (imageThumbs !== undefined && imageThumbs.length > 0) {
+        userMessage.imageThumbs = imageThumbs;
+      }
+      const outbound = [...session.messages, userMessage].map(forWire);
       const isFirstUserMessage = !session.messages.some((m) => m.role === "user");
 
       const controller = new AbortController();
@@ -487,20 +608,47 @@ export function RemudaProvider({
         for await (const chunk of client.chat(session.model, outbound, {
           keepAlive,
           signal: controller.signal,
+          // Per-session, sent on every request for that session.
+          think: session.think,
+          options: session.options,
         })) {
-          if (chunk.content !== "") {
+          const thinking = chunk.thinking ?? "";
+          if (chunk.content !== "" || thinking !== "") {
             updateSession(sessionId, (s) => {
               const messages = [...s.messages];
               const last = messages[messages.length - 1];
               if (last?.role !== "assistant") return s;
-              messages[messages.length - 1] = { ...last, content: last.content + chunk.content };
+              const next: ChatMessage = { ...last };
+              if (chunk.content !== "") {
+                next.content = last.content + chunk.content;
+              }
+              // Reasoning accumulates in its own field — never into content.
+              if (thinking !== "") {
+                next.thinking = (last.thinking ?? "") + thinking;
+              }
+              messages[messages.length - 1] = next;
               return { ...s, messages };
             });
           }
           if (chunk.done && chunk.stats && chunk.stats.evalDurationNs > 0) {
+            const stats = chunk.stats;
+            const promptEvalCount = stats.promptEvalCount ?? null;
+            const promptEvalDurationNs = stats.promptEvalDurationNs;
             setLastStats({
               sessionId,
-              tokPerSec: Math.round(chunk.stats.evalCount / (chunk.stats.evalDurationNs / 1e9)),
+              tokPerSec: Math.round(stats.evalCount / (stats.evalDurationNs / 1e9)),
+              evalCount: stats.evalCount,
+              promptTokPerSec:
+                promptEvalCount !== null &&
+                promptEvalDurationNs !== undefined &&
+                promptEvalDurationNs > 0
+                  ? Math.round(promptEvalCount / (promptEvalDurationNs / 1e9))
+                  : null,
+              promptEvalCount,
+              // What the runner actually held this turn: prompt + reply.
+              contextTokens: promptEvalCount === null ? null : promptEvalCount + stats.evalCount,
+              loadMs: toMs(stats.loadDurationNs),
+              totalMs: toMs(stats.totalDurationNs),
             });
           }
         }
@@ -522,6 +670,25 @@ export function RemudaProvider({
       }
     },
     [activeSessionId, client, keepAlive, syncModels, updateSession],
+  );
+
+  /**
+   * Sampling overrides and reasoning effort are settings, not activity, so
+   * neither touches `updatedAt` — nudging a temperature slider shouldn't
+   * shuffle the chat to the top of the sidebar.
+   */
+  const setSessionOptions = useCallback(
+    (sessionId: string, options: RunOptions) => {
+      updateSession(sessionId, (s) => ({ ...s, options }));
+    },
+    [updateSession],
+  );
+
+  const setSessionThink = useCallback(
+    (sessionId: string, level: ThinkLevel) => {
+      updateSession(sessionId, (s) => ({ ...s, think: level }));
+    },
+    [updateSession],
   );
 
   // ---- Modelfile editor (SPEC §5.4, §8) ----
@@ -573,6 +740,40 @@ export function RemudaProvider({
     [confirmUnsavedChanges],
   );
 
+  const bakeOptionsIntoEditor = useCallback(
+    async (tag: string, options: RunOptions) => {
+      // Deliberately not `await openEditor(tag)` then patch: editorDraftRef
+      // is synced by an effect, so it still holds the PREVIOUS draft on the
+      // line after openEditor resolves — reading it there baked nothing at
+      // all, silently. Loading here instead keeps the draft and its `dirty`
+      // flag correct in a single state write.
+      if (editorDraftRef.current?.dirty && !confirmUnsavedChanges()) return;
+      setEditorError(null);
+      setEditorLoading(true);
+      try {
+        const detail = await client.show(tag);
+        const savedDoc = parseModelfile(detail.modelfile);
+        let doc = savedDoc;
+        for (const [key, parameterName] of RUN_OPTION_KEYS) {
+          const value = options[key];
+          if (value !== undefined) {
+            doc = setParameter(doc, parameterName, value);
+          }
+        }
+        // Nothing overridden ⇒ pristine draft, so the unsaved-changes guard
+        // doesn't fire on a Modelfile the user only looked at.
+        setEditorDraft({ targetTag: tag, doc, savedDoc, dirty: doc !== savedDoc });
+        setSaveError(null);
+        setViewState("modelfile");
+      } catch (err) {
+        setEditorError(err instanceof Error ? err.message : String(err));
+      } finally {
+        setEditorLoading(false);
+      }
+    },
+    [client, confirmUnsavedChanges],
+  );
+
   const setEditorDoc = useCallback((doc: ModelfileDoc) => {
     setEditorDraft((prev) => (prev ? { ...prev, doc, dirty: true } : prev));
   }, []);
@@ -590,7 +791,7 @@ export function RemudaProvider({
   }, []);
 
   const saveDraft = useCallback(
-    async (asName?: string) => {
+    async (asName?: string, quantize?: string) => {
       const draft = editorDraftRef.current;
       if (!draft) return;
       const targetName = asName ?? draft.targetTag;
@@ -606,6 +807,11 @@ export function RemudaProvider({
       const oldTag = loaded?.variant ?? null;
       try {
         const request = toCreateRequest(draft.doc);
+        // Structured-create only; the client refuses to fall back to the
+        // legacy body when this is set rather than drop it silently.
+        if (quantize !== undefined && quantize !== "") {
+          request.quantize = quantize;
+        }
         setReloadToast({ phase: "creating", oldTag, newTag: targetName });
         for await (const status of client.create(targetName, request)) {
           setReloadToast({ phase: "creating", oldTag, newTag: targetName, detail: status.status });
@@ -652,6 +858,7 @@ export function RemudaProvider({
     checked,
     models,
     groups,
+    running,
     loaded,
     keepAlive,
     setKeepAlive,
@@ -675,6 +882,9 @@ export function RemudaProvider({
     openSession,
     deleteSession,
     sendMessage,
+    setSessionOptions,
+    setSessionThink,
+    bakeOptionsIntoEditor,
     cancelGeneration,
     editorDraft,
     editorLoading,
@@ -688,11 +898,12 @@ export function RemudaProvider({
     reloadToast,
     saveDraft,
   }), [
-    client, status, checked, models, groups, loaded, keepAlive,
+    client, status, checked, models, groups, running, loaded, keepAlive,
     confirmDeleteModel, setConfirmDeleteModel, view, setView, loadPaneOpen,
     openLoadPane, closeLoadPane, refreshModels, load, unload, checkHealth, sessions,
     activeSessionId, streamingSessionId, streamError, lastStats, newChat,
-    openSession, deleteSession, sendMessage, cancelGeneration, editorDraft,
+    openSession, deleteSession, sendMessage, setSessionOptions, setSessionThink,
+    bakeOptionsIntoEditor, cancelGeneration, editorDraft,
     editorLoading, editorError, openEditor, openEditorForNew, setEditorDoc,
     revertEditor, saving, saveError, reloadToast, saveDraft,
   ]);

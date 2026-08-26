@@ -87,6 +87,31 @@
   color: var(--muted);
 }
 
+/*
+ * The answer-at-a-glance runtime chip riding along in the model control
+ * (SPEC §5.1, mockup-proposals.html §01 `.rt-inline`) — green while the
+ * loaded model fits in VRAM, amber the moment any of it spills to CPU.
+ */
+.rt-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--good-tint);
+  color: var(--good);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--good) 26%, transparent);
+}
+
+.rt-inline.spill {
+  background: var(--warn-tint);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 32%, transparent);
+}
+
 .edit-modelfile {
   margin-left: 2px;
 }

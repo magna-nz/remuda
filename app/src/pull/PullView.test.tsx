@@ -227,6 +227,16 @@ describe("PullView", () => {
     expect(screen.getByText("All models")).toBeInTheDocument();
   });
 
+  it("renders catalog capability chips via the shared Capabilities component", async () => {
+    const client = new FakeClient({ models: [] });
+    renderPull(client);
+    await untilChecked();
+
+    const row = catalogRow("qwen3");
+    expect(within(row).getByText("tools")).toHaveClass("cap", "cap-tools");
+    expect(within(row).getByText("thinking")).toHaveClass("cap", "cap-thinking");
+  });
+
   it("Sidebar's Pull models button switches to the Pull view, keeping the chats sidebar", async () => {
     const client = new FakeClient({ models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })] });
     render(<App client={client} />);

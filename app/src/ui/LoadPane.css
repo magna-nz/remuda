@@ -304,6 +304,165 @@
   color: var(--muted);
 }
 
+/* ---- runtime strip (SPEC §5.1, mockup-proposals.html §01) ---- */
+.rt {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 11px;
+  padding: 11px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.rt-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.rt-top .rt-tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rt-top .rt-badge {
+  margin-left: auto;
+}
+
+/* The chip riding along in the top-bar model control (TopNav.css) shares
+   this class; duplicated here rather than shared across files, matching how
+   .iconbtn is already declared independently in both TopNav.css and this
+   file. */
+.rt-inline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border-radius: 7px;
+  background: var(--good-tint);
+  color: var(--good);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid color-mix(in srgb, var(--good) 26%, transparent);
+}
+
+.rt-inline.spill {
+  background: var(--warn-tint);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 32%, transparent);
+}
+
+.rt-bar {
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+  display: flex;
+}
+
+.rt-bar i {
+  display: block;
+  height: 100%;
+  transition: width 0.15s linear;
+}
+
+.rt-bar .gpu {
+  background: var(--good);
+}
+
+.rt-bar .cpu {
+  background: var(--warn);
+}
+
+.rt-legend {
+  display: flex;
+  gap: 14px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.rt-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.rt-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  display: block;
+}
+
+.rt-dot.gpu {
+  background: var(--good);
+}
+
+.rt-dot.cpu {
+  background: var(--warn);
+}
+
+.rt-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 9px;
+  border-top: 1px solid var(--border);
+  padding-top: 9px;
+}
+
+.rt-cell .k {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.rt-cell .v {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  margin-top: 2px;
+}
+
+.rt-cell .v small {
+  font-weight: 400;
+  color: var(--faint);
+  font-size: 11px;
+}
+
+.rt-warn {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border-radius: 9px;
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+  font-size: 11.5px;
+  color: var(--ink-2);
+}
+
+.rt-warn svg {
+  width: 14px;
+  height: 14px;
+  color: var(--warn);
+  flex: 0 0 auto;
+  margin-top: 2px;
+}
+
+.rt-warn b {
+  color: var(--ink);
+}
+
 /* ---- step 2: quantisation ---- */
 .pquants {
   display: flex;

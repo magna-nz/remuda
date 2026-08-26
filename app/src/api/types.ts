@@ -22,6 +22,46 @@ export interface Model {
   /** base !== null */
   isVariant: boolean;
   modifiedAt: string; // ISO 8601
+  /**
+   * What the server says this model can do ("tools", "thinking", "vision",
+   * …), from POST /api/show. Deliberately `string[]` and not a closed union:
+   * Ollama adds capabilities over time and a narrow union would fail to
+   * compile against a server newer than this build (pull/catalog.ts takes the
+   * same line for the same reason). Empty when the server doesn't report any
+   * — including every server old enough to omit the field, and the
+   * /api/tags-only path (listModels), which never asks /api/show.
+   */
+  capabilities: string[];
+}
+
+/**
+ * A model currently in memory (GET /api/ps) — the SIZE / PROCESSOR / CONTEXT
+ * / UNTIL columns of `ollama ps`.
+ *
+ * Everything past `tag` is defensive: older servers omit `size_vram`,
+ * `context_length` and `expires_at` entirely, so a missing field reads as
+ * 0/null rather than NaN or undefined.
+ */
+export interface RunningModel {
+  /** Full tag as the server reports it. */
+  tag: string;
+  /** Total bytes the runner holds (VRAM + system RAM). */
+  sizeBytes: number;
+  /** Bytes resident in VRAM. 0 means the model is running entirely on CPU. */
+  sizeVramBytes: number;
+  /** Context window the runner was started with; null when the server omits it. */
+  contextLength: number | null;
+  /** ISO 8601 keep_alive expiry; null when absent, or when keep_alive is infinite. */
+  expiresAt: string | null;
+}
+
+/**
+ * /api/tags and /api/ps read together (see OllamaClient.listModelsWithRunning).
+ * One trip, two answers: the installed set, and what of it is resident.
+ */
+export interface ModelSnapshot {
+  models: Model[];
+  running: RunningModel[];
 }
 
 /** Grouping for the load pane's Modelfile picker: base → its variants. */
@@ -48,20 +88,94 @@ export interface ModelDetail {
     quantizationLevel: string;
   };
   contextLength: number | null;
+  /** See Model.capabilities. `[]` when the server doesn't report any. */
+  capabilities: string[];
 }
+
+/**
+ * Reasoning effort for a thinking-capable model. "off" omits `think` entirely.
+ */
+export type ThinkLevel = "off" | "low" | "medium" | "high";
 
 export interface ChatMessage {
   role: "system" | "user" | "assistant";
   content: string;
+  /**
+   * Accumulated reasoning on an assistant message (Ollama's
+   * `message.thinking`). Kept out of `content` so the UI can fold it away —
+   * and stripped from the outbound history, because Ollama does not take
+   * reasoning back as context.
+   */
+  thinking?: string;
+  /**
+   * Attached images as raw base64 — no `data:` prefix, which is the shape
+   * Ollama's wire format wants. In memory only: saveSessions() drops these
+   * (localStorage's ~5MB quota), so a restored session has thumbs and no
+   * images.
+   */
+  images?: string[];
+  /**
+   * Small `data:` URLs for redisplay — the ONLY image data that is
+   * persisted. Never sent to the server.
+   */
+  imageThumbs?: string[];
 }
 
 /** One streamed chunk from POST /api/chat. */
 export interface ChatChunk {
   content: string;
+  /** Reasoning delta from `message.thinking`; never part of `content`. */
+  thinking?: string;
   done: boolean;
-  /** Set on the final chunk (done: true). */
-  stats?: { evalCount: number; evalDurationNs: number };
+  /**
+   * Set on the final chunk (done: true). The two eval fields are required
+   * because every server that reports timings at all reports those; the rest
+   * are optional and absent on servers that don't.
+   */
+  stats?: {
+    evalCount: number;
+    evalDurationNs: number;
+    promptEvalCount?: number;
+    promptEvalDurationNs?: number;
+    loadDurationNs?: number;
+    totalDurationNs?: number;
+  };
 }
+
+/**
+ * Per-request sampling overrides (POST /api/chat `options`). camelCase here,
+ * snake_case on the wire — the client maps and omits every unset key, since
+ * an explicit `undefined` in the JSON body is not the same as absent.
+ */
+export interface RunOptions {
+  temperature?: number;
+  topP?: number;
+  topK?: number;
+  seed?: number;
+  numPredict?: number;
+  repeatPenalty?: number;
+  /**
+   * Load-time, not sampling: changing this makes Ollama reload the model
+   * with a different memory footprint. The UI warns before applying it.
+   */
+  numCtx?: number;
+}
+
+/**
+ * RunOptions → the name Ollama knows each value by, which is also the
+ * Modelfile `PARAMETER` name. One list, because two copies drift: the wire
+ * encoder in client.ts and the "Bake into Modelfile" action in state.tsx
+ * both have to agree on what `topP` is called.
+ */
+export const RUN_OPTION_KEYS: Array<[keyof RunOptions, string]> = [
+  ["temperature", "temperature"],
+  ["topP", "top_p"],
+  ["topK", "top_k"],
+  ["seed", "seed"],
+  ["numPredict", "num_predict"],
+  ["repeatPenalty", "repeat_penalty"],
+  ["numCtx", "num_ctx"],
+];
 
 /** One streamed progress event from POST /api/pull. */
 export interface PullProgress {
@@ -92,6 +206,13 @@ export interface CreateRequest {
   messages?: ChatMessage[];
   /** PARAMETER lines; repeatable keys (stop) become arrays. */
   parameters?: Record<string, string | number | boolean | Array<string | number>>;
+  /**
+   * Quantise the source weights on the way in, e.g. "q4_K_M". Structured
+   * create only — the legacy `modelfile` string can't express it, so when
+   * this is set the client will NOT fall back: dropping the quantisation
+   * silently would produce a model the user didn't ask for.
+   */
+  quantize?: string;
   /** The raw Modelfile text, for the legacy fallback. */
   rawModelfile: string;
 }
@@ -104,6 +225,17 @@ export interface OllamaClient {
   version(): Promise<ServerStatus>;
   /** GET /api/tags merged with GET /api/ps. */
   listModels(): Promise<Model[]>;
+  /**
+   * listModels(), keeping the full /api/ps readout instead of reducing it to
+   * `isLoaded`. Exactly the same two requests — the 5s poll calls this so the
+   * runtime readout (SPEC §5.1) costs nothing extra.
+   */
+  listModelsWithRunning(): Promise<ModelSnapshot>;
+  /**
+   * GET /api/ps on its own. For callers that want only residency; the poll
+   * path uses listModelsWithRunning instead of pairing this with listModels.
+   */
+  listRunning(): Promise<RunningModel[]>;
   /** Group models into base + variants for the load pane. */
   listGroups(): Promise<ModelGroup[]>;
   /** POST /api/show */
@@ -122,7 +254,14 @@ export interface OllamaClient {
   chat(
     tag: string,
     messages: ChatMessage[],
-    opts: { keepAlive: KeepAlive; signal?: AbortSignal },
+    opts: {
+      keepAlive: KeepAlive;
+      signal?: AbortSignal;
+      /** "off"/undefined omits `think` from the body; the rest go verbatim. */
+      think?: ThinkLevel;
+      /** Sampling overrides; unset keys are omitted, not sent as null. */
+      options?: RunOptions;
+    },
   ): AsyncIterable<ChatChunk>;
   /** POST /api/create with stream: true — structured body first, legacy
    * `modelfile` fallback for older servers (SPEC §9). */
