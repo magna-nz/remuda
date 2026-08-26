@@ -1,0 +1,133 @@
+name: Release
+
+# Tag-triggered release build. Push a `v*` tag (e.g. `v0.1.0`) to build the
+# macOS app bundle and publish it as a GitHub release asset.
+#
+# Distribution is Homebrew, not a DMG (SPEC.md §10) — this workflow produces
+# the tarball a Homebrew cask points `url` at; it does not build or upload a
+# .dmg. See packaging/homebrew/ for the cask template and the per-release
+# update steps.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build macOS app & publish release
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry & build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-release-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-release-
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: app
+        run: npm run build
+
+      # Installed via npm rather than `cargo install tauri-cli`: the npm
+      # package ships a precompiled binary, so this is a download, not a
+      # from-source compile — much faster and friendlier to the runner's
+      # cache than rebuilding tauri-cli on every release.
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      - name: Determine release version
+        id: version
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "version=${tag#v}" >> "$GITHUB_OUTPUT"
+
+      # Run from src-tauri/, matching the documented local dev flow
+      # (README.md "Development": `cargo tauri dev` from src-tauri/), so the
+      # `beforeBuildCommand` hook in tauri.conf.json resolves the same way
+      # it does for a developer running the equivalent `dev` command by
+      # hand. The frontend is also pre-built above so the hook re-running
+      # `npm run build` is redundant, not load-bearing.
+      #
+      # macos-14 GitHub runners are Apple Silicon (arm64), so this produces
+      # an aarch64-only .app. An x86_64 (or universal) build is a follow-up
+      # — see the TODO below and SPEC.md §10/§12.8.
+      - name: Build the app bundle
+        working-directory: src-tauri
+        run: tauri build
+
+      # --------------------------------------------------------------
+      # TODO: code signing & notarization.
+      #
+      # This build is UNSIGNED. Without a signing identity, Gatekeeper
+      # will refuse to open the .app on another Mac ("Remuda.app is
+      # damaged and can't be opened" / "unidentified developer"), which is
+      # why packaging/homebrew/remuda.rb's `caveats` block currently tells
+      # installers to run:
+      #   xattr -dr com.apple.quarantine /Applications/Remuda.app
+      #
+      # To sign and notarize once a Developer ID is available, this step
+      # would need, roughly:
+      #   1. Secrets: APPLE_CERTIFICATE (base64 .p12), APPLE_CERTIFICATE_PASSWORD,
+      #      APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD (app-specific
+      #      password or API key), APPLE_TEAM_ID.
+      #   2. Import the certificate into a temporary keychain before the
+      #      `tauri build` step (tauri-apps/tauri-action or a manual
+      #      `security create-keychain` / `security import` sequence), and
+      #      set tauri.conf.json's `bundle.macOS.signingIdentity`.
+      #   3. After `tauri build` produces the signed .app, notarize it:
+      #      `xcrun notarytool submit <bundle>.zip --apple-id ... --team-id ...
+      #      --password ... --wait`, then `xcrun stapler staple Remuda.app`.
+      #   4. Only once that's in place should the cask's `caveats` note about
+      #      quarantine be removed.
+      # --------------------------------------------------------------
+
+      - name: Package the .app as a tarball
+        id: package
+        run: |
+          version="${{ steps.version.outputs.version }}"
+          bundle_dir="src-tauri/target/release/bundle/macos"
+          asset="Remuda-${version}-aarch64.tar.gz"
+          tar -czf "$asset" -C "$bundle_dir" "Remuda.app"
+          shasum -a 256 "$asset" > "${asset}.sha256"
+          echo "asset=${asset}" >> "$GITHUB_OUTPUT"
+          echo "sha256=$(cut -d ' ' -f1 "${asset}.sha256")" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            ${{ steps.package.outputs.asset }}
+            ${{ steps.package.outputs.asset }}.sha256
+          body: |
+            macOS (Apple Silicon / aarch64) build, **unsigned** — see the
+            signing TODO in .github/workflows/release.yml. Installers will
+            need to clear the quarantine attribute; see
+            packaging/homebrew/remuda.rb.
+
+            SHA-256: `${{ steps.package.outputs.sha256 }}`
+
+            After this release publishes, update
+            packaging/homebrew/remuda.rb in the tap repo with this version
+            and SHA-256 — see packaging/homebrew/README.md.

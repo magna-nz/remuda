@@ -1,0 +1,306 @@
+.mpane-back {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  background: rgba(20, 15, 10, 0.28);
+}
+
+.mpane {
+  position: absolute;
+  top: 54px;
+  left: 168px;
+  width: 392px;
+  z-index: 50;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.mpane-h {
+  display: flex;
+  align-items: center;
+  padding: 13px 15px;
+  border-bottom: 1px solid var(--border);
+}
+
+.mpane-h b {
+  font-size: 13.5px;
+}
+
+.mpane-h .sub {
+  margin-left: 8px;
+  font-size: 11px;
+  color: var(--faint);
+  font-family: var(--mono);
+}
+
+.mpane-h .x {
+  margin-left: auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.mpane-h .x:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.mpane-h .x svg {
+  width: 16px;
+  height: 16px;
+}
+
+.mpane-b {
+  padding: 14px 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.pfield > label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+
+.pmodels {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  max-height: 186px;
+  overflow-y: auto;
+}
+
+/* Wraps a .pmodel row + its .pdelete affordance (a sibling, not nested —
+   buttons can't nest per a11y) so the delete icon only takes the space it
+   needs on the currently selected row. */
+.pmodel-wrap {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.pmodel {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 9px;
+  padding: 8px 9px;
+  color: var(--ink);
+}
+
+/* Delete affordance (SPEC §5.6, §8): shown only on the selected model row. */
+.pdelete {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.pdelete:hover {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+.pdelete:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pdelete svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Empty install (SPEC §5.5): points toward Pull instead of an empty list. */
+.pempty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 4px;
+}
+
+.pempty p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.pmodel:hover {
+  background: var(--raised);
+}
+
+.pmodel.active {
+  background: var(--ember-tint);
+  border-color: color-mix(in srgb, var(--ember) 30%, transparent);
+}
+
+.pmodel .pg {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 11px;
+  background: var(--raised);
+  color: var(--muted);
+}
+
+.pmodel.active .pg {
+  background: var(--ember);
+  color: #fff;
+}
+
+.pmodel .pn {
+  display: block;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.pmodel .ps {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.pmodel .ptune {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--good);
+  background: var(--good-tint);
+  padding: 2px 7px;
+  border-radius: 999px;
+}
+
+.pvariants {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.pv {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--ink-2);
+}
+
+.pv:hover {
+  border-color: var(--border-strong);
+}
+
+.pv.active {
+  background: var(--ember);
+  border-color: transparent;
+  color: #fff;
+}
+
+.pv.new {
+  border-style: dashed;
+  color: var(--muted);
+  background: transparent;
+}
+
+.pv.new:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.ploadwrap {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.pprogress {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.pptext {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.meter {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--ember);
+  border-radius: 999px;
+  transition: width 0.12s linear;
+}
+
+.meter i.indeterminate {
+  animation: pane-load-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes pane-load-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .meter i.indeterminate {
+    animation: none;
+  }
+}
+
+/* Load failure (SPEC §9): the server's error text, verbatim. */
+.perror {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--crit);
+  background: var(--crit-tint);
+  border: 1px solid var(--crit);
+  border-radius: 8px;
+  padding: 8px 10px;
+  overflow-wrap: anywhere;
+}

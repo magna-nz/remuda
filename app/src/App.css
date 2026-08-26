@@ -1,0 +1,66 @@
+@import "./ui/buttons.css";
+
+.app {
+  position: relative;
+  max-width: 1240px;
+  margin: 0 auto;
+  height: 100vh;
+  min-height: 640px;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  border-right: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.main {
+  flex: 1;
+  min-width: 0;
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/*
+ * ViewTabs sits above whichever view is active (chat/modelfile/settings).
+ * Those views size themselves with `height: 100%` (ChatView.css, this
+ * component's own CSS) — this wrapper is what gives that 100% a definite,
+ * tab-strip-aware height to resolve against, and is the fallback scroller
+ * for views (Settings) that don't manage their own internal overflow.
+ */
+.viewbody {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.chat-empty {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  text-align: center;
+  padding: 30px;
+}
+
+.chat-empty svg {
+  width: 26px;
+  height: 26px;
+  color: var(--faint);
+}
+
+.chat-empty b {
+  color: var(--ink);
+  font-size: 14px;
+}

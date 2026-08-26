@@ -1,0 +1,136 @@
+.dlg-back {
+  position: absolute;
+  inset: 0;
+  z-index: 60;
+  background: rgba(20, 15, 10, 0.34);
+}
+
+.dlg {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 70;
+  width: 430px;
+  max-width: calc(100% - 32px);
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.dlg-h {
+  display: flex;
+  align-items: center;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.dlg-h b {
+  font-size: 14px;
+}
+
+.dlg-h .x {
+  margin-left: auto;
+}
+
+.dlg-b {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.dlg-b .field label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-2);
+  margin-bottom: 6px;
+}
+
+.dlg-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dlg-note {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.dlg-note code {
+  font-family: var(--mono);
+  background: var(--raised);
+  padding: 1px 6px;
+  border-radius: 5px;
+  color: var(--ink-2);
+}
+
+.dlg-f {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.pathfield {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 6px 10px;
+  background: var(--surface);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.pathfield svg {
+  width: 14px;
+  height: 14px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.pathfield span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.namefield {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  overflow: hidden;
+  background: var(--surface);
+}
+
+.namefield input {
+  border: 0;
+  background: transparent;
+  padding: 8px 11px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  outline: none;
+  width: 100%;
+  flex: 1;
+}
+
+.namefield .tagsuffix {
+  padding: 0 11px 0 4px;
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 12px;
+}
