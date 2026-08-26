@@ -75,11 +75,17 @@ describe("ChatView", () => {
     // Fresh-session empty state names the model it will test.
     const main = screen.getByText("Send a message to test", { exact: false });
     expect(within(main).getByText("llama3.1:8b")).toBeInTheDocument();
-    // The session persisted, bound to the loaded variant (SPEC §5.2, §6).
-    const stored = JSON.parse(window.localStorage.getItem(SESSIONS_STORAGE_KEY) ?? "[]");
-    expect(stored).toHaveLength(1);
-    expect(stored[0].model).toBe("llama3.1:8b");
-    expect(stored[0].title).toBe("New chat");
+    // The session persists (debounced ~300ms), bound to the loaded variant
+    // (SPEC §5.2, §6).
+    await waitFor(
+      () => {
+        const stored = JSON.parse(window.localStorage.getItem(SESSIONS_STORAGE_KEY) ?? "[]");
+        expect(stored).toHaveLength(1);
+        expect(stored[0].model).toBe("llama3.1:8b");
+        expect(stored[0].title).toBe("New chat");
+      },
+      { timeout: 1500 },
+    );
   });
 
   it("disables New chat with a hint while nothing is loaded", async () => {
@@ -162,6 +168,32 @@ describe("ChatView", () => {
       client.emitChat({ content: "done now", done: true });
     });
     await screen.findByRole("button", { name: "Send" });
+  });
+
+  it("deleting the streaming session aborts its generation and clears the guard", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    await startChatAndSend(client, "Tell me a story");
+
+    await act(async () => {
+      client.emitChat({ content: "Once upon", done: false });
+    });
+    await screen.findByText("Once upon");
+
+    // Delete the session that is actively streaming (title is the first
+    // user message). The in-flight generation must abort, not orphan.
+    fireEvent.click(screen.getByRole("button", { name: "Delete Tell me a story" }));
+    await waitFor(() => expect(screen.queryByText("Once upon")).not.toBeInTheDocument());
+
+    // Guard cleared: a fresh session can stream again immediately.
+    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    fireEvent.change(screen.getByLabelText("Message"), { target: { value: "again" } });
+    fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
+    await act(async () => {});
+    expect(client.chatCalls).toHaveLength(2);
+    await act(async () => {
+      client.emitChat({ content: "done!", done: true });
+    });
+    await screen.findByText("done!");
   });
 
   it("cancel aborts the stream and keeps the partial reply", async () => {

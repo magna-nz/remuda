@@ -177,7 +177,7 @@ export function ChatView() {
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={onComposerKeyDown}
           />
-          {streaming ? (
+          {streamingHere ? (
             <button
               type="button"
               className="send stop"
@@ -193,9 +193,10 @@ export function ChatView() {
             <button
               type="button"
               className="send"
-              title="Send"
+              title={streaming ? "Another chat is still generating" : "Send"}
               aria-label="Send"
               onClick={submit}
+              disabled={streaming}
             >
               <svg
                 viewBox="0 0 24 24"

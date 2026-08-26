@@ -132,8 +132,13 @@ export function RemudaProvider({
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
 
+  // Coalesce writes: a streaming reply updates `sessions` per token, and a
+  // stringify+setItem of the whole list per token is wasted work. Trailing
+  // 300ms debounce — the timer set by the last change always fires, so the
+  // final state is always persisted.
   useEffect(() => {
-    saveSessions(sessions);
+    const id = window.setTimeout(() => saveSessions(sessions), 300);
+    return () => window.clearTimeout(id);
   }, [sessions]);
 
   const refreshModels = useCallback(async () => {
