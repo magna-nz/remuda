@@ -3,7 +3,6 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LoadPane } from "./LoadPane";
 import { TopNav } from "./TopNav";
-import { ViewTabs } from "../editor/ViewTabs";
 import { ChatView } from "../chat/ChatView";
 import { Sidebar } from "./Sidebar";
 import { RemudaProvider } from "./state";
@@ -267,7 +266,7 @@ describe("LoadPane", () => {
       <RemudaProvider client={client} pollIntervalMs={1_000_000}>
         <TopNav />
         <LoadPane />
-        <ViewTabs />
+        <Sidebar />
       </RemudaProvider>,
     );
     fireEvent.click(screen.getByTitle("Choose and load a model"));
@@ -276,7 +275,7 @@ describe("LoadPane", () => {
     fireEvent.click(pullButton);
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Pull" })).toHaveAttribute("aria-current", "true");
+    expect(screen.getByRole("button", { name: "Get Models" })).toHaveAttribute("aria-pressed", "true");
   });
 
   it("ejects the loaded model, freeing its memory without closing the pane", async () => {
