@@ -1,0 +1,455 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Remuda — load pane: model → quant → Modelfile</title>
+<style>
+:root{
+  --bg:#191817; --surface:#1e1d1b; --surface-2:#262523; --raised:#302e2b;
+  --border:#3a3733; --border-strong:#55504a;
+  --ink:#f2efe9; --ink-2:#dcd7ce; --muted:#a29c91; --faint:#7b756a;
+  --ember:#6165c6; --ember-press:#6b4fa8; --ember-tint:#262445; --ember-ink:#a9a5ea;
+  --good:#89c360; --good-tint:#1e2a16;
+  --warn:#f1ae27; --warn-tint:#2e2610;
+  --crit:#e75140; --crit-tint:#2f1714;
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 8px 24px -10px rgba(0,0,0,.55);
+  --shadow-lg:0 22px 60px -16px rgba(0,0,0,.7);
+  --ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono","Cascadia Code",monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;color:inherit}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em}
+
+/* ---------- page chrome around the mock ---------- */
+.page{max-width:1100px;margin:0 auto;padding:28px 24px 64px}
+.page > header{margin-bottom:18px}
+.page > header h1{font-size:17px}
+.page > header p{margin:6px 0 0;color:var(--muted);font-size:13px;max-width:70ch}
+.note{margin-top:14px;font-size:12.5px;color:var(--faint);font-family:var(--mono)}
+
+/* ---------- fake app window ---------- */
+.win{position:relative;height:620px;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--bg);box-shadow:var(--shadow)}
+.topnav{display:flex;align-items:center;gap:14px;height:54px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.brand{display:flex;align-items:center;gap:9px;font-weight:800;font-size:14.5px}
+.mark{width:26px;height:26px;border-radius:8px;background:linear-gradient(150deg,var(--ember),#8f5ad0);display:grid;place-items:center;font-size:12px;color:#fff}
+.divider{width:1px;height:22px;background:var(--border)}
+.modelctl{display:flex;align-items:center;gap:9px;padding:8px 13px;border-radius:10px;background:var(--surface-2);border:1px solid var(--border-strong);font-family:var(--mono);font-size:12.5px;color:var(--ink-2)}
+.modelctl .dot{width:8px;height:8px;border-radius:999px;background:var(--faint)}
+.modelctl.on .dot{background:var(--good);box-shadow:0 0 0 3px var(--good-tint)}
+.modelctl .chev{color:var(--faint);font-size:10px;margin-left:2px}
+.modelctl .mf{color:var(--ember-ink)}
+.shell{display:flex;height:calc(100% - 54px)}
+.side{width:238px;border-right:1px solid var(--border);background:var(--surface);padding:12px}
+.side .search{height:36px;border-radius:9px;border:1px solid var(--border);background:var(--bg);display:flex;align-items:center;padding:0 10px;color:var(--faint);font-size:12.5px;gap:8px}
+.side .newchat{margin-top:10px;height:38px;border-radius:9px;background:var(--ember-tint);border:1px solid color-mix(in srgb,var(--ember) 40%,transparent);display:grid;place-items:center;font-weight:600;font-size:13px;color:var(--ember-ink)}
+.side h5{margin:16px 0 8px;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.side .empty{font-size:12.5px;color:var(--faint);border:1px dashed var(--border);border-radius:10px;padding:12px}
+.main{flex:1;display:grid;place-items:center;color:var(--faint);font-size:13px}
+
+/* ---------- the pane ---------- */
+.mpane-back{position:absolute;inset:0;z-index:40;background:rgba(20,15,10,.36)}
+.mpane{position:absolute;top:54px;left:168px;width:412px;z-index:50;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow-lg);overflow:hidden}
+.mpane-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border);min-height:52px}
+.mpane-h b{font-size:13.5px}
+.mpane-h .sub{font-size:11px;color:var(--faint);font-family:var(--mono)}
+.iconbtn{width:30px;height:30px;display:grid;place-items:center;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted)}
+.iconbtn:hover{background:var(--raised);color:var(--ink)}
+.iconbtn svg{width:16px;height:16px}
+.iconbtn.x{margin-left:auto}
+.iconbtn.danger:hover{background:var(--crit-tint);color:var(--crit)}
+.hstack{display:flex;flex-direction:column;min-width:0}
+.hstack .htitle{font-family:var(--mono);font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hstack .hsub{font-size:11px;color:var(--faint)}
+
+/* two-step viewport */
+.steps{position:relative;overflow:hidden}
+.step{padding:14px 15px;display:flex;flex-direction:column;gap:15px}
+.step.enter-l{animation:slideL .18s ease}
+.step.enter-r{animation:slideR .18s ease}
+@keyframes slideL{from{transform:translateX(28px);opacity:0}to{transform:none;opacity:1}}
+@keyframes slideR{from{transform:translateX(-28px);opacity:0}to{transform:none;opacity:1}}
+@media (prefers-reduced-motion:reduce){.step.enter-l,.step.enter-r{animation:none}}
+
+.pfield > label{display:block;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.pfield > label .qual{font-weight:500;letter-spacing:.02em;text-transform:none;color:var(--faint);font-family:var(--mono)}
+
+.filter{display:flex;align-items:center;gap:8px;height:34px;padding:0 10px;border:1px solid var(--border);border-radius:9px;background:var(--bg);margin-bottom:9px}
+.filter input{flex:1;border:0;background:transparent;color:var(--ink);font-family:var(--mono);font-size:12.5px;outline:none}
+.filter svg{width:14px;height:14px;color:var(--faint)}
+
+/* model list (level 1) */
+.plist{display:flex;flex-direction:column;gap:3px;max-height:290px;overflow-y:auto}
+.prow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:9px;padding:9px;color:var(--ink)}
+.prow:hover{background:var(--raised)}
+.prow.sel{background:var(--ember-tint);border-color:color-mix(in srgb,var(--ember) 30%,transparent)}
+.pg{width:28px;height:28px;border-radius:7px;flex:0 0 auto;display:grid;place-items:center;font-family:var(--mono);font-weight:600;font-size:11px;background:var(--raised);color:var(--muted)}
+.prow.sel .pg,.prow:hover .pg{background:var(--ember);color:#fff}
+.pmeta{min-width:0;flex:1}
+.pn{display:block;font-family:var(--mono);font-size:12.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ps{display:block;font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+.chev-r{color:var(--faint);flex:0 0 auto}
+.chev-r svg{width:15px;height:15px;display:block}
+.pill{font-size:10px;font-weight:600;padding:2px 7px;border-radius:999px;flex:0 0 auto}
+.pill.loaded{color:var(--good);background:var(--good-tint)}
+.pill.tuned{color:var(--ember-ink);background:var(--ember-tint)}
+
+/* quant rows (level 2) */
+.quants{display:flex;flex-direction:column;gap:6px}
+.q{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:9px 11px;border-radius:10px;border:1px solid var(--border);background:var(--surface);color:var(--ink)}
+.q:hover{border-color:var(--border-strong)}
+.q.sel{border-color:var(--ember);background:var(--ember-tint)}
+.radio{width:15px;height:15px;border-radius:999px;border:1.5px solid var(--border-strong);flex:0 0 auto;display:grid;place-items:center}
+.q.sel .radio{border-color:var(--ember)}
+.q.sel .radio::after{content:"";width:7px;height:7px;border-radius:999px;background:var(--ember)}
+.qmeta{min-width:0;flex:1}
+.qname{font-family:var(--mono);font-size:12.5px;font-weight:500}
+.qnote{display:block;font-size:11px;color:var(--muted)}
+/* The literal local tag. Muted, last, smallest: what it is → why pick it → what it
+   actually is. Grouping is derived, so the underlying tag stays visible and
+   copy-pasteable rather than mysterious. */
+.qtag{display:block;font-family:var(--mono);font-size:10.5px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.qsize{margin-left:auto;font-family:var(--mono);font-size:12px;color:var(--ink-2);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.q.ghost{border-style:dashed;background:transparent}
+.q.ghost .qname,.q.ghost .qsize{color:var(--faint)}
+.q.ghost .radio{opacity:.35}
+.q .getbtn{margin-left:auto;font-size:11px;font-weight:600;color:var(--ember-ink);background:var(--ember-tint);border:1px solid color-mix(in srgb,var(--ember) 35%,transparent);border-radius:999px;padding:3px 10px}
+
+/* modelfile chips (level 2) */
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{display:inline-flex;align-items:center;gap:6px;font-family:var(--mono);font-size:12px;padding:6px 10px;border-radius:8px;background:var(--raised);border:1px solid var(--border);color:var(--ink-2)}
+.chip:hover{border-color:var(--border-strong)}
+.chip.sel{background:var(--ember);border-color:transparent;color:#fff}
+.chip.new{border-style:dashed;color:var(--muted);background:transparent}
+.hint{font-size:11.5px;color:var(--warn);background:var(--warn-tint);border-radius:8px;padding:6px 9px;margin-top:8px;font-family:var(--mono)}
+
+/* load button + progress */
+.btn{border:1px solid var(--border);background:var(--raised);border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;color:var(--ink)}
+.btn.primary{background:var(--ember);border-color:transparent;color:#fff}
+.btn.primary:hover{background:var(--ember-press)}
+.btn.primary:disabled{opacity:.55;cursor:not-allowed}
+.btn.wide{width:100%;padding:11px}
+.btn.sm{font-size:12px;padding:6px 11px}
+.ploadwrap{display:flex;flex-direction:column;gap:10px}
+.summary{font-family:var(--mono);font-size:11.5px;color:var(--faint);text-align:center}
+.summary b{color:var(--ink-2);font-weight:500}
+.summary .eff{display:block;margin-top:4px;color:var(--muted)}
+.summary .eff code{color:var(--ink-2)}
+.meter{height:7px;border-radius:999px;background:var(--border);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ember);border-radius:999px;transition:width .18s linear}
+.pptext{font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.pprogress{display:flex;flex-direction:column;gap:7px}
+.footer-note{font-size:11.5px;color:var(--faint);border-top:1px solid var(--border);padding-top:11px;margin-top:-4px}
+</style>
+</head>
+<body>
+<div class="page">
+  <header>
+    <h1>Load pane — model → quant → Modelfile</h1>
+    <p>The list is now one row per <em>model</em>, not one row per installed tag. Drilling in gives the
+       quant (the weights) and the Modelfile (the tuning) as two separate choices. A model with no
+       tuned Modelfiles just loads <code>Original (base)</code>. Grouping is <em>derived</em> from tag names,
+       so every row keeps its literal local tag visible — including what Load will actually send to Ollama.
+       Click through it — every control works.</p>
+  </header>
+
+  <div class="win">
+    <div class="topnav">
+      <div class="brand"><span class="mark">◇</span> Remuda</div>
+      <div class="divider"></div>
+      <button class="modelctl" id="topctl" onclick="openPane()">
+        <span class="dot"></span><span id="topctl-text">No model loaded</span><span class="chev">▼</span>
+      </button>
+    </div>
+    <div class="shell">
+      <div class="side">
+        <div class="search">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+          Search chats…
+        </div>
+        <div class="newchat">＋ New chat</div>
+        <h5>Recent</h5>
+        <div class="empty">No chats yet — load a model to start one.</div>
+      </div>
+      <div class="main">Chat</div>
+    </div>
+
+    <!-- pane -->
+    <div id="back" class="mpane-back" hidden onclick="closePane()"></div>
+    <div id="pane" class="mpane" role="dialog" aria-label="Load a model" hidden>
+      <div class="mpane-h" id="pane-head"></div>
+      <div class="steps">
+        <!-- LEVEL 1 -->
+        <div class="step" id="step-list">
+          <div class="pfield">
+            <div class="filter">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <input id="q" placeholder="Filter models…" oninput="renderList()" aria-label="Filter models" />
+            </div>
+            <div class="plist" id="plist"></div>
+          </div>
+          <div class="footer-note">Quantisations and tuned Modelfiles live inside each model. Grouped by tag name, never by family metadata — when the rule is unsure it leaves a tag on its own.</div>
+        </div>
+
+        <!-- LEVEL 2 -->
+        <div class="step" id="step-detail" hidden>
+          <div class="pfield">
+            <label>Quantisation</label>
+            <div class="quants" id="quants"></div>
+          </div>
+          <div class="pfield">
+            <label>Modelfile <span class="qual" id="mf-qual"></span></label>
+            <div class="chips" id="chips"></div>
+            <div class="hint" id="mf-hint" hidden></div>
+          </div>
+          <div class="ploadwrap">
+            <button class="btn primary wide" id="loadbtn" onclick="doLoad()">Load model</button>
+            <div class="summary" id="summary"></div>
+            <div class="pprogress" id="progress" hidden>
+              <div class="meter"><i id="bar" style="width:0%"></i></div>
+              <div class="pptext" id="ptext"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="note">mockup · not wired to Ollama · <span id="statenote"></span></p>
+</div>
+
+<script>
+/* ---------------- mock data ----------------
+   One entry per MODEL. Quants are the installed weight variants of that
+   model; each quant carries its own tuned Modelfiles (a Modelfile FROMs a
+   specific tag, so a tuning belongs to one quant). */
+const MODELS = [
+  {
+    id:"llama3.1-70b-instruct", glyph:"LL", family:"Llama", params:"70B", publisher:"meta",
+    quants:[
+      {id:"Q4_K_M", tag:"llama3.1-70b-instruct-q4:latest", size:"42.5 GB", note:"fastest · smallest footprint", installed:true,
+       modelfiles:[{id:"strict-diff", label:"strict-diff", tag:"llama-strict-diff:latest"},
+                   {id:"terse-review", label:"terse-review", tag:"llama-terse-review:latest"}]},
+      {id:"Q8_0", tag:"llama3.1-70b-instruct-q8:latest", size:"75.0 GB", note:"highest quality · slower", installed:true, modelfiles:[]},
+      {id:"Q6_K", size:"57.9 GB", note:"not installed", installed:false, modelfiles:[]}
+    ]
+  },
+  {
+    id:"mistral-small-24b", glyph:"MI", family:"Mistral", params:"24B", publisher:"mistralai",
+    quants:[
+      {id:"Q5_K_M", tag:"mistral-small-24b-q5:latest", size:"16.8 GB", note:"balanced", installed:true,
+       modelfiles:[{id:"house-style", label:"house-style", tag:"mistral-house-style:latest"}]},
+      {id:"Q4_K_M", size:"14.3 GB", note:"not installed", installed:false, modelfiles:[]}
+    ]
+  },
+  {
+    id:"phi4-14b", glyph:"PH", family:"Phi", params:"14B", publisher:"microsoft",
+    quants:[
+      {id:"Q5_K_M", tag:"phi4-14b:latest", size:"10.4 GB", note:"balanced", installed:true, modelfiles:[]}
+    ]
+  },
+  {
+    id:"qwen2.5-7b", glyph:"QW", family:"Qwen", params:"7B", publisher:"qwen",
+    quants:[
+      {id:"Q4_K_M", tag:"qwen2.5:7b-q4_K_M", size:"4.7 GB", note:"fastest", installed:true, modelfiles:[]},
+      {id:"Q8_0", tag:"qwen2.5:7b-q8_0", size:"8.1 GB", note:"highest quality", installed:true, modelfiles:[]}
+    ]
+  }
+];
+
+/* ---------------- state ---------------- */
+let paneOpen = false;
+let level = "list";          // "list" | "detail"
+let curModel = null;         // model id
+let curQuant = null;         // quant id
+let curMf = null;            // modelfile id, or null = Original (base)
+let loaded = null;           // {model, quant, mf}
+let phase = "idle";
+
+const model = id => MODELS.find(m => m.id === id);
+const quant = (m,q) => m && m.quants.find(x => x.id === q);
+const installedQuants = m => m.quants.filter(q => q.installed);
+const tuneCount = m => installedQuants(m).reduce((n,q) => n + q.modelfiles.length, 0);
+const isLoadedModel = id => loaded && loaded.model === id;
+/** The tag actually sent to Ollama: the tuning's own tag, else the quant's. */
+function effectiveTag(){
+  const q = quant(model(curModel), curQuant);
+  if (!q) return "—";
+  const f = q.modelfiles.find(x => x.id === curMf);
+  return f ? f.tag : q.tag;
+}
+
+/* ---------------- pane open/close ---------------- */
+function openPane(){
+  paneOpen = true;
+  level = loaded ? "detail" : "list";
+  if (loaded){ curModel = loaded.model; curQuant = loaded.quant; curMf = loaded.mf; }
+  phase = "idle";
+  document.getElementById("q").value = "";
+  render();
+}
+function closePane(){ paneOpen = false; phase = "idle"; render(); }
+function drillIn(id){
+  curModel = id;
+  const m = model(id);
+  const preferred = isLoadedModel(id) ? loaded.quant : null;
+  const q = (preferred && quant(m,preferred)) || installedQuants(m)[0];
+  curQuant = q ? q.id : null;
+  curMf = (isLoadedModel(id) && loaded.quant === curQuant) ? loaded.mf : null;
+  level = "detail"; phase = "idle";
+  render("l");
+}
+function drillOut(){ level = "list"; phase = "idle"; render("r"); }
+
+function pickQuant(qid){
+  if (qid === curQuant) return;
+  const prev = curMf;
+  curQuant = qid;
+  const q = quant(model(curModel), qid);
+  // A tuning FROMs one specific quant — it can't carry across.
+  const carried = prev && q.modelfiles.some(f => f.id === prev);
+  if (!carried) curMf = null;
+  phase = "idle";
+  render();
+  if (prev && !carried){
+    const h = document.getElementById("mf-hint");
+    h.hidden = false;
+    h.textContent = "‘" + prev + "’ is built on the other quant — reset to Original (base).";
+  }
+}
+function pickMf(id){ curMf = id; phase = "idle"; render(); }
+
+function doLoad(){
+  if (phase === "loading") return;
+  phase = "loading"; render();
+  const bar = document.getElementById("bar");
+  let pct = 0;
+  const tick = setInterval(() => {
+    pct = Math.min(100, pct + 9 + Math.random()*13);
+    bar.style.width = pct + "%";
+    if (pct >= 100){
+      clearInterval(tick);
+      loaded = {model:curModel, quant:curQuant, mf:curMf};
+      phase = "done"; render();
+      setTimeout(() => { if (phase === "done") closePane(); }, 900);
+    }
+  }, 190);
+}
+
+/* ---------------- render ---------------- */
+function render(dir){
+  document.getElementById("pane").hidden = !paneOpen;
+  document.getElementById("back").hidden = !paneOpen;
+  renderTop();
+  if (!paneOpen) return;
+  renderHead();
+  const list = document.getElementById("step-list"), detail = document.getElementById("step-detail");
+  list.hidden = level !== "list";
+  detail.hidden = level !== "detail";
+  const active = level === "list" ? list : detail;
+  active.classList.remove("enter-l","enter-r");
+  if (dir){ void active.offsetWidth; active.classList.add(dir === "l" ? "enter-l" : "enter-r"); }
+  if (level === "list") renderList(); else renderDetail();
+}
+
+function renderTop(){
+  const ctl = document.getElementById("topctl"), t = document.getElementById("topctl-text");
+  ctl.classList.toggle("on", !!loaded);
+  if (!loaded){ t.textContent = "No model loaded"; }
+  else {
+    t.innerHTML = loaded.model + " <span style='color:var(--faint)'>·</span> " + loaded.quant +
+      (loaded.mf ? " <span class='mf'>· " + loaded.mf + "</span>" : "");
+  }
+  document.getElementById("statenote").textContent =
+    loaded ? ("loaded: " + loaded.model + " / " + loaded.quant + " / " + (loaded.mf || "Original (base)"))
+           : "nothing loaded";
+}
+
+function renderHead(){
+  const h = document.getElementById("pane-head");
+  const closeBtn = `<button class="iconbtn x" onclick="closePane()" aria-label="Close">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button>`;
+  if (level === "list"){
+    const tags = MODELS.reduce((n,m) => n + installedQuants(m).length + tuneCount(m), 0);
+    h.innerHTML = `<b>Load a model</b><span class="sub">${MODELS.length} models · ${tags} tags</span>` + closeBtn;
+  } else {
+    const m = model(curModel);
+    h.innerHTML = `<button class="iconbtn" onclick="drillOut()" aria-label="Back to model list">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+      <span class="hstack"><span class="htitle">${m.id}</span>
+        <span class="hsub">${m.family} · ${m.params} · ${installedQuants(m).length} quant${installedQuants(m).length===1?"":"s"} installed</span></span>
+      <button class="iconbtn danger" style="margin-left:auto" title="Delete this quant" aria-label="Delete this quant">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0-1 14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2L4 6h16z"/></svg></button>` + closeBtn;
+  }
+}
+
+function renderList(){
+  const term = (document.getElementById("q").value || "").toLowerCase();
+  const rows = MODELS.filter(m => (m.id + " " + m.family + " " + m.params).toLowerCase().includes(term));
+  const el = document.getElementById("plist");
+  if (!rows.length){ el.innerHTML = `<div style="padding:14px 4px;color:var(--faint);font-size:12.5px">No model matches “${term}”.</div>`; return; }
+  el.innerHTML = rows.map(m => {
+    const nq = installedQuants(m).length, nt = tuneCount(m);
+    const bits = [nq + " quant" + (nq===1?"":"s"), nt ? nt + " Modelfile" + (nt===1?"":"s") : "base only"];
+    return `<button class="prow${isLoadedModel(m.id)?" sel":""}" onclick="drillIn('${m.id}')">
+      <span class="pg">${m.glyph}</span>
+      <span class="pmeta"><span class="pn">${m.id}</span><span class="ps">${bits.join(" · ")}</span></span>
+      ${isLoadedModel(m.id) ? '<span class="pill loaded">loaded</span>' : (nt ? '<span class="pill tuned">tuned</span>' : "")}
+      <span class="chev-r"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
+    </button>`;
+  }).join("");
+}
+
+function renderDetail(){
+  const m = model(curModel);
+
+  document.getElementById("quants").innerHTML = m.quants.map(q => {
+    if (!q.installed) return `<div class="q ghost">
+        <span class="radio"></span>
+        <span><span class="qname">${q.id}</span><span class="qnote">available to pull</span></span>
+        <button class="getbtn" onclick="event.stopPropagation()">Pull ${q.size}</button></div>`;
+    const isOn = loaded && loaded.model === m.id && loaded.quant === q.id;
+    return `<button class="q${q.id===curQuant?" sel":""}" onclick="pickQuant('${q.id}')">
+      <span class="radio"></span>
+      <span class="qmeta"><span class="qname">${q.id}</span>
+        <span class="qnote">${q.note}${q.modelfiles.length ? " · " + q.modelfiles.length + " Modelfile" + (q.modelfiles.length===1?"":"s") : ""}${isOn ? " · in memory" : ""}</span>
+        <span class="qtag" title="${q.tag}">${q.tag}</span></span>
+      <span class="qsize">${q.size}</span></button>`;
+  }).join("");
+
+  const q = quant(m, curQuant);
+  document.getElementById("mf-qual").textContent = q ? "for " + q.id : "";
+  document.getElementById("mf-hint").hidden = true;
+  const files = q ? q.modelfiles : [];
+  document.getElementById("chips").innerHTML =
+    `<button class="chip${curMf===null?" sel":""}" onclick="pickMf(null)">Original (base)</button>` +
+    files.map(f => `<button class="chip${curMf===f.id?" sel":""}" onclick="pickMf('${f.id}')" title="${f.tag}">${f.label} · tuned</button>`).join("") +
+    `<button class="chip new" title="New Modelfile from ${m.id} ${curQuant}">＋ New Modelfile</button>`;
+
+  const isReload = loaded && loaded.model===curModel && loaded.quant===curQuant && loaded.mf===curMf;
+  const btn = document.getElementById("loadbtn");
+  btn.textContent = phase==="loading" ? "Loading…" : (isReload ? "Reload model" : "Load model");
+  btn.disabled = phase === "loading" || !curQuant;
+
+  document.getElementById("summary").innerHTML =
+    `<b>${m.id}</b> · <b>${curQuant||"—"}</b> · <b>${curMf || "Original (base)"}</b>` +
+    `<span class="eff">loads <code>${effectiveTag()}</code></span>`;
+
+  const prog = document.getElementById("progress");
+  prog.hidden = phase === "idle";
+  if (phase === "loading"){ document.getElementById("ptext").textContent = "Pulling weights into memory…"; }
+  if (phase === "done"){
+    document.getElementById("bar").style.width = "100%";
+    document.getElementById("ptext").textContent = "✓ " + effectiveTag() + " loaded and ready";
+  }
+  if (phase === "idle") document.getElementById("bar").style.width = "0%";
+}
+
+render();
+openPane();
+</script>
+</body>
+</html>

@@ -2,22 +2,33 @@
  * Global top nav (SPEC.md §5, §5.1): brand mark, the model control (opens
  * the load pane), and the connection pill.
  */
+import { useMemo } from "react";
 import "./TopNav.css";
 import { useRemuda } from "./state";
+import { displayKey, groupByModel, type ModelEntry } from "../models/grouping";
 
 function shortTag(tag: string): string {
   return tag.endsWith(":latest") ? tag.slice(0, -":latest".length) : tag;
 }
 
-function controlLabel(loaded: { base: string; variant: string } | null): string {
+/**
+ * The control names the same three things the load pane asked for: the model,
+ * the quantisation, and the Modelfile. `loaded.base` is the quant's tag, so
+ * the grouping (models/grouping.ts) is what turns it back into a model name —
+ * falling back to the raw tag if this tag isn't in the list yet.
+ */
+function controlLabel(loaded: { base: string; variant: string } | null, entries: ModelEntry[]): string {
   if (!loaded) return "No model loaded";
-  return loaded.variant === loaded.base
-    ? `${loaded.base} · Original`
-    : `${loaded.base} · ${shortTag(loaded.variant)}`;
+  const tuning = loaded.variant === loaded.base ? "Original" : shortTag(loaded.variant);
+  const entry = entries.find((e) => e.quants.some((q) => q.tag === loaded.base));
+  const quant = entry?.quants.find((q) => q.tag === loaded.base);
+  if (entry === undefined || quant === undefined) return `${loaded.base} · ${tuning}`;
+  return [displayKey(entry.key), quant.quantization, tuning].filter((part) => part !== "").join(" · ");
 }
 
 export function TopNav() {
-  const { status, loaded, loadPaneOpen, openLoadPane, closeLoadPane, openEditor } = useRemuda();
+  const { status, loaded, loadPaneOpen, openLoadPane, closeLoadPane, openEditor, groups } = useRemuda();
+  const entries = useMemo(() => groupByModel(groups), [groups]);
 
   return (
     <header className="titlebar">
@@ -39,7 +50,7 @@ export function TopNav() {
         onClick={() => (loadPaneOpen ? closeLoadPane() : openLoadPane())}
       >
         <span className={`d${loaded ? "" : " off"}`} aria-hidden="true" />
-        <span className="mctl-t">{controlLabel(loaded)}</span>
+        <span className="mctl-t">{controlLabel(loaded, entries)}</span>
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
           <path d="M6 9l6 6 6-6" />
         </svg>
