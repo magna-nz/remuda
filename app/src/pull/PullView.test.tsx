@@ -159,7 +159,7 @@ describe("PullView", () => {
     expect(screen.getByText("Popular")).toBeInTheDocument();
   });
 
-  it("Sidebar's Pull models button switches to the full-width Pull view (no chats sidebar)", async () => {
+  it("Sidebar's Pull models button switches to the Pull view, keeping the chats sidebar", async () => {
     const client = new FakeClient({ models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })] });
     render(<App client={client} />);
 
@@ -167,7 +167,7 @@ describe("PullView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pull models" }));
 
     expect(await screen.findByLabelText("Pull models")).toBeInTheDocument();
-    expect(screen.queryByLabelText("Chats")).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Chats")).toBeInTheDocument();
     expect(screen.getByLabelText("Model to pull")).toBeInTheDocument();
   });
 });

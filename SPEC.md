@@ -81,9 +81,9 @@ reach the server, it is mostly inert and says so plainly (§9).
 ├──────────────┬───────────────────────────────────────────┤
 │ Chats        │ Chat · Modelfile        Pull · Settings   │  ← section tabs
 │              │                                            │
-│ + New chat   │  (Chat, or the in-context Modelfile        │
-│ ─ Recent     │   editor — the Chats list stays visible    │
-│  Undo a…  ●  │   for both)                                │
+│ + New chat   │  (Chat, the in-context Modelfile editor,   │
+│ ─ Recent     │   Pull, or Settings — the Chats list stays │
+│  Undo a…  ●  │   visible for all of them)                 │
 │  Explain… ○  │                                            │
 │  …           │                                            │
 │ Pull · ⚙     │                                            │
@@ -93,8 +93,9 @@ reach the server, it is mostly inert and says so plainly (§9).
 - **Global nav (top):** the **model control** is the centrepiece — it shows
   the loaded model + Modelfile and opens the load pane (§5.1). Also the
   connection status.
-- **Chats (left):** the saved-session list; visible for **Chat and
-  Modelfile** (they share the window), hidden on Pull/Settings.
+- **Chats (left):** the saved-session list; a persistent rail that stays
+  visible on every surface — Pull and Settings open in the main area beside
+  it, not over the whole window.
 - **Section tabs:** Chat · Modelfile · Pull · Settings.
 
 ## 5.1 Model control + load pane (global)

@@ -20,18 +20,15 @@ function MainPanel() {
 }
 
 function Shell() {
-  const { view } = useRemuda();
-  // SPEC §5: the chats sidebar is visible for Chat and Modelfile (they share
-  // the window) and hidden on the full-width global surfaces, Pull and
-  // Settings.
-  const showSidebar = view !== "pull" && view !== "settings";
-
+  // SPEC §5: the chats sidebar is a persistent rail — it stays visible for
+  // every surface, so Pull and Settings open in the main area beside it
+  // rather than taking over the window.
   return (
     <div className="app">
       <TopNav />
       <OfflineBanner />
       <div className="body">
-        {showSidebar && <Sidebar />}
+        <Sidebar />
         <main className="main">
           <ViewTabs />
           <div className="viewbody">
