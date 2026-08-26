@@ -483,3 +483,61 @@ describe("error handling", () => {
     await expect(iterate()).rejects.toThrow(/400.*error parsing modelfile/);
   });
 });
+
+/* ── truncated streams ─────────────────────────────────────────────────── */
+
+describe("truncated stream detection", () => {
+  it("chat() throws when the stream ends without done: true", async () => {
+    stubFetch({
+      "/api/chat": () =>
+        streamResponse([
+          '{"message":{"content":"Hel"},"done":false}\n',
+          '{"message":{"content":"lo"},"done":false}\n',
+          // stream ends — no done: true line
+        ]),
+    });
+    const iterate = async () => {
+      await collect(
+        createClient().chat("llama3.1:8b", [{ role: "user", content: "hi" }], {
+          keepAlive: "5m",
+        }),
+      );
+    };
+    await expect(iterate()).rejects.toThrow(/chat stream ended without a done message/);
+  });
+
+  it("create() throws when the stream ends without status: 'success'", async () => {
+    stubFetch({
+      "/api/create": () =>
+        streamResponse([
+          '{"status":"reading model metadata"}\n',
+          '{"status":"creating system layer"}\n',
+          // stream ends — no status: "success" line
+        ]),
+    });
+    const iterate = async () => {
+      await collect(
+        createClient().create("bot:latest", {
+          from: "llama3.1:8b",
+          rawModelfile: "FROM llama3.1:8b",
+        }),
+      );
+    };
+    await expect(iterate()).rejects.toThrow(/create stream ended without a success status/);
+  });
+
+  it("pull() throws when the stream ends without status: 'success'", async () => {
+    stubFetch({
+      "/api/pull": () =>
+        streamResponse([
+          '{"status":"pulling manifest"}\n',
+          '{"status":"pulling sha256:abc","digest":"sha256:abc","total":1000,"completed":500}\n',
+          // stream ends — no status: "success" line
+        ]),
+    });
+    const iterate = async () => {
+      await collect(createClient().pull("llama3.1:8b"));
+    };
+    await expect(iterate()).rejects.toThrow(/pull stream ended without a success status/);
+  });
+});
