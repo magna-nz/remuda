@@ -34,23 +34,28 @@ export function makeModel(overrides: Partial<Model> & { tag: string }): Model {
 export interface FakeClientOptions {
   models?: Model[];
   connected?: boolean;
-  version?: string;
+  /** null simulates a connected server whose /api/version omits a version string. */
+  version?: string | null;
   /** version() rejects, simulating an unreachable server. */
   failVersion?: boolean;
+  /** load() rejects with this message, simulating a failed load request. */
+  failLoad?: string;
 }
 
 export class FakeClient implements OllamaClient {
   models: Model[];
   connected: boolean;
-  versionString: string;
+  versionString: string | null;
   failVersion: boolean;
+  failLoad: string | undefined;
   loadCalls: { tag: string; keepAlive: KeepAlive }[] = [];
 
   constructor(options: FakeClientOptions = {}) {
     this.models = options.models ?? [];
     this.connected = options.connected ?? true;
-    this.versionString = options.version ?? "0.5.4";
+    this.versionString = options.version === undefined ? "0.5.4" : options.version;
     this.failVersion = options.failVersion ?? false;
+    this.failLoad = options.failLoad;
   }
 
   async version(): Promise<ServerStatus> {
@@ -90,6 +95,9 @@ export class FakeClient implements OllamaClient {
   }
 
   async load(tag: string, keepAlive: KeepAlive): Promise<void> {
+    if (this.failLoad !== undefined) {
+      throw new Error(this.failLoad);
+    }
     this.loadCalls.push({ tag, keepAlive });
     this.models = this.models.map((m) => ({ ...m, isLoaded: m.tag === tag }));
   }

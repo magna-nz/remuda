@@ -62,14 +62,6 @@ function deriveLoaded(models: Model[]): LoadedSelection | null {
     : { base: loadedModel.tag, variant: loadedModel.tag };
 }
 
-function groupModels(models: Model[]): ModelGroup[] {
-  const bases = models.filter((m) => !m.isVariant);
-  return bases.map((base) => ({
-    base,
-    variants: models.filter((m) => m.isVariant && m.base === base.tag),
-  }));
-}
-
 export interface RemudaProviderProps {
   children: ReactNode;
   /** Injected for tests; defaults to the real Ollama client. */
@@ -86,15 +78,15 @@ export function RemudaProvider({
   const client = useMemo(() => injectedClient ?? createClient(), [injectedClient]);
   const [status, setStatus] = useState<ServerStatus>({ connected: false, version: null });
   const [checked, setChecked] = useState(false);
-  const [models, setModels] = useState<Model[]>([]);
+  const [groups, setGroups] = useState<ModelGroup[]>([]);
   const [keepAlive, setKeepAlive] = useState<KeepAlive>("5m");
   const [view, setView] = useState<View>("chat");
   const [loadPaneOpen, setLoadPaneOpen] = useState(false);
   const wasConnected = useRef(false);
 
   const refreshModels = useCallback(async () => {
-    const list = await client.listModels();
-    setModels(list);
+    const list = await client.listGroups();
+    setGroups(list);
   }, [client]);
 
   const checkHealth = useCallback(async () => {
@@ -131,7 +123,10 @@ export function RemudaProvider({
     [client, keepAlive, refreshModels],
   );
 
-  const groups = useMemo(() => groupModels(models), [models]);
+  const models = useMemo(
+    () => groups.flatMap((g) => [g.base, ...g.variants]),
+    [groups],
+  );
   const loaded = useMemo(() => deriveLoaded(models), [models]);
 
   const value: RemudaContextValue = {

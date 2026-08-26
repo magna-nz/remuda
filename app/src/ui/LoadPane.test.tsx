@@ -55,4 +55,36 @@ describe("LoadPane", () => {
     // The pane auto-closes a moment after a successful load.
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
   });
+
+  it("surfaces a failed load's error text and keeps the pane open (SPEC §9)", async () => {
+    const client = new FakeClient({
+      models: fixtureModels(),
+      failLoad: 'Ollama /api/generate failed (500): model "llama3.1:8b" busy',
+    });
+    await openPane(client);
+
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent('model "llama3.1:8b" busy');
+    // The pane stays open with the button re-enabled for a retry.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Load model" })).toBeEnabled();
+  });
+
+  it("disables the Load button while the server is disconnected", async () => {
+    const client = new FakeClient({ models: fixtureModels() });
+    // Fast poll so the dropped connection is noticed without UI interaction.
+    render(
+      <RemudaProvider client={client} pollIntervalMs={25}>
+        <TopNav />
+        <LoadPane />
+      </RemudaProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    await screen.findByText("mistral:7b");
+    // Connection drops after the pane opened with a model list present.
+    client.connected = false;
+    await waitFor(() => expect(screen.getByRole("button", { name: "Load model" })).toBeDisabled());
+  });
 });

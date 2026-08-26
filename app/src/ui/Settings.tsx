@@ -6,6 +6,7 @@
 import { useState } from "react";
 import "./Settings.css";
 import { useRemuda } from "./state";
+import { createClient } from "../api/client";
 import { DEFAULT_BASE_URL, type KeepAlive } from "../api/types";
 
 type TestResult = "idle" | "testing" | "healthy" | "unreachable";
@@ -16,7 +17,7 @@ function parseKeepAlive(value: string): KeepAlive {
 }
 
 export function Settings() {
-  const { client, status, models, keepAlive, setKeepAlive } = useRemuda();
+  const { status, models, keepAlive, setKeepAlive } = useRemuda();
   const [serverUrl, setServerUrl] = useState(DEFAULT_BASE_URL);
   const [testResult, setTestResult] = useState<TestResult>("idle");
   const [confirmDelete, setConfirmDelete] = useState(true);
@@ -24,7 +25,7 @@ export function Settings() {
   async function handleTest() {
     setTestResult("testing");
     try {
-      const result = await client.version();
+      const result = await createClient(serverUrl).version();
       setTestResult(result.connected ? "healthy" : "unreachable");
     } catch {
       setTestResult("unreachable");
@@ -63,7 +64,7 @@ export function Settings() {
             <b>Connection</b>
             <div>
               {status.connected
-                ? `Server v${status.version} · ${models.length} model${models.length === 1 ? "" : "s"} · ${diskUsedGb.toFixed(1)} GB on disk`
+                ? `${status.version ? `Server v${status.version}` : "Connected"} · ${models.length} model${models.length === 1 ? "" : "s"} · ${diskUsedGb.toFixed(1)} GB on disk`
                 : "Not connected"}
             </div>
           </div>

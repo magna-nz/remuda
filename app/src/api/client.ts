@@ -106,15 +106,33 @@ function normalizeTag(tag: string): string {
   return lower.endsWith(":latest") ? lower.slice(0, -":latest".length) : lower;
 }
 
-/** First FROM line of a Modelfile, or null. */
+/**
+ * The FROM target of a Modelfile, or null. Ollama's /api/show returns a
+ * reconstructed modelfile whose FROM line is a blob path
+ * (`FROM /…/blobs/sha256-…`); the actual model-name reference, when it
+ * resolves to another local model, shows up in a `# FROM <name>` comment
+ * line instead. Prefer that comment; fall back to a FROM line whose value
+ * doesn't look like a path.
+ */
 function parseFrom(modelfile: string): string | null {
+  let fallback: string | null = null;
   for (const raw of modelfile.split("\n")) {
-    const match = /^from\s+(.+)$/i.exec(raw.trim());
-    if (match) {
-      return match[1].trim();
+    const line = raw.trim();
+    const commentMatch = /^#\s*from\s+(.+)$/i.exec(line);
+    if (commentMatch) {
+      return commentMatch[1].trim();
+    }
+    if (fallback === null) {
+      const match = /^from\s+(.+)$/i.exec(line);
+      if (match) {
+        const value = match[1].trim();
+        if (!value.includes("/") && !value.includes("sha256-")) {
+          fallback = value;
+        }
+      }
     }
   }
-  return null;
+  return fallback;
 }
 
 /** model_info keys vary by family ("llama.context_length", …); find the one
@@ -192,7 +210,9 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
   return {
     async version(): Promise<ServerStatus> {
       try {
-        const res = await fetch(url("/api/version"));
+        const res = await fetch(url("/api/version"), {
+          signal: AbortSignal.timeout(3000),
+        });
         if (!res.ok) {
           return { connected: false, version: null };
         }

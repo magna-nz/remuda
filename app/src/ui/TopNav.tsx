@@ -47,7 +47,9 @@ export function TopNav() {
       <div className="spacer" />
       <div className={`conn${status.connected ? "" : " off"}`}>
         <span className="dot" aria-hidden="true" />
-        <span>{status.connected ? `Connected · v${status.version}` : "Not running"}</span>
+        <span>
+          {status.connected ? (status.version ? `Connected · v${status.version}` : "Connected") : "Not running"}
+        </span>
       </div>
     </header>
   );

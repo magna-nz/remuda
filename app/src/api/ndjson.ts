@@ -35,6 +35,11 @@ export async function* ndjson<T>(
       yield JSON.parse(tail) as T;
     }
   } finally {
+    // Cancel first so a consumer that stops iterating early (e.g. `break`
+    // in a `for await`) actually drops the stream and stops server-side
+    // generation, rather than merely releasing our lock on it. A no-op
+    // if the stream is already fully consumed or closed.
+    await reader.cancel().catch(() => {});
     reader.releaseLock();
   }
 }

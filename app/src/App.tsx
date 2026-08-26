@@ -49,10 +49,13 @@ function Shell() {
  * App shell (SPEC.md §4, §5): global top nav with the model control, the
  * chats sidebar, the main area, and the load-pane popover. Later waves
  * (M2+) fill in chat, the Modelfile editor, and Pull.
+ *
+ * `client` is injected by tests (a FakeClient); production passes nothing
+ * and the provider constructs the real Ollama client.
  */
-function App() {
+function App({ client }: { client?: import("./api/types").OllamaClient }) {
   return (
-    <RemudaProvider>
+    <RemudaProvider client={client}>
       <Shell />
     </RemudaProvider>
   );

@@ -16,4 +16,16 @@ describe("TopNav", () => {
     await waitFor(() => expect(screen.getByText("Not running")).toBeInTheDocument());
     expect(screen.getByText("No model loaded")).toBeInTheDocument();
   });
+
+  it("shows plain Connected (no vnull) when connected but version is null", async () => {
+    const client = new FakeClient({ connected: true, version: null });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <TopNav />
+      </RemudaProvider>,
+    );
+
+    await waitFor(() => expect(screen.getByText("Connected")).toBeInTheDocument());
+    expect(screen.queryByText(/vnull/)).not.toBeInTheDocument();
+  });
 });

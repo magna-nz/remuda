@@ -27,10 +27,11 @@ function formatSize(bytes: number): string {
 type LoadPhase = "idle" | "loading" | "done";
 
 export function LoadPane() {
-  const { models, groups, loaded, load, loadPaneOpen, closeLoadPane } = useRemuda();
+  const { models, groups, loaded, load, loadPaneOpen, closeLoadPane, status } = useRemuda();
   const [selectedBase, setSelectedBase] = useState<string | null>(null);
   const [selectedVariant, setSelectedVariant] = useState<string | null>(null);
   const [phase, setPhase] = useState<LoadPhase>("idle");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Reset the selection when the pane closes, so reopening it re-derives
   // from whatever is loaded then (rather than a stale prior pick).
@@ -39,6 +40,7 @@ export function LoadPane() {
     setSelectedBase(null);
     setSelectedVariant(null);
     setPhase("idle");
+    setLoadError(null);
   }, [loadPaneOpen]);
 
   // Seed the default selection (the loaded model, or the first base) once
@@ -58,24 +60,29 @@ export function LoadPane() {
     setSelectedBase(base);
     setSelectedVariant(variant);
     setPhase("idle");
+    setLoadError(null);
   }
 
   function pickVariant(tag: string) {
     setSelectedVariant(tag);
     setPhase("idle");
+    setLoadError(null);
   }
 
   async function handleLoad() {
     if (!selectedVariant) return;
     setPhase("loading");
+    setLoadError(null);
     try {
       await load(selectedVariant);
       setPhase("done");
       window.setTimeout(() => {
         closeLoadPane();
       }, 500);
-    } catch {
+    } catch (err) {
+      // SPEC §9: surface the server's error text verbatim, don't reset quietly.
       setPhase("idle");
+      setLoadError(err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -156,10 +163,16 @@ export function LoadPane() {
               type="button"
               className="btn primary wide"
               onClick={() => void handleLoad()}
-              disabled={phase === "loading" || !selectedVariant}
+              disabled={phase === "loading" || !selectedVariant || !status.connected}
+              title={status.connected ? undefined : "Ollama isn't running"}
             >
               {phase === "loading" ? "Loading…" : isReload ? "Reload model" : "Load model"}
             </button>
+            {loadError !== null && (
+              <div className="perror" role="alert">
+                {loadError}
+              </div>
+            )}
             {phase !== "idle" && (
               <div className="pprogress">
                 <div className="meter">
