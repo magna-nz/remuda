@@ -237,12 +237,12 @@ describe("PullView", () => {
     expect(within(row).getByText("thinking")).toHaveClass("cap", "cap-thinking");
   });
 
-  it("Sidebar's Pull models button switches to the Pull view, keeping the chats sidebar", async () => {
+  it("Sidebar's Get Models button switches to the Pull view, keeping the chats sidebar", async () => {
     const client = new FakeClient({ models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })] });
     render(<App client={client} />);
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "Pull models" })).toBeInTheDocument());
-    fireEvent.click(screen.getByRole("button", { name: "Pull models" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Get Models" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Get Models" }));
 
     expect(await screen.findByLabelText("Pull models")).toBeInTheDocument();
     expect(screen.getByLabelText("Chats")).toBeInTheDocument();
