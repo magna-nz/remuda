@@ -9,7 +9,7 @@
   position: absolute;
   top: 54px;
   left: 168px;
-  width: 392px;
+  width: 412px;
   z-index: 50;
   background: var(--surface-2);
   border: 1px solid var(--border-strong);
@@ -21,7 +21,9 @@
 .mpane-h {
   display: flex;
   align-items: center;
-  padding: 13px 15px;
+  gap: 8px;
+  padding: 12px 14px;
+  min-height: 52px;
   border-bottom: 1px solid var(--border);
 }
 
@@ -30,14 +32,34 @@
 }
 
 .mpane-h .sub {
-  margin-left: 8px;
   font-size: 11px;
   color: var(--faint);
   font-family: var(--mono);
 }
 
-.mpane-h .x {
-  margin-left: auto;
+/* Step-2 header: back arrow, the model's name, its metadata. */
+.mpane-h .hstack {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.mpane-h .htitle {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mpane-h .hsub {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.iconbtn {
+  flex: 0 0 auto;
   width: 30px;
   height: 30px;
   display: grid;
@@ -48,14 +70,38 @@
   color: var(--muted);
 }
 
-.mpane-h .x:hover {
+.iconbtn:hover {
   background: var(--raised);
   color: var(--ink);
 }
 
-.mpane-h .x svg {
+.iconbtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.iconbtn svg {
   width: 16px;
   height: 16px;
+}
+
+.mpane-h .iconbtn.x {
+  margin-left: auto;
+}
+
+/* Delete affordance (SPEC §5.6, §8): acts on the selected quantisation. */
+.mpane-h .iconbtn.danger {
+  margin-left: auto;
+}
+
+.mpane-h .iconbtn.danger:hover {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+/* Sits right of the danger button, which already claimed the auto margin. */
+.mpane-h .iconbtn.danger + .iconbtn.x {
+  margin-left: 0;
 }
 
 .mpane-b {
@@ -75,21 +121,50 @@
   margin-bottom: 8px;
 }
 
+.pfield > label .qual {
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: none;
+  font-family: var(--mono);
+}
+
+.pfilter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--bg);
+  margin-bottom: 9px;
+}
+
+.pfilter svg {
+  width: 14px;
+  height: 14px;
+  color: var(--faint);
+  flex: 0 0 auto;
+}
+
+.pfilter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  outline: none;
+}
+
+/* ---- step 1: one row per model ---- */
 .pmodels {
   display: flex;
   flex-direction: column;
   gap: 3px;
-  max-height: 186px;
+  max-height: 290px;
   overflow-y: auto;
-}
-
-/* Wraps a .pmodel row + its .pdelete affordance (a sibling, not nested —
-   buttons can't nest per a11y) so the delete icon only takes the space it
-   needs on the currently selected row. */
-.pmodel-wrap {
-  display: flex;
-  align-items: center;
-  gap: 4px;
 }
 
 .pmodel {
@@ -101,51 +176,8 @@
   border: 1px solid transparent;
   background: transparent;
   border-radius: 9px;
-  padding: 8px 9px;
+  padding: 9px;
   color: var(--ink);
-}
-
-/* Delete affordance (SPEC §5.6, §8): shown only on the selected model row. */
-.pdelete {
-  flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
-  display: grid;
-  place-items: center;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: transparent;
-  color: var(--muted);
-}
-
-.pdelete:hover {
-  background: var(--crit-tint);
-  color: var(--crit);
-}
-
-.pdelete:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.pdelete svg {
-  width: 15px;
-  height: 15px;
-}
-
-/* Empty install (SPEC §5.5): points toward Pull instead of an empty list. */
-.pempty {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 16px 4px;
-}
-
-.pempty p {
-  margin: 0;
-  font-size: 12.5px;
-  color: var(--muted);
 }
 
 .pmodel:hover {
@@ -171,9 +203,15 @@
   color: var(--muted);
 }
 
-.pmodel.active .pg {
+.pmodel.active .pg,
+.pmodel:hover .pg {
   background: var(--ember);
   color: #fff;
+}
+
+.pmodel .pmeta {
+  min-width: 0;
+  flex: 1;
 }
 
 .pmodel .pn {
@@ -181,6 +219,9 @@
   font-family: var(--mono);
   font-size: 12.5px;
   font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .pmodel .ps {
@@ -190,16 +231,158 @@
   font-variant-numeric: tabular-nums;
 }
 
-.pmodel .ptune {
-  margin-left: auto;
+.ppill {
+  flex: 0 0 auto;
   font-size: 10px;
   font-weight: 600;
-  color: var(--good);
-  background: var(--good-tint);
   padding: 2px 7px;
   border-radius: 999px;
 }
 
+.ppill.loaded {
+  color: var(--good);
+  background: var(--good-tint);
+}
+
+.ppill.tuned {
+  color: var(--ember-ink);
+  background: var(--ember-tint);
+}
+
+.pmodel .pchev {
+  flex: 0 0 auto;
+  color: var(--faint);
+}
+
+.pmodel .pchev svg {
+  width: 15px;
+  height: 15px;
+  display: block;
+}
+
+.pnomatch,
+.pfoot {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.pnomatch {
+  padding: 14px 4px;
+  font-size: 12.5px;
+}
+
+.pfoot {
+  border-top: 1px solid var(--border);
+  padding-top: 11px;
+  margin-top: 11px;
+}
+
+/* Empty install (SPEC §5.5): points toward Pull instead of an empty list. */
+.pempty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 4px;
+}
+
+.pempty p {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+/* ---- step 2: quantisation ---- */
+.pquants {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.pq {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 9px 11px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.pq:hover {
+  border-color: var(--border-strong);
+}
+
+.pq.active {
+  border-color: var(--ember);
+  background: var(--ember-tint);
+}
+
+.pradio {
+  width: 15px;
+  height: 15px;
+  border-radius: 999px;
+  border: 1.5px solid var(--border-strong);
+  flex: 0 0 auto;
+  display: grid;
+  place-items: center;
+}
+
+.pq.active .pradio {
+  border-color: var(--ember);
+}
+
+.pq.active .pradio::after {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--ember);
+}
+
+.pqmeta {
+  min-width: 0;
+  flex: 1;
+}
+
+.pqname {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.pqnote {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+}
+
+/* The literal local tag. Muted, last, smallest: what it is → what's in it →
+   what it actually is. The model→quant grouping is derived (models/grouping.ts),
+   so the underlying tag stays visible rather than hidden behind a guess. */
+.pqtag {
+  display: block;
+  margin-top: 1px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pqsize {
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- step 2: Modelfile ---- */
 .pvariants {
   display: flex;
   flex-wrap: wrap;
@@ -240,10 +423,35 @@
   opacity: 0.6;
 }
 
+/* Why a tuning vanished when the quantisation changed. */
+.pnote {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--warn);
+  background: var(--warn-tint);
+  border-radius: 8px;
+  padding: 6px 9px;
+}
+
+/* ---- load ---- */
 .ploadwrap {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+/* The exact tag Load sends to Ollama — no inference required of the reader. */
+.psummary {
+  text-align: center;
+  font-size: 11.5px;
+  color: var(--faint);
+  margin-top: -2px;
+}
+
+.psummary code {
+  font-family: var(--mono);
+  color: var(--ink-2);
 }
 
 .pprogress {
