@@ -1,16 +1,18 @@
 @import "./ui/buttons.css";
 
+/*
+ * The shell fills the window edge to edge — maximised or full-screen, there
+ * are no letterbox gutters. Per-view reading widths (.pullview, .settings)
+ * cap their own content instead.
+ */
 .app {
   position: relative;
-  max-width: 1240px;
-  margin: 0 auto;
+  width: 100%;
   height: 100vh;
   min-height: 640px;
   display: flex;
   flex-direction: column;
   background: var(--surface);
-  border-left: 1px solid var(--border);
-  border-right: 1px solid var(--border);
   overflow: hidden;
 }
 
