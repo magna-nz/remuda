@@ -201,8 +201,33 @@ layer`, `writing manifest`, `success`).
 ## 5.5 Pull (global)
 
 - Name field (`llama3.2`, `gemma2:9b`, or a full registry URL) + **Pull**.
-- A curated **Popular** list (bundled, not a registry search — Ollama has no
-  search API), showing approximate size; installed entries marked.
+- A searchable **catalog** of the Ollama library — name, description,
+  parameter sizes, capabilities — with installed entries marked.
+
+  Ollama has no registry search API (`ollama.com/api/search`,
+  `/v2/_catalog` and `/v2/.../tags/list` all 404; `ollama.com/search`
+  returns HTML only), so the catalog is **generated at build time** by
+  `scripts/fetch-catalog.mjs` scraping `ollama.com/library` into
+  `app/src/pull/catalog.json`, and ships with the app. Search is local:
+  instant, offline, no launch cost.
+
+  Deliberately *not* fetched at startup. That page serves ~808 KB with no
+  `ETag`/`Last-Modified`/`Cache-Control` and no compression, so every launch
+  would pay the full transfer with no way to revalidate cheaply — and it
+  sets a year-long tracking cookie. Staleness between releases is covered by
+  the probe below.
+- **Existence probe.** What the user types is checked against the registry
+  manifest (`GET /v2/<ns>/<model>/manifests/<tag>`), showing exists/not-found
+  plus the exact download size before they commit. This covers models
+  published after the catalog was generated, so a day-old model is pullable
+  without a catalog refresh.
+
+  `registry.ollama.ai` sends no CORS headers, so this cannot run in the
+  webview: it is a Rust command (`src-tauri/src/registry.rs`), and the
+  frontend passes a model *name*, never a URL. Progressive enhancement —
+  outside the desktop shell the size line is simply absent and pulling is
+  unaffected. "Couldn't reach the registry" is never rendered as "no such
+  model".
 - **In-progress pulls** render layered progress (manifest + per-`sha256:` blob
   bars), throughput, ETA. Cancelable; partial layers resume.
 
@@ -214,7 +239,9 @@ Source: `POST /api/pull` `{ model, stream: true }`; aggregate
 - **Ollama server** URL + **Test connection**.
 - **Connection** readout (version, model count, disk used).
 - **Keep models loaded** — `keep_alive` (5 min / 30 min / forever).
-- **Models directory** — read-only `~/.ollama/models`, with *Reveal*.
+- **Models directory** — read-only, with *Reveal*. Defaults to
+  `~/.ollama/models`; `OLLAMA_MODELS` can relocate it and no API reports the
+  real path, so treat the displayed value as the default rather than a fact.
 - **Modelfile directory** — where **Save as…** writes tuned Modelfiles and
   which Remuda scans for variants. Chooseable; default `~/ollama/modelfiles`.
 - **Confirm before deleting a model** — toggle.
@@ -269,9 +296,21 @@ ChatSession {
 | Delete | `DELETE /api/delete` | no |
 | Copy / duplicate | `POST /api/copy` | no |
 
-All requests are same-origin to the configured loopback host. Default Ollama
-needs no auth; a remote host requiring one would need an auth header from
-Settings (kept out of v1 by default — §12).
+All Ollama requests are same-origin to the configured loopback host. Default
+Ollama needs no auth; a remote host requiring one would need an auth header
+from Settings (kept out of v1 by default — §12).
+
+One exception, and only one: the Pull pane's existence probe issues a `GET`
+to `registry.ollama.ai` (§5.5). It runs in Rust rather than the webview (no
+CORS headers there) and sends only the reference being checked — no
+identifiers, no history.
+
+Worth being precise about what that means, since the field doubles as the
+catalog search box: a single-token query is indistinguishable from a model
+name, so typing `uncensored` to search the catalog does reach the registry.
+Anything that isn't a valid reference — anything with a space, and so every
+multi-word query — is rejected locally before a request is made. The
+build-time catalog scrape is not part of the shipped app.
 
 ## 8. States & rules
 

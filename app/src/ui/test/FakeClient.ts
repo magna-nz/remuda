@@ -72,6 +72,8 @@ export interface FakeClientOptions {
    * immediately, before yielding anything.
    */
   failPull?: string;
+  /** listGroups() rejects, simulating a failing /api/show inside the sweep. */
+  failListGroups?: string;
 }
 
 function abortError(): DOMException {
@@ -120,6 +122,7 @@ export class FakeClient implements OllamaClient {
     this.failCreate = options.failCreate;
     this.pullEvents = options.pullEvents;
     this.failPull = options.failPull;
+    this.failListGroups = options.failListGroups;
   }
 
   async version(): Promise<ServerStatus> {
@@ -133,12 +136,37 @@ export class FakeClient implements OllamaClient {
     return this.models;
   }
 
+  /** Counts the expensive /api/show sweep, so tests can assert it's rare. */
+  listGroupsCalls = 0;
+  /** listGroups() rejects with this message (simulates a failing /api/show). */
+  failListGroups: string | undefined;
+  /** listGroups() takes this long, so a test can outrun it with the poll. */
+  listGroupsDelayMs = 0;
+
   async listGroups(): Promise<ModelGroup[]> {
+    this.listGroupsCalls += 1;
+    if (this.listGroupsDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, this.listGroupsDelayMs));
+    }
+    if (this.failListGroups !== undefined) {
+      throw new Error(this.failListGroups);
+    }
     const bases = this.models.filter((m) => !m.isVariant);
-    return bases.map((base) => ({
+    const groups = bases.map((base) => ({
       base,
       variants: this.models.filter((m) => m.isVariant && m.base === base.tag),
     }));
+    // A variant whose base isn't installed (deleted since, or never present)
+    // still has to appear. The real client resolves `base` against the
+    // installed set, so an unresolvable parent leaves the tag a base in its
+    // own right — mirror that here, rather than dropping the model. Dropping
+    // it also made the provider's signature permanently unmatchable, which
+    // presents as a mysterious /api/show sweep storm rather than a failure.
+    const grouped = new Set(groups.flatMap((g) => [g.base.tag, ...g.variants.map((v) => v.tag)]));
+    for (const orphan of this.models.filter((m) => !grouped.has(m.tag))) {
+      groups.push({ base: { ...orphan, base: null, isVariant: false }, variants: [] });
+    }
+    return groups;
   }
 
   async show(tag: string): Promise<ModelDetail> {

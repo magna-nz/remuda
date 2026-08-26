@@ -238,3 +238,71 @@
   color: var(--muted);
   flex: 0 0 auto;
 }
+
+/* Catalog search + registry probe (SPEC §5.5). */
+.pullview .side-label .count {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: var(--chip, #22252b);
+  color: var(--muted, #9aa1ac);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.probe {
+  margin: -4px 0 10px;
+  font-size: 12px;
+  color: var(--ok, #6fd08c);
+}
+
+.probe.miss {
+  color: var(--muted, #9aa1ac);
+}
+
+.probe code {
+  font-family: var(--mono, ui-monospace, monospace);
+}
+
+.noresults {
+  padding: 18px 2px;
+  color: var(--muted, #9aa1ac);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+/* Needs `.rt` in the selector: `.regrow .rt div` above is more specific than
+   a bare `.regrow .caps`, and would otherwise win the margin. */
+.regrow .rt .caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.regrow .cap {
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: var(--chip, #22252b);
+  color: var(--muted, #9aa1ac);
+  font-size: 11px;
+}
+
+.regrow .sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  justify-content: flex-end;
+  max-width: 320px;
+  margin-right: 10px;
+}
+
+.btn.sm.chip {
+  padding: 2px 8px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.btn.sm.chip.installed {
+  opacity: 0.45;
+}

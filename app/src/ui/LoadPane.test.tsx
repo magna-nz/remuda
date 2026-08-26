@@ -223,10 +223,13 @@ describe("LoadPane", () => {
 
     expect(window.confirm).toHaveBeenCalledWith(expect.stringContaining("llama3.1:8b-q4_K_M"));
     await waitFor(() => expect(client.deleteCalls).toEqual(["llama3.1:8b-q4_K_M"]));
-    // Back on the list, where llama3.1 is now a one-quant model: the deleted
-    // tag took its tuning (grouped under it) with it. Both remaining models
-    // read "1 quant · base only".
-    await waitFor(() => expect(screen.getAllByText("1 quant · base only")).toHaveLength(2));
+    // Back on the list. llama3.1 is now a one-quant model, and support-bot —
+    // whose base was the tag just deleted — is left standing on its own: the
+    // real client resolves a variant's base against the *installed* set, so
+    // an unresolvable parent makes the tag a base in its own right (SPEC §12
+    // item 3, "a variant whose base was deleted"). Three rows, each reading
+    // "1 quant · base only".
+    await waitFor(() => expect(screen.getAllByText("1 quant · base only")).toHaveLength(3));
     expect(screen.queryByText("2 quants · 1 Modelfile")).not.toBeInTheDocument();
   });
 
