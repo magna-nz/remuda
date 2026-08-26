@@ -70,8 +70,14 @@ export function EditorView() {
   // model, opening a new one, reverting, or a completed save — all of which
   // replace `savedDoc`. Ordinary form edits update `rawText` directly (see
   // applyDocUpdate) so raw-text typing never gets clobbered mid-keystroke.
+  // Seeds from `doc`, not `savedDoc`: a draft can arrive with edits already
+  // applied — "Bake into Modelfile" (SPEC §5.3) hands over a doc carrying the
+  // chat's run-control overrides. Seeding from savedDoc showed the untouched
+  // Modelfile while `dirty` was true, so the pending change was invisible.
+  // The dependency stays `savedDoc` so this fires when a *new* draft loads or
+  // a save lands, never on every keystroke (which would clobber typing).
   useEffect(() => {
-    if (editorDraft) setRawText(serializeModelfile(editorDraft.savedDoc));
+    if (editorDraft) setRawText(serializeModelfile(editorDraft.doc));
   }, [editorDraft?.savedDoc]);
 
   if (editorLoading) {
@@ -350,12 +356,13 @@ export function EditorView() {
       {saveAsOpen && (
         <SaveAsDialog
           baseTag={baseTag}
+          baseQuantization={baseModel?.quantization ?? null}
           onCancel={() => setSaveAsOpen(false)}
-          onConfirm={(name) => {
+          onConfirm={(name, quantize) => {
             setSaveAsOpen(false);
             // A name that already carries a tag (support:v2) keeps it; only
             // bare names get the conventional :latest.
-            void saveDraft(name.includes(":") ? name : `${name}:latest`);
+            void saveDraft(name.includes(":") ? name : `${name}:latest`, quantize);
           }}
         />
       )}

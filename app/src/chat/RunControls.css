@@ -1,0 +1,229 @@
+/* Run-controls pill + popover (docs/mockup-proposals.html §04). */
+
+.runpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 9px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--raised);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.runpill:hover {
+  border-color: var(--border-strong);
+}
+
+.runpill.dirty {
+  border-color: color-mix(in srgb, var(--ember) 45%, transparent);
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+}
+
+.runpill svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.runpop {
+  position: absolute;
+  right: 14px;
+  bottom: 64px;
+  width: 330px;
+  max-height: min(70vh, 560px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  box-shadow: var(--shadow-lg);
+  z-index: 20;
+  overflow: hidden;
+}
+
+.runpop-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.runpop-h b {
+  font-size: 12.5px;
+}
+
+.runpop-h .scope {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.runpop-h .x {
+  margin-left: auto;
+  padding: 4px;
+  width: 26px;
+}
+
+.runpop-h .x svg {
+  width: 14px;
+  height: 14px;
+}
+
+.runpop-b {
+  padding: 12px 13px;
+  display: flex;
+  flex-direction: column;
+  gap: 13px;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.knob {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.knob .kh {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.knob .kh label {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+
+.knob .kh .src {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+  border: 0;
+  background: transparent;
+  padding: 0;
+}
+
+.knob .kh button.src {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+.knob .kh .src.over {
+  color: var(--ember-ink);
+}
+
+.knob .row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.knob .val {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 58px;
+  text-align: right;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.knob .val.over {
+  color: var(--ember-ink);
+}
+
+.knob .hint {
+  font-size: 10.5px;
+  color: var(--faint);
+  line-height: 1.45;
+}
+
+.runpop input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--border-strong);
+  flex: 1;
+  min-width: 0;
+  outline: none;
+}
+
+.runpop input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--ember);
+  border: 2px solid var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.runpop .input {
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink);
+  border-radius: 8px;
+  padding: 6px 9px;
+  font-family: var(--mono);
+  font-size: 12px;
+  outline: none;
+  width: 100%;
+}
+
+.runpop .input:focus {
+  border-color: var(--ember);
+}
+
+/* num_ctx is load-time, not sampling — SPEC §5.1 says loading is explicit,
+   so applying one has to be impossible to miss. */
+.ctx-warn {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  margin-top: 4px;
+  padding: 9px 10px;
+  border-radius: 9px;
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.ctx-warn svg {
+  width: 15px;
+  height: 15px;
+  color: var(--warn);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.ctx-warn b {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.runpop-f {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  flex: 0 0 auto;
+}
+
+.runpop-f .spacer {
+  flex: 1;
+}

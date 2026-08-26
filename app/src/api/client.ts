@@ -12,11 +12,15 @@ import type {
   Model,
   ModelDetail,
   ModelGroup,
+  ModelSnapshot,
   OllamaClient,
   PullProgress,
+  RunOptions,
+  RunningModel,
   ServerStatus,
+  ThinkLevel,
 } from "./types";
-import { DEFAULT_BASE_URL } from "./types";
+import { DEFAULT_BASE_URL, RUN_OPTION_KEYS } from "./types";
 import { ndjson } from "./ndjson";
 
 /* ── Wire shapes (Ollama's JSON, snake_case) ────────────────────────────── */
@@ -40,7 +44,18 @@ interface WireTagsResponse {
 }
 
 interface WirePsResponse {
-  models?: Array<{ name?: string; model?: string }>;
+  models?: Array<{
+    name?: string;
+    model?: string;
+    /** Total bytes held by the runner (VRAM + system RAM). */
+    size?: number;
+    /** Bytes in VRAM; absent on servers that predate the field. */
+    size_vram?: number;
+    /** Context the runner was started with; absent on older servers. */
+    context_length?: number;
+    /** keep_alive expiry; "0001-01-01T00:00:00Z" means "never". */
+    expires_at?: string;
+  }>;
 }
 
 interface WireShowResponse {
@@ -50,13 +65,19 @@ interface WireShowResponse {
   system?: string;
   details?: WireDetails;
   model_info?: Record<string, unknown>;
+  /** e.g. ["completion","tools","thinking"]; absent on older servers. */
+  capabilities?: unknown;
 }
 
 interface WireChatLine {
-  message?: { content?: string };
+  message?: { content?: string; thinking?: string };
   done?: boolean;
   eval_count?: number;
   eval_duration?: number;
+  prompt_eval_count?: number;
+  prompt_eval_duration?: number;
+  load_duration?: number;
+  total_duration?: number;
   error?: string;
 }
 
@@ -160,6 +181,103 @@ function contextLengthFrom(
   return null;
 }
 
+/** POST /api/show's `capabilities`, defensively: anything that isn't an
+ * array of strings reads as "none reported". Kept as free strings — Ollama
+ * adds capabilities between releases (see pull/catalog.ts). */
+function capabilitiesFrom(raw: WireShowResponse | undefined): string[] {
+  if (!raw || !Array.isArray(raw.capabilities)) {
+    return [];
+  }
+  return raw.capabilities.filter((c): c is string => typeof c === "string");
+}
+
+/**
+ * Ollama writes `expires_at: "0001-01-01T00:00:00Z"` — Go's zero time — for a
+ * model loaded with an infinite keep_alive. That is not an expiry a UI should
+ * ever render, so year 1 (and anything unparseable) becomes null. Otherwise
+ * the server's own string is passed through verbatim.
+ */
+function expiryFrom(value: string | undefined): string | null {
+  if (typeof value !== "string" || value === "") {
+    return null;
+  }
+  const ms = Date.parse(value);
+  if (Number.isNaN(ms) || new Date(ms).getUTCFullYear() <= 1) {
+    return null;
+  }
+  return value;
+}
+
+/**
+ * The full GET /api/ps readout. Every field past the tag is optional on the
+ * wire, so each has a floor: missing size/size_vram are 0 (not NaN), missing
+ * context_length/expires_at are null.
+ */
+function parseRunning(ps: WirePsResponse): RunningModel[] {
+  return (ps.models ?? []).map((m) => ({
+    tag: m.name ?? m.model ?? "",
+    sizeBytes: typeof m.size === "number" ? m.size : 0,
+    sizeVramBytes: typeof m.size_vram === "number" ? m.size_vram : 0,
+    contextLength: typeof m.context_length === "number" ? m.context_length : null,
+    expiresAt: expiryFrom(m.expires_at),
+  }));
+}
+
+/** RunOptions → Ollama's `options` object. camelCase becomes snake_case and
+ * every unset key is dropped — an explicit `undefined` in the JSON body is
+ * not the same as absent. Null when nothing is set, so the caller can omit
+ * the whole object. */
+function wireOptions(options: RunOptions | undefined): Record<string, number> | null {
+  if (!options) {
+    return null;
+  }
+  const out: Record<string, number> = {};
+  for (const [key, wireKey] of RUN_OPTION_KEYS) {
+    const value = options[key];
+    if (value !== undefined) {
+      out[wireKey] = value;
+    }
+  }
+  return Object.keys(out).length === 0 ? null : out;
+}
+
+/**
+ * What actually goes on the wire for a message. Only role/content/images —
+ * `thinking` is deliberately dropped (Ollama doesn't take reasoning back as
+ * context) and `imageThumbs` is a display-only artefact that would bloat
+ * every request. Empty `images` is omitted rather than sent as [].
+ */
+function wireMessage(message: ChatMessage): Record<string, unknown> {
+  const out: Record<string, unknown> = {
+    role: message.role,
+    content: message.content,
+  };
+  if (message.images !== undefined && message.images.length > 0) {
+    out.images = message.images;
+  }
+  return out;
+}
+
+/**
+ * `think` has three states on the wire, not two.
+ *
+ * Ollama declares it `json:"think,omitempty"` on a nil-distinguishable type,
+ * so **absent and `false` are different values to the server** — absent means
+ * "use the model's default", which for a model Ollama treats as always
+ * thinking is *on*. A control labelled "off" that merely omitted the field
+ * would therefore not reliably turn reasoning off.
+ *
+ *   undefined  → omit. Nothing was ever chosen (a model with no thinking
+ *                capability never renders the control), so don't opine.
+ *   "off"      → `false`. The user explicitly asked for no reasoning, and
+ *                only a thinking-capable model can reach this state.
+ *   a level    → the string, verbatim.
+ */
+function wireThink(think: ThinkLevel | undefined): string | boolean | null {
+  if (think === undefined) return null;
+  return think === "off" ? false : think;
+}
+
 /* ── Factory ────────────────────────────────────────────────────────────── */
 
 export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
@@ -192,21 +310,29 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
   }
 
   /**
-   * The models from /api/tags, plus the parent each one declares.
+   * The models from /api/tags, plus the parent each one declares, plus the
+   * full /api/ps readout.
    *
    * `details.parent_model` is Ollama's own answer to "was this built FROM
    * another local model?" — it names the exact tag `ollama create` used. It's
    * kept out of Model (a tag's own facts) and handed to listGroups, which is
    * where derivation matters; unresolvable parents don't survive that far.
+   *
+   * `running` rides along because /api/ps is already being fetched here for
+   * `isLoaded`. The 5s poll reads the runtime pane's numbers out of this same
+   * response rather than asking again (SPEC §5.1).
    */
-  async function fetchModels(): Promise<{ models: Model[]; parents: Map<string, string> }> {
+  async function fetchModels(): Promise<{
+    models: Model[];
+    parents: Map<string, string>;
+    running: RunningModel[];
+  }> {
     const [tags, ps] = await Promise.all([
       getJson<WireTagsResponse>("/api/tags"),
       getJson<WirePsResponse>("/api/ps"),
     ]);
-    const loaded = new Set(
-      (ps.models ?? []).map((m) => normalizeTag(m.name ?? m.model ?? "")),
-    );
+    const running = parseRunning(ps);
+    const loaded = new Set(running.map((m) => normalizeTag(m.tag)));
     const parents = new Map<string, string>();
     const models = (tags.models ?? []).map((m) => {
       const tag = m.name ?? m.model ?? "";
@@ -225,13 +351,21 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         base: null,
         isVariant: false,
         modifiedAt: m.modified_at ?? "",
+        // /api/tags doesn't carry capabilities; only the /api/show sweep in
+        // listGroups can fill these in.
+        capabilities: [],
       };
     });
-    return { models, parents };
+    return { models, parents, running };
   }
 
   async function listModels(): Promise<Model[]> {
     return (await fetchModels()).models;
+  }
+
+  async function listModelsWithRunning(): Promise<ModelSnapshot> {
+    const { models, running } = await fetchModels();
+    return { models, running };
   }
 
   return {
@@ -251,6 +385,12 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
     },
 
     listModels,
+
+    listModelsWithRunning,
+
+    async listRunning(): Promise<RunningModel[]> {
+      return parseRunning(await getJson<WirePsResponse>("/api/ps"));
+    },
 
     async listGroups(): Promise<ModelGroup[]> {
       const { models, parents } = await fetchModels();
@@ -289,6 +429,9 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
           base,
           isVariant: base !== null,
           contextLength: contextLengthFrom(raw?.model_info),
+          // Same cached /api/show response the base resolution above reads —
+          // capabilities cost no extra request.
+          capabilities: capabilitiesFrom(raw),
         };
       });
       const groups = new Map<string, ModelGroup>();
@@ -327,6 +470,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
           quantizationLevel: raw.details?.quantization_level ?? "",
         },
         contextLength: contextLengthFrom(raw.model_info),
+        capabilities: capabilitiesFrom(raw),
       };
     },
 
@@ -357,19 +501,28 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
     async *chat(
       tag: string,
       messages: ChatMessage[],
-      opts: { keepAlive: KeepAlive; signal?: AbortSignal },
+      opts: {
+        keepAlive: KeepAlive;
+        signal?: AbortSignal;
+        think?: ThinkLevel;
+        options?: RunOptions;
+      },
     ): AsyncIterable<ChatChunk> {
-      const res = await send(
-        "POST",
-        "/api/chat",
-        {
-          model: tag,
-          messages,
-          stream: true,
-          keep_alive: opts.keepAlive,
-        },
-        opts.signal,
-      );
+      const requestBody: Record<string, unknown> = {
+        model: tag,
+        messages: messages.map(wireMessage),
+        stream: true,
+        keep_alive: opts.keepAlive,
+      };
+      const think = wireThink(opts.think);
+      if (think !== null) {
+        requestBody.think = think;
+      }
+      const options = wireOptions(opts.options);
+      if (options !== null) {
+        requestBody.options = options;
+      }
+      const res = await send("POST", "/api/chat", requestBody, opts.signal);
       const body = requireBody(res, "/api/chat");
       for await (const line of ndjson<WireChatLine>(body, opts.signal)) {
         if (typeof line.error === "string") {
@@ -380,15 +533,36 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
           content: line.message?.content ?? "",
           done,
         };
+        // Reasoning arrives in its own field and stays there — folding it
+        // into `content` would put the model's scratchpad in the transcript.
+        const thinking = line.message?.thinking;
+        if (typeof thinking === "string" && thinking !== "") {
+          chunk.thinking = thinking;
+        }
         if (
           done &&
           typeof line.eval_count === "number" &&
           typeof line.eval_duration === "number"
         ) {
-          chunk.stats = {
+          const stats: NonNullable<ChatChunk["stats"]> = {
             evalCount: line.eval_count,
             evalDurationNs: line.eval_duration,
           };
+          // The prefill/load/total breakdown is newer than eval_*; a server
+          // that omits it leaves these absent rather than 0.
+          if (typeof line.prompt_eval_count === "number") {
+            stats.promptEvalCount = line.prompt_eval_count;
+          }
+          if (typeof line.prompt_eval_duration === "number") {
+            stats.promptEvalDurationNs = line.prompt_eval_duration;
+          }
+          if (typeof line.load_duration === "number") {
+            stats.loadDurationNs = line.load_duration;
+          }
+          if (typeof line.total_duration === "number") {
+            stats.totalDurationNs = line.total_duration;
+          }
+          chunk.stats = stats;
         }
         yield chunk;
       }
@@ -411,6 +585,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       if (request.license !== undefined) structured.license = request.license;
       if (request.messages !== undefined) structured.messages = request.messages;
       if (request.parameters !== undefined) structured.parameters = request.parameters;
+      if (request.quantize !== undefined) structured.quantize = request.quantize;
 
       let res: Response;
       try {
@@ -425,6 +600,12 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         // only mislead. Anything non-400 (404, network) propagates as-is.
         const message = err instanceof Error ? err.message : "";
         if (!/\((400|422)\)/.test(message)) {
+          throw err;
+        }
+        // The legacy `modelfile` string has no way to say "quantize to
+        // q4_K_M". Falling back would quietly create an unquantised model
+        // under the name the user asked to quantise — worse than failing.
+        if (request.quantize !== undefined) {
           throw err;
         }
         try {

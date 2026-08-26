@@ -7,6 +7,7 @@ import { ChatView } from "../chat/ChatView";
 import { Sidebar } from "./Sidebar";
 import { RemudaProvider } from "./state";
 import { FakeClient, makeModel } from "./test/FakeClient";
+import type { RunningModel } from "../api/types";
 
 /**
  * Two quantisations of one model (the quant lives in the tag, as an upstream
@@ -389,5 +390,183 @@ describe("LoadPane", () => {
 
     client.connected = false;
     await waitFor(() => expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeDisabled());
+  });
+});
+
+/** A model already loaded, with a scripted /api/ps readout (SPEC §5.1). */
+function loadedFixture(running: RunningModel[]) {
+  const models = fixtureModels().map((m) => (m.tag === "llama3.1:8b-q4_K_M" ? { ...m, isLoaded: true } : m));
+  return new FakeClient({ models, running });
+}
+
+/** Open the pane on a model that's already loaded — it lands on detail directly. */
+async function openLoadedDetail(client: FakeClient) {
+  render(
+    <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+      <TopNav />
+      <LoadPane />
+    </RemudaProvider>,
+  );
+  fireEvent.click(screen.getByTitle("Choose and load a model"));
+  await screen.findByText("Q4_K_M");
+}
+
+describe("LoadPane runtime readout (SPEC §5.1)", () => {
+  it("shows a full-GPU strip, the top-bar chip, and Eject's freed size — no RAM legend or spill warning", async () => {
+    const client = loadedFixture([
+      {
+        tag: "llama3.1:8b-q4_K_M",
+        sizeBytes: 4_700_000_000,
+        sizeVramBytes: 4_700_000_000,
+        contextLength: 8192,
+        expiresAt: null,
+      },
+    ]);
+    await openLoadedDetail(client);
+
+    // Top-bar chip and the strip's own badge — both read the same figure.
+    expect(screen.getAllByText("100% GPU")).toHaveLength(2);
+    expect(document.querySelectorAll(".rt-inline.spill")).toHaveLength(0);
+    // Nothing off-GPU: no RAM legend entry, no spill warning.
+    expect(screen.queryByText(/^RAM /)).not.toBeInTheDocument();
+    expect(screen.queryByText(/running on the CPU/)).not.toBeInTheDocument();
+    expect(screen.getByText(/^VRAM /)).toHaveTextContent("VRAM 4.7 GB");
+    // Context equals the model's own max, so no "/ max" suffix.
+    expect(screen.getByText("8,192")).toBeInTheDocument();
+    // expiresAt: null is an infinite keep_alive, not a broken countdown.
+    expect(screen.getByText("never")).toBeInTheDocument();
+    // Eject now names the memory it frees.
+    expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toHaveTextContent(
+      "Eject 4.7 GB",
+    );
+  });
+
+  it("spills to CPU: amber chip, a RAM legend entry, and the CPU warning", async () => {
+    const client = loadedFixture([
+      {
+        tag: "llama3.1:8b-q4_K_M",
+        sizeBytes: 4_700_000_000,
+        sizeVramBytes: 2_900_000_000,
+        contextLength: 8192,
+        expiresAt: null,
+      },
+    ]);
+    await openLoadedDetail(client);
+
+    expect(screen.getAllByText("62% GPU")).toHaveLength(2);
+    expect(document.querySelectorAll(".rt-inline.spill")).toHaveLength(2);
+    expect(screen.getByText(/^RAM /)).toHaveTextContent("RAM 1.8 GB");
+    const warning = screen.getByText(/running on the CPU/);
+    expect(warning).toHaveTextContent("1.8 GB is running on the CPU.");
+  });
+
+  it("renders no percentage or bar when sizeBytes is 0, rather than dividing by zero", async () => {
+    const client = loadedFixture([
+      { tag: "llama3.1:8b-q4_K_M", sizeBytes: 0, sizeVramBytes: 0, contextLength: null, expiresAt: null },
+    ]);
+    await openLoadedDetail(client);
+
+    expect(screen.queryByText(/% GPU/)).not.toBeInTheDocument();
+    expect(document.querySelector(".rt-bar")).not.toBeInTheDocument();
+    // Both unknowns render as an em dash rather than a broken number:
+    // contextLength: null, and a size the server reported as 0. Addressed by
+    // cell so this can't be satisfied by one dash standing in for both.
+    const cellValue = (label: string) =>
+      screen.getByText(label).parentElement?.querySelector(".v")?.textContent?.trim();
+    // Context still shows the model's trained max beside the unknown runner
+    // value, so it reads "— / 8,192"; Total size has nothing to pair with.
+    expect(cellValue("Context")).toMatch(/^—/);
+    expect(cellValue("Total size")).toBe("—");
+    // Eject falls back to its plain label when there's nothing to size.
+    // Asserted on the exact text: `toHaveTextContent("Eject")` is a substring
+    // match and passed happily on the "Eject 0 MB" this is meant to prevent.
+    expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toHaveTextContent(
+      /^Eject$/,
+    );
+  });
+
+  it("shows the model's trained max alongside the running context length", async () => {
+    const client = loadedFixture([
+      {
+        tag: "llama3.1:8b-q4_K_M",
+        sizeBytes: 4_700_000_000,
+        sizeVramBytes: 4_700_000_000,
+        contextLength: 2048,
+        expiresAt: null,
+      },
+    ]);
+    await openLoadedDetail(client);
+
+    expect(screen.getByText("2,048")).toBeInTheDocument();
+    expect(screen.getByText("/ 8,192")).toBeInTheDocument();
+  });
+
+  it("ticks the Expires countdown once a second and stops at zero rather than going negative", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+      const client = loadedFixture([
+        {
+          tag: "llama3.1:8b-q4_K_M",
+          sizeBytes: 4_700_000_000,
+          sizeVramBytes: 4_700_000_000,
+          contextLength: 8192,
+          expiresAt: "2026-01-01T00:00:05.000Z",
+        },
+      ]);
+      render(
+        <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+          <TopNav />
+          <LoadPane />
+        </RemudaProvider>,
+      );
+      fireEvent.click(screen.getByTitle("Choose and load a model"));
+      await act(async () => {});
+      expect(screen.getByText("5s")).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByText("3s")).toBeInTheDocument();
+
+      await act(async () => {
+        vi.advanceTimersByTime(10_000);
+      });
+      expect(screen.getByText("0s")).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("LoadPane capability chips (SPEC §5.1, §2)", () => {
+  function fixtureWithCapabilities() {
+    return [
+      makeModel({ tag: "llama3.1:8b", capabilities: ["completion", "tools", "thinking"] }),
+      makeModel({ tag: "nomic-embed-text:latest", capabilities: ["embedding"] }),
+      makeModel({ tag: "vision-model:latest", capabilities: ["completion", "vision", "frobnicate"] }),
+    ];
+  }
+
+  it("renders known capabilities, an embedding model's 'no chat' chip, and an unrecognised one without crashing", async () => {
+    const client = new FakeClient({ models: fixtureWithCapabilities() });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <TopNav />
+        <LoadPane />
+      </RemudaProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    await screen.findByText("llama3.1:8b");
+
+    // completion never gets its own chip — it's the unremarkable default.
+    expect(screen.queryByText("completion")).not.toBeInTheDocument();
+    expect(screen.getByText("tools")).toBeInTheDocument();
+    expect(screen.getByText("thinking")).toBeInTheDocument();
+    // No `completion` capability: the embedding chip clarifies it can't chat.
+    expect(screen.getByText("embedding · no chat")).toBeInTheDocument();
+    // vision is known; frobnicate isn't — both render, neither throws.
+    expect(screen.getByText("vision")).toBeInTheDocument();
+    expect(screen.getByText("frobnicate")).toBeInTheDocument();
   });
 });

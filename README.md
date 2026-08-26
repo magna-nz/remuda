@@ -61,7 +61,31 @@ weights again.
 
 Chats live down the left. Each is a saved session that **remembers the model it ran on** — if
 that model isn't in memory when you reopen it, Remuda says so and offers to load it, never
-silently swapping. Streaming replies, cancel, tok/s, and a warming indicator while weights load.
+silently swapping. Streaming replies, cancel, and a warming indicator while weights load.
+
+Reasoning models get their thinking **folded away** in its own block above the answer —
+collapsed by default, live while it streams, and never sent back as context. Vision models
+get a paperclip. Embedding models are told plainly they can't chat, instead of failing on
+your first message.
+
+### 🎛 Try a parameter without re-creating the model
+
+Temperature, top-p, top-k, seed and the rest override **for the current chat only** — one
+click in the composer, no `ollama create`, no reload. When a setting earns its keep, **Bake
+into Modelfile** hands it to the editor, which stays the only place a change becomes
+permanent. (`num_ctx` is in there too, with a warning: it's load-time, so it reloads the
+model.)
+
+Each reply reports what it cost — generation tok/s, prompt-eval tok/s, load time, total time,
+and context used.
+
+### 📊 See where the model is actually running
+
+The load pane shows what `ollama ps` knows: the **VRAM/RAM split**, the context the runner
+started with, the size, and a live countdown to `keep_alive` expiry. A `100% GPU` chip sits in
+the top bar so the answer is one glance away — and turns amber the moment any of the model
+spills to system RAM, which is the difference between fast and unusable. **Eject** names the
+memory it frees.
 
 ### 🛠 Tweak the Modelfile without leaving the chat
 
@@ -72,9 +96,10 @@ raw text is the source of truth. Content the form doesn't model (`LICENSE`, `ADA
 
 ### 🔁 Save, and it's live
 
-**Save** overwrites; **Save as…** forks a new tuned variant. Either way Remuda runs
-`ollama create`, stops the old model, and reloads the new one — a toast walks through each
-step, and your next message uses the new Modelfile.
+**Save** overwrites; **Save as…** forks a new tuned variant — optionally **quantising** it on
+the way in, which is usually what you want right after seeing a model spill out of VRAM.
+Either way Remuda runs `ollama create`, stops the old model, and reloads the new one — a toast
+walks through each step, and your next message uses the new Modelfile.
 
 ### 📦 Pull new models
 

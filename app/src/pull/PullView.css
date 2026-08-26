@@ -226,6 +226,17 @@
   font-weight: 600;
 }
 
+/*
+ * Needs `.rt` in the selector: `.regrow .rt div` below is more specific than
+ * the shared `.caps` rule in ui/Capabilities.css, and would otherwise win the
+ * margin and flatten the chips against the description line. This override
+ * survived the extraction of the chips into the shared component; the bare
+ * `.caps { margin-top }` alone does not beat it.
+ */
+.regrow .rt .caps {
+  margin-top: 5px;
+}
+
 .regrow .rt div {
   font-size: 12px;
   color: var(--muted);
@@ -271,22 +282,8 @@
   line-height: 1.5;
 }
 
-/* Needs `.rt` in the selector: `.regrow .rt div` above is more specific than
-   a bare `.regrow .caps`, and would otherwise win the margin. */
-.regrow .rt .caps {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 6px;
-}
-
-.regrow .cap {
-  padding: 1px 6px;
-  border-radius: 4px;
-  background: var(--chip, #22252b);
-  color: var(--muted, #9aa1ac);
-  font-size: 11px;
-}
+/* Chip layout/colour now lives in ui/Capabilities.css, shared with the load
+   pane — nothing left to declare here. */
 
 .regrow .sizes {
   display: flex;

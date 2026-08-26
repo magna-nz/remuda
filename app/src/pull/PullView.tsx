@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import "./PullView.css";
 import { useRemuda } from "../ui/state";
+import { Capabilities } from "../ui/Capabilities";
 import type { Model } from "../api/types";
 import { isProbeAvailable, probeModel, type ProbeResult } from "../api/registry";
 import { CATALOG, searchCatalog, type CatalogModel } from "./catalog";
@@ -93,15 +94,7 @@ function CatalogRow({ model, models, disabled, onPull }: CatalogRowProps) {
       <div className="rt">
         <b>{model.name}</b>
         <div>{model.description}</div>
-        {model.capabilities.length > 0 && (
-          <div className="caps">
-            {model.capabilities.map((c) => (
-              <span className="cap" key={c}>
-                {c}
-              </span>
-            ))}
-          </div>
-        )}
+        <Capabilities capabilities={model.capabilities} />
       </div>
       <div className="sizes">
         {model.sizes.map((size) => {

@@ -50,6 +50,20 @@
   font-family: var(--mono);
 }
 
+.msg .col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.msg.user .col {
+  align-items: flex-end;
+}
+
+.msg.bot .col {
+  align-items: flex-start;
+}
+
 .bubble {
   padding: 10px 13px;
   border-radius: 12px;
@@ -102,13 +116,59 @@
   }
 }
 
-.tokstat {
-  align-self: flex-start;
-  margin: -8px 0 0 40px;
+/* Full timings under a completed reply (mockup §04: .stats). */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 9px;
+  max-width: 560px;
+  align-self: stretch;
+}
+
+.stats .s {
+  flex: 1;
+  min-width: 104px;
+  padding: 8px 11px;
+  border-right: 1px solid var(--border);
+}
+
+.stats .s:last-child {
+  border-right: 0;
+}
+
+.stats .s .k {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.stats .s .v {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+
+.stats .s .v small {
+  color: var(--faint);
+  font-weight: 400;
+  font-size: 10.5px;
+}
+
+/* Which per-session overrides the run used (mockup §04). */
+.runnote {
+  margin-top: 7px;
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
+  color: var(--ember-ink);
 }
 
 .chat-error {
@@ -123,6 +183,7 @@
   flex: 0 0 auto;
   border-top: 1px solid var(--border);
   padding: 12px 16px;
+  position: relative;
 }
 
 .composer .box {
@@ -183,17 +244,72 @@
 }
 
 .note-strip {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 9px;
+  flex-wrap: wrap;
   margin-top: 8px;
+}
+
+.note-strip .spacer {
+  flex: 1;
+}
+
+.note-strip .note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .note-strip b {
   font-weight: 600;
   color: var(--ink-2);
+}
+
+.note-strip .hint {
+  color: var(--faint);
+}
+
+/* Think-level segmented control (mockup §03: .seg). */
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+
+.seg button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-family: var(--mono);
+}
+
+.seg button:hover {
+  color: var(--ink);
+}
+
+.seg button.on {
+  background: var(--ember);
+  color: var(--ink);
+}
+
+.seg .lbl {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 0 6px 0 4px;
 }
 
 /* unloaded banner (SPEC §5.3) */
@@ -224,4 +340,85 @@
 .chat-banner .bt b,
 .chat-banner .bt code {
   font-family: var(--mono);
+}
+
+/* Drop target for vision attachments (mockup §05). */
+.chatmain.dropping {
+  outline: 2px dashed var(--ember);
+  outline-offset: -6px;
+}
+
+/* Embedding model: no composer, an explanation instead (mockup §02). */
+.gate {
+  margin: 14px;
+  padding: 14px;
+  border-radius: 11px;
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+
+.gate > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--warn);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.gate b {
+  font-size: 13px;
+  font-family: var(--mono);
+}
+
+.gate p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.gate code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--raised);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.gate-foot {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  font-size: 12.5px;
+  padding: 30px;
+}
+
+.gate-foot code {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+/* num_ctx is applied at load time, so the warning outlives the popover. */
+.note-strip .ctx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.note-strip .ctx-chip svg {
+  width: 12px;
+  height: 12px;
+  color: var(--warn);
+  flex: 0 0 auto;
 }

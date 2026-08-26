@@ -6,6 +6,7 @@ import { useMemo } from "react";
 import "./TopNav.css";
 import { useRemuda } from "./state";
 import { displayKey, groupByModel, type ModelEntry } from "../models/grouping";
+import type { RunningModel } from "../api/types";
 
 function shortTag(tag: string): string {
   return tag.endsWith(":latest") ? tag.slice(0, -":latest".length) : tag;
@@ -26,9 +27,23 @@ function controlLabel(loaded: { base: string; variant: string } | null, entries:
   return [displayKey(entry.key), quant.quantization, tuning].filter((part) => part !== "").join(" · ");
 }
 
+/**
+ * The answer-at-a-glance chip (SPEC §5.1, mockup-proposals.html §01): what
+ * fraction of the loaded model sits in VRAM. `sizeBytes === 0` renders no
+ * percentage at all rather than dividing by zero — the caller treats a null
+ * return as "say nothing".
+ */
+function gpuPercent(running: RunningModel[], variant: string | undefined): number | null {
+  if (variant === undefined) return null;
+  const entry = running.find((r) => r.tag === variant);
+  if (!entry || entry.sizeBytes === 0) return null;
+  return Math.round((entry.sizeVramBytes / entry.sizeBytes) * 100);
+}
+
 export function TopNav() {
-  const { status, loaded, loadPaneOpen, openLoadPane, closeLoadPane, openEditor, groups } = useRemuda();
+  const { status, loaded, loadPaneOpen, openLoadPane, closeLoadPane, openEditor, groups, running } = useRemuda();
   const entries = useMemo(() => groupByModel(groups), [groups]);
+  const pct = gpuPercent(running, loaded?.variant);
 
   return (
     <header className="titlebar">
@@ -51,6 +66,9 @@ export function TopNav() {
       >
         <span className={`d${loaded ? "" : " off"}`} aria-hidden="true" />
         <span className="mctl-t">{controlLabel(loaded, entries)}</span>
+        {pct !== null && (
+          <span className={`rt-inline${pct < 100 ? " spill" : ""}`}>{pct}% GPU</span>
+        )}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} aria-hidden="true">
           <path d="M6 9l6 6 6-6" />
         </svg>

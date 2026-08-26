@@ -7,10 +7,12 @@
  * terminal, `ollama rm`, another client. These cover the cheap reconcile
  * that fixes it, and the cost guard that keeps it cheap.
  */
-import { render, screen, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import "../chat/test/localStorage";
+import { act, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
 import { RemudaProvider, useRemuda } from "./state";
 import { FakeClient, makeModel } from "./test/FakeClient";
+import type { RemudaContextValue } from "./state";
 
 /** Renders one line per known base tag, plus the live connection state. */
 function ModelList() {
@@ -190,5 +192,295 @@ describe("model reconcile on poll", () => {
     await new Promise((resolve) => setTimeout(resolve, 200));
 
     expect(client.listGroupsCalls).toBe(1);
+  });
+});
+
+/* ── runtime readout, chat options, thinking, images ────────────────────── */
+
+/** Grabs the live context so a test can call into it directly. */
+function captureContext(seen: { current: RemudaContextValue | null }) {
+  return function Capture() {
+    seen.current = useRemuda();
+    return null;
+  };
+}
+
+function renderContext(client: FakeClient, pollIntervalMs = 10) {
+  const seen: { current: RemudaContextValue | null } = { current: null };
+  const Capture = captureContext(seen);
+  render(
+    <RemudaProvider client={client} pollIntervalMs={pollIntervalMs}>
+      <Capture />
+    </RemudaProvider>,
+  );
+  return seen;
+}
+
+/** The context, asserted non-null — the provider always renders children. */
+function ctx(seen: { current: RemudaContextValue | null }): RemudaContextValue {
+  if (seen.current === null) throw new Error("provider never rendered");
+  return seen.current;
+}
+
+beforeEach(() => {
+  window.localStorage.clear();
+});
+
+describe("running (GET /api/ps readout)", () => {
+  it("exposes the full readout and refreshes it from the existing poll", async () => {
+    const client = new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })],
+      running: [
+        {
+          tag: "llama3.1:8b",
+          sizeBytes: 6_000_000_000,
+          sizeVramBytes: 4_500_000_000,
+          contextLength: 8192,
+          expiresAt: "2026-08-26T12:05:00Z",
+        },
+      ],
+    });
+    const seen = renderContext(client);
+
+    await waitFor(() => expect(ctx(seen).running).toHaveLength(1));
+    expect(ctx(seen).running[0]).toEqual({
+      tag: "llama3.1:8b",
+      sizeBytes: 6_000_000_000,
+      sizeVramBytes: 4_500_000_000,
+      contextLength: 8192,
+      expiresAt: "2026-08-26T12:05:00Z",
+    });
+
+    // Ollama dropped it after keep_alive: the next tick notices.
+    client.running = [];
+    await waitFor(() => expect(ctx(seen).running).toEqual([]));
+  });
+
+  it("costs the poll no standalone /api/ps request", async () => {
+    const client = new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })],
+    });
+    renderContext(client);
+
+    await waitFor(() => expect(client.listGroupsCalls).toBe(1));
+    const afterFirstSweep = client.listRunningCalls;
+    // Several more ticks with a stable store.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    });
+    expect(client.listRunningCalls).toBe(afterFirstSweep);
+  });
+
+  it("keeps the array identity stable while the numbers don't move", async () => {
+    const client = new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })],
+    });
+    const seen = renderContext(client);
+
+    await waitFor(() => expect(ctx(seen).running).toHaveLength(1));
+    const first = ctx(seen).running;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 80));
+    });
+    expect(ctx(seen).running).toBe(first);
+  });
+
+  it("empties the readout when the server goes away", async () => {
+    const client = new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })],
+    });
+    const seen = renderContext(client);
+    await waitFor(() => expect(ctx(seen).running).toHaveLength(1));
+
+    client.failVersion = true;
+    await waitFor(() => expect(ctx(seen).status.connected).toBe(false));
+    // A stale residency list would read as fact; say nothing instead.
+    expect(ctx(seen).running).toEqual([]);
+  });
+});
+
+describe("chat: thinking, options and images", () => {
+  /** A provider with one loaded model and an open session on it. */
+  async function withSession(client: FakeClient) {
+    const seen = renderContext(client, 1_000_000);
+    await waitFor(() => expect(ctx(seen).loaded?.variant).toBe("llama3.1:8b"));
+    act(() => ctx(seen).newChat());
+    await waitFor(() => expect(ctx(seen).activeSessionId).not.toBeNull());
+    return seen;
+  }
+
+  function loadedClient(options: ConstructorParameters<typeof FakeClient>[0] = {}) {
+    return new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })],
+      ...options,
+    });
+  }
+
+  it("accumulates thinking into its own field, never into content", async () => {
+    const client = loadedClient({
+      chatChunks: [
+        { content: "", thinking: "weigh ", done: false },
+        { content: "", thinking: "options", done: false },
+        { content: "Use ", done: false },
+        { content: "git reset.", done: true },
+      ],
+    });
+    const seen = await withSession(client);
+
+    await act(async () => {
+      await ctx(seen).sendMessage("how do I undo a commit");
+    });
+
+    const session = ctx(seen).sessions[0];
+    const reply = session.messages[session.messages.length - 1];
+    expect(reply.role).toBe("assistant");
+    expect(reply.content).toBe("Use git reset.");
+    expect(reply.thinking).toBe("weigh options");
+  });
+
+  it("strips prior reasoning from the outbound history", async () => {
+    const client = loadedClient({
+      chatChunks: [{ content: "first", thinking: "hmm", done: true }],
+    });
+    const seen = await withSession(client);
+
+    await act(async () => {
+      await ctx(seen).sendMessage("one");
+    });
+    await act(async () => {
+      await ctx(seen).sendMessage("two");
+    });
+
+    // Ollama does not take reasoning back as context — the second request
+    // must carry the assistant's content and nothing else.
+    expect(client.chatCalls[1].messages).toEqual([
+      { role: "user", content: "one" },
+      { role: "assistant", content: "first" },
+      { role: "user", content: "two" },
+    ]);
+  });
+
+  it("sends the session's think level and options on every request", async () => {
+    const client = loadedClient({ chatChunks: [{ content: "ok", done: true }] });
+    const seen = await withSession(client);
+    const sessionId = ctx(seen).activeSessionId as string;
+
+    act(() => {
+      ctx(seen).setSessionThink(sessionId, "medium");
+      ctx(seen).setSessionOptions(sessionId, { temperature: 0.2, numCtx: 4096 });
+    });
+
+    await act(async () => {
+      await ctx(seen).sendMessage("one");
+    });
+    await act(async () => {
+      await ctx(seen).sendMessage("two");
+    });
+
+    expect(client.chatCalls).toHaveLength(2);
+    for (const call of client.chatCalls) {
+      expect(call.think).toBe("medium");
+      expect(call.options).toEqual({ temperature: 0.2, numCtx: 4096 });
+    }
+    // Persisted with the session (SPEC §6).
+    expect(ctx(seen).sessions[0].think).toBe("medium");
+    expect(ctx(seen).sessions[0].options).toEqual({ temperature: 0.2, numCtx: 4096 });
+  });
+
+  it("leaves think and options undefined when the session sets neither", async () => {
+    const client = loadedClient({ chatChunks: [{ content: "ok", done: true }] });
+    const seen = await withSession(client);
+    await act(async () => {
+      await ctx(seen).sendMessage("hi");
+    });
+    expect(client.chatCalls[0].think).toBeUndefined();
+    expect(client.chatCalls[0].options).toBeUndefined();
+  });
+
+  it("sends images on the wire, keeps thumbs for the transcript, and holds thumbs alone after a reload", async () => {
+    const client = loadedClient({ chatChunks: [{ content: "a cat", done: true }] });
+    const seen = await withSession(client);
+
+    await act(async () => {
+      await ctx(seen).sendMessage("what is this", ["QkFTRTY0"], [
+        "data:image/png;base64,QkFTRTY0",
+      ]);
+    });
+
+    expect(client.chatCalls[0].messages).toEqual([
+      { role: "user", content: "what is this", images: ["QkFTRTY0"] },
+    ]);
+    const stored = ctx(seen).sessions[0].messages[0];
+    expect(stored.images).toEqual(["QkFTRTY0"]);
+    expect(stored.imageThumbs).toEqual(["data:image/png;base64,QkFTRTY0"]);
+  });
+
+  it("still takes a single argument — existing callers are unaffected", async () => {
+    const client = loadedClient({ chatChunks: [{ content: "hi", done: true }] });
+    const seen = await withSession(client);
+    await act(async () => {
+      await ctx(seen).sendMessage("plain text only");
+    });
+    expect(client.chatCalls[0].messages).toEqual([
+      { role: "user", content: "plain text only" },
+    ]);
+  });
+
+  it("derives the full timing breakdown, keeping tokPerSec as it was", async () => {
+    const client = loadedClient({
+      chatChunks: [
+        {
+          content: "done",
+          done: true,
+          stats: {
+            evalCount: 42,
+            evalDurationNs: 2_000_000_000,
+            promptEvalCount: 11,
+            promptEvalDurationNs: 500_000_000,
+            loadDurationNs: 1_500_000_000,
+            totalDurationNs: 4_000_000_000,
+          },
+        },
+      ],
+    });
+    const seen = await withSession(client);
+    await act(async () => {
+      await ctx(seen).sendMessage("hi");
+    });
+
+    const stats = ctx(seen).lastStats;
+    expect(stats?.sessionId).toBe(ctx(seen).sessions[0].id);
+    expect(stats?.tokPerSec).toBe(21);
+    expect(stats?.evalCount).toBe(42);
+    expect(stats?.promptTokPerSec).toBe(22);
+    expect(stats?.promptEvalCount).toBe(11);
+    expect(stats?.contextTokens).toBe(53);
+    expect(stats?.loadMs).toBe(1500);
+    expect(stats?.totalMs).toBe(4000);
+  });
+
+  it("reports null, not zero, for timings an older server omits", async () => {
+    const client = loadedClient({
+      chatChunks: [
+        { content: "done", done: true, stats: { evalCount: 8, evalDurationNs: 1_000_000_000 } },
+      ],
+    });
+    const seen = await withSession(client);
+    await act(async () => {
+      await ctx(seen).sendMessage("hi");
+    });
+
+    const stats = ctx(seen).lastStats;
+    expect(stats?.tokPerSec).toBe(8);
+    expect(stats?.promptTokPerSec).toBeNull();
+    expect(stats?.promptEvalCount).toBeNull();
+    expect(stats?.contextTokens).toBeNull();
+    expect(stats?.loadMs).toBeNull();
+    expect(stats?.totalMs).toBeNull();
   });
 });

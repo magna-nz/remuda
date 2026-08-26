@@ -1,0 +1,89 @@
+/* Thinking disclosure (docs/mockup-proposals.html §03: .think / .think-h / .think-b). */
+
+.think {
+  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--ember-tint) 55%, var(--surface));
+  border-radius: 10px;
+  margin-bottom: 8px;
+  overflow: hidden;
+  max-width: 520px;
+}
+
+.think-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  padding: 7px 11px;
+  text-align: left;
+  color: var(--ember-ink);
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.think-h:disabled {
+  cursor: default;
+}
+
+.think-h .chev {
+  margin-left: auto;
+  transition: transform 0.15s;
+  display: inline-flex;
+}
+
+.think-h .chev svg {
+  width: 13px;
+  height: 13px;
+  display: block;
+}
+
+.think.open .think-h .chev {
+  transform: rotate(180deg);
+}
+
+.think-h > svg {
+  width: 13px;
+  height: 13px;
+  flex: 0 0 auto;
+}
+
+.think-b {
+  padding: 9px 12px 11px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--muted);
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.think.live .think-h {
+  color: var(--muted);
+}
+
+.rspin {
+  width: 12px;
+  height: 12px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--ember);
+  display: inline-block;
+  animation: think-spin 0.7s linear infinite;
+}
+
+@keyframes think-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rspin {
+    animation: none;
+  }
+}

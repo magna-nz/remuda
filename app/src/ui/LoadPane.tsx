@@ -17,7 +17,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import "./LoadPane.css";
 import { useRemuda } from "./state";
+import { Capabilities } from "./Capabilities";
 import { displayKey, groupByModel, variantCount, type ModelEntry, type QuantOption } from "../models/grouping";
+import type { RunningModel } from "../api/types";
 
 function shortTag(tag: string): string {
   return tag.endsWith(":latest") ? tag.slice(0, -":latest".length) : tag;
@@ -34,6 +36,22 @@ function formatSize(bytes: number): string {
   return `${Math.round(bytes / 1_000_000)} MB`;
 }
 
+/**
+ * The Expires cell (SPEC §5.1, mockup-proposals.html §01): a live countdown
+ * to `expiresAt`, floored at zero rather than going negative — the poll
+ * clears `running` shortly after it actually lapses. `null` is an infinite
+ * `keep_alive`, not a broken timestamp.
+ */
+function formatCountdown(expiresAt: string | null, nowMs: number): string {
+  if (expiresAt === null) return "never";
+  const target = Date.parse(expiresAt);
+  if (Number.isNaN(target)) return "—";
+  const remainingSec = Math.max(0, Math.floor((target - nowMs) / 1000));
+  const m = Math.floor(remainingSec / 60);
+  const s = remainingSec % 60;
+  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+}
+
 type LoadPhase = "idle" | "loading" | "ejecting" | "done";
 
 export function LoadPane() {
@@ -41,6 +59,7 @@ export function LoadPane() {
     models,
     groups,
     loaded,
+    running,
     load,
     loadPaneOpen,
     closeLoadPane,
@@ -55,6 +74,15 @@ export function LoadPane() {
   } = useRemuda();
 
   const entries = useMemo(() => groupByModel(groups), [groups]);
+  /**
+   * What's actually in memory (SPEC §5.1's runtime strip), independent of
+   * the pane's current selection — the same rule Eject already follows: it
+   * names whatever is loaded, not whatever the pane happens to be showing.
+   */
+  const runningEntry: RunningModel | null = useMemo(
+    () => (loaded ? (running.find((r) => r.tag === loaded.variant) ?? null) : null),
+    [running, loaded],
+  );
 
   const [step, setStep] = useState<"list" | "detail">("list");
   /** The chosen quant's tag — `base` in the store's LoadedSelection. */
@@ -67,6 +95,14 @@ export function LoadPane() {
   /** A tuning dropped by a quant switch, so the pane can say why. */
   const [droppedVariant, setDroppedVariant] = useState<string | null>(null);
   const seeded = useRef(false);
+  /** Clock for the Expires countdown; ticks once a second while something's loaded. */
+  const [nowMs, setNowMs] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (runningEntry === null || runningEntry.expiresAt === null) return;
+    const id = window.setInterval(() => setNowMs(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [runningEntry]);
 
   // Closing resets everything, so reopening re-derives from whatever is
   // loaded then rather than from a stale prior pick. Opening on a loaded
@@ -97,6 +133,30 @@ export function LoadPane() {
   const entry = entries.find((e) => e.quants.some((q) => q.tag === quantTag)) ?? null;
   const quant = entry?.quants.find((q) => q.tag === quantTag) ?? null;
   const isReload = loaded?.variant === variantTag;
+
+  // Runtime strip (SPEC §5.1, mockup-proposals.html §01). sizeBytes === 0 is
+  // "the server said nothing useful" — no percentage, no bar, no split.
+  const gpuPct =
+    runningEntry && runningEntry.sizeBytes > 0
+      ? Math.round((runningEntry.sizeVramBytes / runningEntry.sizeBytes) * 100)
+      : null;
+  const spilling =
+    runningEntry !== null && runningEntry.sizeBytes > 0 && runningEntry.sizeVramBytes < runningEntry.sizeBytes;
+  const vramBytes = runningEntry?.sizeVramBytes ?? 0;
+  const ramBytes = runningEntry ? Math.max(0, runningEntry.sizeBytes - runningEntry.sizeVramBytes) : 0;
+  const gpuBarPct = runningEntry && runningEntry.sizeBytes > 0 ? (vramBytes / runningEntry.sizeBytes) * 100 : 0;
+  const cpuBarPct = spilling ? 100 - gpuBarPct : 0;
+  // The model's trained max, for "used / max" — looked up in the flat model
+  // list rather than QuantOption, which doesn't carry contextLength.
+  const runningMaxContext = runningEntry
+    ? (models.find((m) => m.tag === runningEntry.tag)?.contextLength ?? null)
+    : null;
+  // Eject's size (SPEC §5.1c) is the same lookup the strip uses — both are
+  // about what's in memory, not the pane's current selection. A reported 0
+  // is "the server didn't say", exactly as it is for the GPU split above, so
+  // it falls back to the plain label rather than promising to free 0 MB.
+  const ejectSizeLabel =
+    runningEntry && runningEntry.sizeBytes > 0 ? formatSize(runningEntry.sizeBytes) : null;
 
   function drillIn(target: ModelEntry) {
     // Prefer the quant that's already loaded, so reopening a model lands on
@@ -297,6 +357,11 @@ export function LoadPane() {
                   visible.map((e) => {
                     const tuned = variantCount(e);
                     const live = loaded !== null && e.quants.some((q) => q.tag === loaded.base);
+                    // Capabilities are per-installed-tag (POST /api/show), not
+                    // per derived model — the first quant stands in for the
+                    // whole row, same as the glyph and the "N quants" count.
+                    const firstTag = e.quants[0]?.tag;
+                    const capabilities = firstTag ? (models.find((m) => m.tag === firstTag)?.capabilities ?? []) : [];
                     return (
                       <button key={e.key + e.quants[0]?.tag} type="button" className={`pmodel${live ? " active" : ""}`} onClick={() => drillIn(e)}>
                         <span className="pg" aria-hidden="true">
@@ -308,6 +373,7 @@ export function LoadPane() {
                             {e.quants.length} quant{e.quants.length === 1 ? "" : "s"} ·{" "}
                             {tuned === 0 ? "base only" : `${tuned} Modelfile${tuned === 1 ? "" : "s"}`}
                           </span>
+                          <Capabilities capabilities={capabilities} />
                         </span>
                         {/* Both pills can show at once: "tuned" is a fact
                             about the model, "loaded" about right now. A
@@ -335,6 +401,76 @@ export function LoadPane() {
             </div>
           ) : (
             <>
+              {/* Runtime strip (SPEC §5.1, mockup-proposals.html §01): what's
+                  actually in memory. Independent of the entry on screen —
+                  same rule as Eject (it names whatever is loaded, not
+                  whatever the pane is showing). */}
+              {runningEntry !== null && (
+                <div className="pfield">
+                  <label>In memory now</label>
+                  <div className="rt">
+                    <div className="rt-top">
+                      <span className="rt-tag">{runningEntry.tag}</span>
+                      {gpuPct !== null && (
+                        <span className={`rt-badge rt-inline${spilling ? " spill" : ""}`}>{gpuPct}% GPU</span>
+                      )}
+                    </div>
+                    {runningEntry.sizeBytes > 0 && (
+                      <>
+                        <div className="rt-bar">
+                          <i className="gpu" style={{ width: `${gpuBarPct}%` }} />
+                          {spilling && <i className="cpu" style={{ width: `${cpuBarPct}%` }} />}
+                        </div>
+                        <div className="rt-legend">
+                          <span>
+                            <i className="rt-dot gpu" aria-hidden="true" />
+                            VRAM {formatSize(vramBytes)}
+                          </span>
+                          {spilling && (
+                            <span>
+                              <i className="rt-dot cpu" aria-hidden="true" />
+                              RAM {formatSize(ramBytes)}
+                            </span>
+                          )}
+                        </div>
+                      </>
+                    )}
+                    <div className="rt-grid">
+                      <div className="rt-cell">
+                        <div className="k">Context</div>
+                        <div className="v">
+                          {runningEntry.contextLength === null ? "—" : runningEntry.contextLength.toLocaleString("en-US")}
+                          {runningMaxContext !== null && runningMaxContext !== runningEntry.contextLength && (
+                            <small> / {runningMaxContext.toLocaleString("en-US")}</small>
+                          )}
+                        </div>
+                      </div>
+                      <div className="rt-cell">
+                        <div className="k">Expires</div>
+                        <div className="v">{formatCountdown(runningEntry.expiresAt, nowMs)}</div>
+                      </div>
+                      <div className="rt-cell">
+                        <div className="k">Total size</div>
+                        <div className="v">
+                          {runningEntry.sizeBytes > 0 ? formatSize(runningEntry.sizeBytes) : "—"}
+                        </div>
+                      </div>
+                    </div>
+                    {spilling && (
+                      <div className="rt-warn">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                          <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+                        </svg>
+                        <div>
+                          <b>{formatSize(ramBytes)} is running on the CPU.</b> Expect a large drop in tok/s. Try a
+                          smaller quant, or a lower <code>num_ctx</code>.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="pfield">
                 <label htmlFor="pane-quants">Quantisation</label>
                 <div className="pquants" id="pane-quants">
@@ -448,7 +584,7 @@ export function LoadPane() {
                         <path d="M12 4l7 9H5z" />
                         <path d="M5 18h14" />
                       </svg>
-                      {phase === "ejecting" ? "Ejecting…" : "Eject"}
+                      {phase === "ejecting" ? "Ejecting…" : `Eject${ejectSizeLabel ? ` ${ejectSizeLabel}` : ""}`}
                     </button>
                   )}
                 </div>

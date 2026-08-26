@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createClient } from "./client";
 import { DEFAULT_BASE_URL } from "./types";
-import type { ChatChunk } from "./types";
+import type { ChatChunk, ChatMessage } from "./types";
 
 /* ── fetch stubbing helpers (no live server) ────────────────────────────── */
 
@@ -156,6 +156,8 @@ describe("listModels", () => {
         base: null,
         isVariant: false,
         modifiedAt: "2026-08-01T10:00:00Z",
+        // /api/tags carries no capabilities; only the listGroups sweep can.
+        capabilities: [],
       },
       {
         tag: "gemma2:9b",
@@ -168,8 +170,123 @@ describe("listModels", () => {
         base: null,
         isVariant: false,
         modifiedAt: "2026-07-15T09:00:00Z",
+        capabilities: [],
       },
     ]);
+  });
+});
+
+/* ── listRunning() / listModelsWithRunning() ────────────────────────────── */
+
+describe("listRunning", () => {
+  it("maps the full /api/ps readout", async () => {
+    stubFetch({
+      "/api/ps": () =>
+        jsonResponse({
+          models: [
+            {
+              name: "llama3.1:8b",
+              size: 6_000_000_000,
+              size_vram: 4_500_000_000,
+              context_length: 8192,
+              expires_at: "2026-08-26T12:05:00Z",
+            },
+          ],
+        }),
+    });
+    await expect(createClient().listRunning()).resolves.toEqual([
+      {
+        tag: "llama3.1:8b",
+        sizeBytes: 6_000_000_000,
+        sizeVramBytes: 4_500_000_000,
+        contextLength: 8192,
+        expiresAt: "2026-08-26T12:05:00Z",
+      },
+    ]);
+  });
+
+  it("floors the fields an older server omits — 0/null, never NaN", async () => {
+    stubFetch({
+      "/api/ps": () => jsonResponse({ models: [{ name: "old:1b" }] }),
+    });
+    const [model] = await createClient().listRunning();
+    expect(model).toEqual({
+      tag: "old:1b",
+      sizeBytes: 0,
+      sizeVramBytes: 0,
+      contextLength: null,
+      expiresAt: null,
+    });
+    expect(Number.isNaN(model.sizeBytes)).toBe(false);
+    expect(Number.isNaN(model.sizeVramBytes)).toBe(false);
+  });
+
+  it("reads size_vram: 0 as CPU-only rather than as missing", async () => {
+    stubFetch({
+      "/api/ps": () =>
+        jsonResponse({ models: [{ name: "cpu:1b", size: 1_000, size_vram: 0 }] }),
+    });
+    const [model] = await createClient().listRunning();
+    expect(model.sizeBytes).toBe(1_000);
+    expect(model.sizeVramBytes).toBe(0);
+  });
+
+  it("treats the year-1 expires_at sentinel as no expiry at all", async () => {
+    // Ollama writes Go's zero time for an infinite keep_alive.
+    stubFetch({
+      "/api/ps": () =>
+        jsonResponse({
+          models: [
+            { name: "forever:1b", expires_at: "0001-01-01T00:00:00Z" },
+            { name: "junk:1b", expires_at: "not a date" },
+            { name: "blank:1b", expires_at: "" },
+          ],
+        }),
+    });
+    const running = await createClient().listRunning();
+    expect(running.map((m) => m.expiresAt)).toEqual([null, null, null]);
+  });
+
+  it("empty /api/ps is an empty list, not a throw", async () => {
+    stubFetch({ "/api/ps": () => jsonResponse({}) });
+    await expect(createClient().listRunning()).resolves.toEqual([]);
+  });
+});
+
+describe("listModelsWithRunning", () => {
+  it("returns both readouts from the same two requests listModels makes", async () => {
+    const stub = stubFetch({
+      "/api/tags": () => jsonResponse(TAGS),
+      "/api/ps": () =>
+        jsonResponse({
+          models: [
+            {
+              name: "llama3.1:8b",
+              size: 6_000_000_000,
+              size_vram: 6_000_000_000,
+              context_length: 4096,
+              expires_at: "2026-08-26T12:05:00Z",
+            },
+          ],
+        }),
+    });
+    const { models, running } = await createClient().listModelsWithRunning();
+    expect(models.find((m) => m.tag === "llama3.1:8b")?.isLoaded).toBe(true);
+    expect(models.find((m) => m.tag === "gemma2:9b")?.isLoaded).toBe(false);
+    expect(running).toEqual([
+      {
+        tag: "llama3.1:8b",
+        sizeBytes: 6_000_000_000,
+        sizeVramBytes: 6_000_000_000,
+        contextLength: 4096,
+        expiresAt: "2026-08-26T12:05:00Z",
+      },
+    ]);
+    // The whole point: no third request for the runtime numbers.
+    expect(stub.mock.calls).toHaveLength(2);
+    expect(
+      stub.mock.calls.filter((call) => String(call[0]).endsWith("/api/ps")),
+    ).toHaveLength(1);
   });
 });
 
@@ -290,6 +407,45 @@ describe("listGroups", () => {
     );
     expect(showCalls).toHaveLength(2);
   });
+
+  it("fills capabilities from the cached show response, without extra requests", async () => {
+    const shows: Record<string, unknown> = {
+      "llama3.1:8b": {
+        modelfile: "FROM /blobs/sha256-abc",
+        capabilities: ["completion", "tools", "thinking"],
+      },
+      // No capabilities field at all — an older server.
+      "gemma2:9b": { modelfile: "FROM /blobs/sha256-def" },
+      // Malformed: not an array of strings. Defaults, doesn't throw.
+      "weird:1b": { modelfile: "FROM /blobs/sha256-fff", capabilities: "tools" },
+    };
+    const tags = {
+      models: Object.keys(shows).map((name) => ({
+        name,
+        size: 1,
+        modified_at: "2026-08-01T00:00:00Z",
+        details: { family: "llama", parameter_size: "8B", quantization_level: "Q4" },
+      })),
+    };
+    const stub = stubFetch({
+      "/api/tags": () => jsonResponse(tags),
+      "/api/ps": () => jsonResponse({ models: [] }),
+      "/api/show": (init) => jsonResponse(shows[String(bodyOf(init).model)]),
+    });
+    const groups = await createClient().listGroups();
+    const byTag = new Map(groups.map((g) => [g.base.tag, g.base]));
+    expect(byTag.get("llama3.1:8b")?.capabilities).toEqual([
+      "completion",
+      "tools",
+      "thinking",
+    ]);
+    expect(byTag.get("gemma2:9b")?.capabilities).toEqual([]);
+    expect(byTag.get("weird:1b")?.capabilities).toEqual([]);
+    // One /api/show per model and no more — capabilities ride the same sweep.
+    expect(
+      stub.mock.calls.filter((call) => String(call[0]).endsWith("/api/show")),
+    ).toHaveLength(3);
+  });
 });
 
 /* ── show() ─────────────────────────────────────────────────────────────── */
@@ -321,6 +477,16 @@ describe("show", () => {
       parameterSize: "8.0B",
       quantizationLevel: "Q4_K_M",
     });
+    expect(detail.capabilities).toEqual([]);
+  });
+
+  it("carries capabilities through, and defaults to [] when absent", async () => {
+    stubFetch({
+      "/api/show": () =>
+        jsonResponse({ modelfile: "FROM x", capabilities: ["completion", "vision"] }),
+    });
+    const detail = await createClient().show("llava:7b");
+    expect(detail.capabilities).toEqual(["completion", "vision"]);
   });
 });
 
@@ -392,6 +558,144 @@ describe("chat", () => {
       name: "AbortError",
     });
     expect(stub.mock.calls[0][1]?.signal).toBe(controller.signal);
+  });
+
+  /** One done-line stub; returns the body the client sent. */
+  async function chatBody(
+    opts: Parameters<ReturnType<typeof createClient>["chat"]>[2],
+    messages: ChatMessage[] = [{ role: "user", content: "hi" }],
+  ): Promise<Record<string, unknown>> {
+    const stub = stubFetch({
+      "/api/chat": () => streamResponse(['{"message":{"content":"ok"},"done":true}\n']),
+    });
+    await collect(createClient().chat("m:1b", messages, opts));
+    return bodyOf(stub.mock.calls[0][1]);
+  }
+
+  it("omits `think` when unset, but sends false for an explicit \"off\"", async () => {
+    // Ollama declares `think` omitempty on a nil-distinguishable type, so
+    // absent means "model's default" — which is reasoning ON for models it
+    // treats as always-thinking. Omitting for an explicit "off" would leave
+    // the control unable to do the one thing it is named for.
+    expect(await chatBody({ keepAlive: "5m" })).not.toHaveProperty("think");
+    expect(await chatBody({ keepAlive: "5m", think: "off" })).toMatchObject({ think: false });
+  });
+
+  it("sends a set think level verbatim", async () => {
+    for (const level of ["low", "medium", "high"] as const) {
+      expect(await chatBody({ keepAlive: "5m", think: level })).toMatchObject({
+        think: level,
+      });
+    }
+  });
+
+  it("maps run options to snake_case and drops the keys that are unset", async () => {
+    const body = await chatBody({
+      keepAlive: "5m",
+      options: {
+        temperature: 0.7,
+        topP: 0.9,
+        topK: 40,
+        seed: 42,
+        numPredict: 256,
+        repeatPenalty: 1.1,
+        numCtx: 8192,
+      },
+    });
+    expect(body.options).toEqual({
+      temperature: 0.7,
+      top_p: 0.9,
+      top_k: 40,
+      seed: 42,
+      num_predict: 256,
+      repeat_penalty: 1.1,
+      num_ctx: 8192,
+    });
+  });
+
+  it("omits explicitly-undefined option keys — absent is not the same as null", async () => {
+    const body = await chatBody({
+      keepAlive: "5m",
+      options: { temperature: 0.2, topP: undefined, numCtx: undefined },
+    });
+    // Not toEqual: toEqual would let an `undefined`-valued key through.
+    expect(Object.keys(body.options as object)).toEqual(["temperature"]);
+    expect(JSON.stringify(body.options)).toBe('{"temperature":0.2}');
+  });
+
+  it("omits the whole options object when nothing is set", async () => {
+    expect(await chatBody({ keepAlive: "5m", options: {} })).not.toHaveProperty("options");
+    expect(await chatBody({ keepAlive: "5m" })).not.toHaveProperty("options");
+  });
+
+  it("passes images through and never sends thumbs or reasoning back", async () => {
+    const body = await chatBody({ keepAlive: "5m" }, [
+      {
+        role: "assistant",
+        content: "done",
+        // Ollama does not take reasoning back as context.
+        thinking: "let me think...",
+      },
+      {
+        role: "user",
+        content: "what is this",
+        images: ["QkFTRTY0"],
+        imageThumbs: ["data:image/png;base64,QkFTRTY0"],
+      },
+    ]);
+    expect(body.messages).toEqual([
+      { role: "assistant", content: "done" },
+      { role: "user", content: "what is this", images: ["QkFTRTY0"] },
+    ]);
+    expect(JSON.stringify(body.messages)).not.toContain("thinking");
+    expect(JSON.stringify(body.messages)).not.toContain("data:image");
+  });
+
+  it("keeps thinking deltas out of content and reports the full timing breakdown", async () => {
+    stubFetch({
+      "/api/chat": () =>
+        streamResponse([
+          '{"message":{"thinking":"first "},"done":false}\n',
+          '{"message":{"thinking":"second","content":"Hi"},"done":false}\n',
+          '{"message":{"content":" there"},"done":true,"eval_count":42,' +
+            '"eval_duration":2000000000,"prompt_eval_count":11,' +
+            '"prompt_eval_duration":500000000,"load_duration":1500000000,' +
+            '"total_duration":4000000000}\n',
+        ]),
+    });
+    const chunks = await collect(
+      createClient().chat("m:1b", [{ role: "user", content: "hi" }], { keepAlive: "5m" }),
+    );
+    expect(chunks).toEqual<ChatChunk[]>([
+      { content: "", thinking: "first ", done: false },
+      { content: "Hi", thinking: "second", done: false },
+      {
+        content: " there",
+        done: true,
+        stats: {
+          evalCount: 42,
+          evalDurationNs: 2000000000,
+          promptEvalCount: 11,
+          promptEvalDurationNs: 500000000,
+          loadDurationNs: 1500000000,
+          totalDurationNs: 4000000000,
+        },
+      },
+    ]);
+  });
+
+  it("leaves the newer timing fields absent when the server omits them", async () => {
+    stubFetch({
+      "/api/chat": () =>
+        streamResponse([
+          '{"message":{"content":"x"},"done":true,"eval_count":8,"eval_duration":1000000000}\n',
+        ]),
+    });
+    const [chunk] = await collect(
+      createClient().chat("m:1b", [{ role: "user", content: "hi" }], { keepAlive: "5m" }),
+    );
+    expect(chunk.stats).toEqual({ evalCount: 8, evalDurationNs: 1000000000 });
+    expect(chunk.stats).not.toHaveProperty("promptEvalCount");
   });
 });
 
@@ -468,6 +772,68 @@ describe("error handling", () => {
       );
     };
     await expect(iterate()).rejects.toThrow(/invalid parameter: num_ctx/);
+  });
+
+  it("create() sends quantize in the structured body", async () => {
+    let body: Record<string, unknown> | null = null;
+    stubFetch({
+      "/api/create": (init) => {
+        body = bodyOf(init);
+        return streamResponse(['{"status":"success"}\n']);
+      },
+    });
+    await collect(
+      createClient().create("small:latest", {
+        from: "llama3.1:8b",
+        quantize: "q4_K_M",
+        rawModelfile: "FROM llama3.1:8b",
+      }),
+    );
+    expect(body).toMatchObject({ model: "small:latest", quantize: "q4_K_M" });
+  });
+
+  it("create() omits quantize when unset", async () => {
+    let body: Record<string, unknown> | null = null;
+    stubFetch({
+      "/api/create": (init) => {
+        body = bodyOf(init);
+        return streamResponse(['{"status":"success"}\n']);
+      },
+    });
+    await collect(
+      createClient().create("plain:latest", { from: "x", rawModelfile: "FROM x" }),
+    );
+    expect(body).not.toHaveProperty("quantize");
+  });
+
+  it("create() refuses the legacy fallback when quantize is set, rather than dropping it", async () => {
+    // The legacy `modelfile` string can't express quantisation. Falling back
+    // would succeed while producing an UNquantised model under the name the
+    // user asked to quantise — so the original error must propagate instead.
+    const bodies: Record<string, unknown>[] = [];
+    stubFetch({
+      "/api/create": (init) => {
+        const body = bodyOf(init);
+        bodies.push(body);
+        // A server old enough to reject `from` would happily take `modelfile`.
+        if ("modelfile" in body) {
+          return streamResponse(['{"status":"success"}\n']);
+        }
+        return jsonResponse({ error: "unknown field from" }, 400);
+      },
+    });
+    const iterate = async () => {
+      await collect(
+        createClient().create("small:latest", {
+          from: "llama3.1:8b",
+          quantize: "q4_K_M",
+          rawModelfile: "FROM llama3.1:8b",
+        }),
+      );
+    };
+    await expect(iterate()).rejects.toThrow(/unknown field from/);
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]).not.toHaveProperty("modelfile");
   });
 
   it("create() surfaces a 400 with the server's error text", async () => {
