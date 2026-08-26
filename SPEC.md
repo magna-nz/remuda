@@ -79,14 +79,14 @@ reach the server, it is mostly inert and says so plainly (§9).
 ┌ Global nav ──────────────────────────────────────────────┐
 │ ● Remuda │ [ llama3.1:8b · Original ▾ ]   [connected] │   ← model control
 ├──────────────┬───────────────────────────────────────────┤
-│ Chats        │ Chat · Modelfile        Pull · Settings   │  ← section tabs
+│ Chats        │ Chat · Modelfile                          │  ← section tabs
 │              │                                            │
 │ + New chat   │  (Chat, the in-context Modelfile editor,   │
 │ ─ Recent     │   Pull, or Settings — the Chats list stays │
 │  Undo a…  ●  │   visible for all of them)                 │
 │  Explain… ○  │                                            │
 │  …           │                                            │
-│ Pull · ⚙     │                                            │
+│ Get Models·⚙ │                                            │
 └──────────────┴───────────────────────────────────────────┘
 ```
 
@@ -96,7 +96,8 @@ reach the server, it is mostly inert and says so plainly (§9).
 - **Chats (left):** the saved-session list; a persistent rail that stays
   visible on every surface — Pull and Settings open in the main area beside
   it, not over the whole window.
-- **Section tabs:** Chat · Modelfile · Pull · Settings.
+- **Section tabs:** Chat · Modelfile. Pull and Settings are *not*
+  tabs — they open from the Chats footer's **Get Models** button and gear.
 
 ## 5.1 Model control + load pane (global)
 
