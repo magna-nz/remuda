@@ -184,6 +184,22 @@ interface RemudaContextValue {
 
 const RemudaContext = createContext<RemudaContextValue | null>(null);
 
+/**
+ * Identity of the installed set: which tags exist and when each was last
+ * written. `modifiedAt` is what makes a re-pull of the same tag visible —
+ * the name alone wouldn't change.
+ */
+function signatureOf(models: Model[]): string {
+  return models
+    .map((m) => `${m.tag}@${m.modifiedAt}`)
+    .sort()
+    .join("\n");
+}
+
+function signatureOfGroups(groups: ModelGroup[]): string {
+  return signatureOf(groups.flatMap((g) => [g.base, ...g.variants]));
+}
+
 function deriveLoaded(models: Model[]): LoadedSelection | null {
   const loadedModel = models.find((m) => m.isLoaded);
   if (!loadedModel) return null;
@@ -225,6 +241,8 @@ export function RemudaProvider({
   viewRef.current = view;
   const [loadPaneOpen, setLoadPaneOpen] = useState(false);
   const wasConnected = useRef(false);
+  /** Last observed installed-set signature; null forces a full rebuild. */
+  const installedSignature = useRef<string | null>(null);
 
   const [editorDraft, setEditorDraft] = useState<EditorDraft | null>(null);
   const [editorLoading, setEditorLoading] = useState(false);
@@ -273,45 +291,74 @@ export function RemudaProvider({
     };
   }, []);
 
-  /**
-   * Cheap loaded-state refresh: /api/tags + /api/ps only (no per-model
-   * /api/show sweep). Structural facts (bases, variants, context length)
-   * can't change from merely chatting, so remap isLoaded onto the groups
-   * we already have. Full refreshModels stays for create/delete/pull.
-   */
-  const refreshLoaded = useCallback(async () => {
-    const list = await client.listModels();
-    const loadedTags = new Set(list.filter((m) => m.isLoaded).map((m) => m.tag));
-    setGroups((prev) =>
-      prev.map((g) => ({
-        base: { ...g.base, isLoaded: loadedTags.has(g.base.tag) },
-        variants: g.variants.map((v) => ({ ...v, isLoaded: loadedTags.has(v.tag) })),
-      })),
-    );
-  }, [client]);
-
   const refreshModels = useCallback(async () => {
     const list = await client.listGroups();
     setGroups(list);
+    installedSignature.current = signatureOfGroups(list);
   }, [client]);
+
+  /**
+   * Cheap reconcile against the server: /api/tags + /api/ps only.
+   *
+   * Two jobs. Ollama loads on demand, so `isLoaded` drifts constantly and is
+   * remapped onto the groups we already have — structural facts (bases,
+   * variants, context length) can't change from merely chatting.
+   *
+   * But the *set* of installed models can change without Remuda doing
+   * anything: `ollama pull` or `ollama rm` in a terminal, or another client.
+   * Comparing the tag+modifiedAt signature catches that, and only then do we
+   * pay for the full listGroups sweep (one /api/show per model). Without
+   * this, a model pulled outside Remuda stayed invisible until the
+   * connection dropped and came back.
+   */
+  const syncModels = useCallback(async () => {
+    const list = await client.listModels();
+    if (signatureOf(list) !== installedSignature.current) {
+      await refreshModels();
+      return;
+    }
+    const loadedTags = new Set(list.filter((m) => m.isLoaded).map((m) => m.tag));
+    setGroups((prev) => {
+      // This runs on every poll tick. Returning `prev` unchanged when nothing
+      // actually loaded or unloaded lets React bail out, instead of handing
+      // every consumer fresh object identities twice a minute.
+      const changed = prev.some(
+        (g) =>
+          g.base.isLoaded !== loadedTags.has(g.base.tag) ||
+          g.variants.some((v) => v.isLoaded !== loadedTags.has(v.tag)),
+      );
+      if (!changed) return prev;
+      return prev.map((g) => ({
+        base: { ...g.base, isLoaded: loadedTags.has(g.base.tag) },
+        variants: g.variants.map((v) => ({ ...v, isLoaded: loadedTags.has(v.tag) })),
+      }));
+    });
+  }, [client, refreshModels]);
 
   const checkHealth = useCallback(async () => {
     try {
       const s = await client.version();
       setStatus(s);
       setChecked(true);
-      if (s.connected && !wasConnected.current) {
-        wasConnected.current = true;
-        await refreshModels().catch(() => {});
-      } else if (!s.connected) {
+      if (s.connected) {
+        if (!wasConnected.current) {
+          // (Re)connected: drop the signature so the sync below rebuilds the
+          // groups from scratch rather than trusting a pre-outage snapshot.
+          wasConnected.current = true;
+          installedSignature.current = null;
+        }
+        await syncModels().catch(() => {});
+      } else {
         wasConnected.current = false;
+        installedSignature.current = null;
       }
     } catch {
       setStatus({ connected: false, version: null });
       setChecked(true);
       wasConnected.current = false;
+      installedSignature.current = null;
     }
-  }, [client, refreshModels]);
+  }, [client, syncModels]);
 
   useEffect(() => {
     void checkHealth();
@@ -426,7 +473,7 @@ export function RemudaProvider({
         // Completed exchange: bump updatedAt (§6) and re-check /api/ps —
         // Ollama loads on demand, so the session's model may be loaded now.
         updateSession(sessionId, (s) => ({ ...s, updatedAt: new Date().toISOString() }));
-        void refreshLoaded().catch(() => {});
+        void syncModels().catch(() => {});
       } catch (err) {
         // Cancel keeps the partial reply and isn't an error (SPEC §5.3).
         const aborted =
@@ -440,7 +487,7 @@ export function RemudaProvider({
         setStreamingSessionId(null);
       }
     },
-    [activeSessionId, client, keepAlive, refreshLoaded, updateSession],
+    [activeSessionId, client, keepAlive, syncModels, updateSession],
   );
 
   // ---- Modelfile editor (SPEC §5.4, §8) ----

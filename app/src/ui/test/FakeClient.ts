@@ -133,7 +133,11 @@ export class FakeClient implements OllamaClient {
     return this.models;
   }
 
+  /** Counts the expensive /api/show sweep, so tests can assert it's rare. */
+  listGroupsCalls = 0;
+
   async listGroups(): Promise<ModelGroup[]> {
+    this.listGroupsCalls += 1;
     const bases = this.models.filter((m) => !m.isVariant);
     return bases.map((base) => ({
       base,
