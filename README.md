@@ -40,6 +40,13 @@ Distribution is **Homebrew, not a DMG** (see [`SPEC.md` §10](SPEC.md)):
 brew install --cask magna-nz/tap/remuda
 ```
 
+The build is unsigned (by design — no Apple Developer program). To skip the
+one-time Gatekeeper prompt, install with `--no-quarantine` instead:
+
+```bash
+brew install --cask --no-quarantine magna-nz/tap/remuda
+```
+
 This becomes available from the first tagged release (the tap repo,
 `magna-nz/homebrew-tap`, is created then — see
 [`packaging/homebrew/README.md`](packaging/homebrew/README.md)). Until a

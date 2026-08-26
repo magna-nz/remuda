@@ -22,9 +22,11 @@ cask "remuda" do
       brew install ollama
       ollama serve
 
-    This build is unsigned (no Apple Developer ID yet — see the signing
-    TODO in .github/workflows/release.yml). macOS Gatekeeper will refuse to
-    open it until you clear the quarantine attribute once, after install:
-      xattr -dr com.apple.quarantine /Applications/Remuda.app
+    This build is unsigned (deliberately — see the signing TODO in
+    .github/workflows/release.yml if that ever changes). macOS Gatekeeper
+    will balk once on first launch. Any ONE of these clears it:
+      - install with:  brew install --cask --no-quarantine magna-nz/tap/remuda
+      - or right-click Remuda.app -> Open -> Open, once
+      - or:  xattr -dr com.apple.quarantine /Applications/Remuda.app
   EOS
 end
