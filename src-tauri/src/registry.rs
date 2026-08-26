@@ -112,6 +112,10 @@ pub async fn probe_model(reference: String) -> Result<Probe, String> {
     let client = reqwest::Client::builder()
         .user_agent(concat!("Remuda/", env!("CARGO_PKG_VERSION")))
         .timeout(std::time::Duration::from_secs(10))
+        // The host is fixed and the path is built from a validated name; not
+        // following redirects keeps it that way, rather than letting a 3xx
+        // hand this request to somewhere we never intended to talk to.
+        .redirect(reqwest::redirect::Policy::none())
         .build()
         .map_err(|e| e.to_string())?;
 

@@ -1,5 +1,5 @@
 import "../chat/test/localStorage";
-import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "../App";
 import { PullView } from "./PullView";
@@ -14,9 +14,17 @@ function renderPull(client: FakeClient) {
   );
 }
 
-/** Wait for the first health check to populate the model list / connection. */
+/**
+ * Wait for the first health check to populate the model list / connection.
+ *
+ * Anchored on a catalog row's Pull button rather than the input: the input is
+ * never disabled (it searches a bundled file), so it makes a useless signal.
+ * `mixtral` is a model no test installs, so its row always offers Pull.
+ */
 async function untilChecked() {
-  await waitFor(() => expect(screen.getByLabelText("Model to pull")).toBeEnabled());
+  await waitFor(() =>
+    expect(within(catalogRow("mixtral")).getByRole("button", { name: "Pull" })).toBeEnabled(),
+  );
 }
 
 /**
@@ -178,13 +186,35 @@ describe("PullView", () => {
     await waitFor(() => expect(client.pullCalls).toEqual(["qwen3:14b"]));
   });
 
-  it("disables pull actions while disconnected", async () => {
+  it("disables pull actions while disconnected, but keeps search usable", async () => {
     const client = new FakeClient({ models: [], connected: false });
     renderPull(client);
 
-    await waitFor(() => expect(screen.getByLabelText("Model to pull")).toBeDisabled());
-    const pullableRow = catalogRow("llama3.2");
-    expect(within(pullableRow).getByRole("button", { name: "Pull" })).toBeDisabled();
+    await waitFor(() =>
+      expect(within(catalogRow("llama3.2")).getByRole("button", { name: "Pull" })).toBeDisabled(),
+    );
+    expect(barPullButton()).toBeDisabled();
+
+    // Searching a bundled JSON file needs no server (SPEC §5.5).
+    const input = screen.getByLabelText("Model to pull");
+    expect(input).toBeEnabled();
+    typeQuery("mixtral");
+    await waitFor(() => expect(screen.getByText("Matching")).toBeInTheDocument());
+  });
+
+  it("keeps search usable while a pull is streaming", async () => {
+    const client = new FakeClient({ models: [] });
+    renderPull(client);
+    await untilChecked();
+
+    submitPull("gemma2:9b");
+    await act(async () => {
+      client.emitPull({ status: "pulling manifest" });
+    });
+
+    expect(screen.getByLabelText("Model to pull")).toBeEnabled();
+    typeQuery("mixtral");
+    await waitFor(() => expect(screen.getByText("Matching")).toBeInTheDocument());
   });
 
   it("no pull in progress shows just the bar and the catalog (SPEC §5.5 empty state)", async () => {
@@ -302,6 +332,15 @@ describe("registry probe", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 600));
     expect(document.querySelector(".probe")).toBeNull();
+
+    // ...but the same query in the shell does render one, so this is really
+    // asserting the fallback and not just that the probe never works.
+    stubBridge(async () => ({ exists: true, totalBytes: 1, resolved: "library/llama3.2:latest" }));
+    cleanup();
+    renderPull(new FakeClient({ models: [] }));
+    await untilChecked();
+    typeQuery("llama3.2");
+    await waitFor(() => expect(document.querySelector(".probe")).not.toBeNull());
   });
 
   it("debounces to one lookup per pause, not one per keystroke", async () => {

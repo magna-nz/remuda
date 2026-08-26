@@ -301,10 +301,16 @@ Ollama needs no auth; a remote host requiring one would need an auth header
 from Settings (kept out of v1 by default — §12).
 
 One exception, and only one: the Pull pane's existence probe issues a `GET`
-to `registry.ollama.ai` (§5.5). It runs in Rust rather than the webview
-(no CORS headers there), is triggered by typing in the pull field, and sends
-nothing but the model name being checked. The build-time catalog scrape is
-not part of the shipped app.
+to `registry.ollama.ai` (§5.5). It runs in Rust rather than the webview (no
+CORS headers there) and sends only the reference being checked — no
+identifiers, no history.
+
+Worth being precise about what that means, since the field doubles as the
+catalog search box: a single-token query is indistinguishable from a model
+name, so typing `uncensored` to search the catalog does reach the registry.
+Anything that isn't a valid reference — anything with a space, and so every
+multi-word query — is rejected locally before a request is made. The
+build-time catalog scrape is not part of the shipped app.
 
 ## 8. States & rules
 

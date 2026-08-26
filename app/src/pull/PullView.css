@@ -271,7 +271,9 @@
   line-height: 1.5;
 }
 
-.regrow .caps {
+/* Needs `.rt` in the selector: `.regrow .rt div` above is more specific than
+   a bare `.regrow .caps`, and would otherwise win the margin. */
+.regrow .rt .caps {
   display: flex;
   flex-wrap: wrap;
   gap: 5px;

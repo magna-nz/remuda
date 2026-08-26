@@ -65,7 +65,11 @@ function decodeEntities(text: string): string {
   return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
     if (entity[0] === "#") {
       const codePoint = entity[1] === "x" || entity[1] === "X" ? parseInt(entity.slice(2), 16) : parseInt(entity.slice(1), 10);
-      return Number.isNaN(codePoint) ? match : String.fromCodePoint(codePoint);
+      // parseInt returns a finite number for "1114112", so Number.isNaN alone
+      // lets an out-of-range value through to String.fromCodePoint, which
+      // throws. A parser documented as total must not have that edge.
+      const valid = !Number.isNaN(codePoint) && codePoint >= 0 && codePoint <= 0x10ffff;
+      return valid ? String.fromCodePoint(codePoint) : match;
     }
     return entity in NAMED_ENTITIES ? NAMED_ENTITIES[entity] : match;
   });
@@ -149,7 +153,10 @@ export function searchCatalog(models: CatalogModel[], query: string): CatalogMod
   if (trimmed === "") return models;
 
   const lower = trimmed.toLowerCase();
-  const namePart = lower.split(":", 1)[0];
+  // "" for a query that starts with ':' — `name.startsWith("")` is true for
+  // everything, which would rank the whole catalog as a prefix match. Fall
+  // through to description matching instead of pretending everything matched.
+  const namePart = lower.split(":", 1)[0] || null;
 
   const RANK_EXACT = 0;
   const RANK_PREFIX = 1;
@@ -160,11 +167,11 @@ export function searchCatalog(models: CatalogModel[], query: string): CatalogMod
   for (const model of models) {
     const name = model.name.toLowerCase();
     let rank: number;
-    if (name === namePart) {
+    if (namePart !== null && name === namePart) {
       rank = RANK_EXACT;
-    } else if (name.startsWith(namePart)) {
+    } else if (namePart !== null && name.startsWith(namePart)) {
       rank = RANK_PREFIX;
-    } else if (name.includes(namePart)) {
+    } else if (namePart !== null && name.includes(namePart)) {
       rank = RANK_NAME_SUBSTRING;
     } else if (model.description.toLowerCase().includes(lower)) {
       rank = RANK_DESCRIPTION;

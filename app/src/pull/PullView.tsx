@@ -144,6 +144,12 @@ export function PullView() {
   const connected = status.connected;
   // SPEC §9: disable mutating pull actions while disconnected; one pull at a
   // time (usePull) disables new pulls while one is already streaming.
+  //
+  // The field itself is deliberately NOT in that set. It searches a bundled
+  // JSON file, which needs neither a server nor an idle pull — disabling it
+  // would strand the user with all 236 rows and no way to filter them for the
+  // length of a multi-gigabyte download. Every button that actually mutates
+  // anything is disabled independently below.
   const disableStart = !connected || busy;
 
   function handleSubmit() {
@@ -170,7 +176,6 @@ export function PullView() {
           placeholder="Search the library, or name a model to pull"
           spellCheck={false}
           aria-label="Model to pull"
-          disabled={disableStart}
         />
         <button
           type="button"

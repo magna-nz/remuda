@@ -57,7 +57,7 @@ describe("parseLibraryIndex", () => {
   });
 
   it("never classifies a size token (e.g. \"8b\", \"0.6b\") as a capability", () => {
-    const sizeTokenRe = /^\d+(\.\d+)?[bm]$/i;
+    const sizeTokenRe = /^(?:\d+x)?\d+(?:\.\d+)?[bm]$|^e\d+b$/i;
     for (const model of models) {
       for (const capability of model.capabilities) {
         expect(capability).not.toMatch(sizeTokenRe);
@@ -134,5 +134,29 @@ describe("size vs capability classification", () => {
     // shows up here as an unexpected token rather than passing silently.
     const seen = [...new Set(models.flatMap((m) => m.capabilities))].sort();
     expect(seen).toEqual([...KNOWN_CAPABILITIES].sort());
+  });
+});
+
+describe("parser and search edge cases", () => {
+  it("passes through an out-of-range numeric entity instead of throwing", () => {
+    // parseInt("1114112") is a finite number, so a Number.isNaN-only guard
+    // let this reach String.fromCodePoint, which throws RangeError.
+    for (const entity of ["&#1114112;", "&#x110000;", "&#-1;"]) {
+      const html = `<a href="/library/x"><h2>x</h2><p>${entity}</p></a>`;
+      expect(() => parseLibraryIndex(html)).not.toThrow();
+    }
+  });
+
+  it("does not treat a bare tag query as matching every model", () => {
+    // ":8b" splits to an empty name part, and "".startsWith() is true for
+    // every name — which ranked the entire catalog as a prefix match.
+    for (const query of [":", "::", ":8b"]) {
+      expect(searchCatalog(models, query).length).toBeLessThan(models.length);
+    }
+  });
+
+  it("survives regex metacharacters and a very long query", () => {
+    expect(() => searchCatalog(models, "(((((*+")).not.toThrow();
+    expect(searchCatalog(models, "a".repeat(200_000))).toEqual([]);
   });
 });
