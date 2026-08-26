@@ -122,17 +122,25 @@ pub async fn probe_model(reference: String) -> Result<Probe, String> {
     let res = client.get(&url).send().await.map_err(|e| e.to_string())?;
 
     if res.status() == reqwest::StatusCode::NOT_FOUND {
-        return Ok(Probe { exists: false, total_bytes: 0, resolved });
+        return Ok(Probe {
+            exists: false,
+            total_bytes: 0,
+            resolved,
+        });
     }
     if !res.status().is_success() {
         return Err(format!("registry returned {}", res.status()));
     }
 
     let manifest: Manifest = res.json().await.map_err(|e| e.to_string())?;
-    let total_bytes = manifest.layers.iter().map(|l| l.size).sum::<u64>()
-        + manifest.config.map_or(0, |c| c.size);
+    let total_bytes =
+        manifest.layers.iter().map(|l| l.size).sum::<u64>() + manifest.config.map_or(0, |c| c.size);
 
-    Ok(Probe { exists: true, total_bytes, resolved })
+    Ok(Probe {
+        exists: true,
+        total_bytes,
+        resolved,
+    })
 }
 
 #[cfg(test)]
@@ -142,13 +150,19 @@ mod tests {
     #[test]
     fn bare_name_defaults_namespace_and_tag() {
         let (ns, m, t) = parse_reference("llama3.2").unwrap();
-        assert_eq!((ns.as_str(), m.as_str(), t.as_str()), ("library", "llama3.2", "latest"));
+        assert_eq!(
+            (ns.as_str(), m.as_str(), t.as_str()),
+            ("library", "llama3.2", "latest")
+        );
     }
 
     #[test]
     fn explicit_tag_and_namespace() {
         let (ns, m, t) = parse_reference("some-user/my-model:q4_K_M").unwrap();
-        assert_eq!((ns.as_str(), m.as_str(), t.as_str()), ("some-user", "my-model", "q4_K_M"));
+        assert_eq!(
+            (ns.as_str(), m.as_str(), t.as_str()),
+            ("some-user", "my-model", "q4_K_M")
+        );
     }
 
     #[test]
