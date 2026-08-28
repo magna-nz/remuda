@@ -524,11 +524,13 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       }
       const res = await send("POST", "/api/chat", requestBody, opts.signal);
       const body = requireBody(res, "/api/chat");
+      let sawDone = false;
       for await (const line of ndjson<WireChatLine>(body, opts.signal)) {
         if (typeof line.error === "string") {
           throw new Error(line.error);
         }
         const done = line.done === true;
+        if (done) sawDone = true;
         const chunk: ChatChunk = {
           content: line.message?.content ?? "",
           done,
@@ -565,6 +567,9 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
           chunk.stats = stats;
         }
         yield chunk;
+      }
+      if (!sawDone) {
+        throw new Error("chat stream ended without a done message (connection interrupted?)");
       }
     },
 
@@ -620,11 +625,16 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         }
       }
       const body = requireBody(res, "/api/create");
+      let sawSuccess = false;
       for await (const line of ndjson<WireStreamLine>(body, signal)) {
         if (typeof line.error === "string") {
           throw new Error(line.error);
         }
+        if (line.status === "success") sawSuccess = true;
         yield { status: line.status ?? "" };
+      }
+      if (!sawSuccess) {
+        throw new Error("create stream ended without a success status (connection interrupted?)");
       }
     },
 
@@ -639,10 +649,12 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         signal,
       );
       const body = requireBody(res, "/api/pull");
+      let sawSuccess = false;
       for await (const line of ndjson<WireStreamLine>(body, signal)) {
         if (typeof line.error === "string") {
           throw new Error(line.error);
         }
+        if (line.status === "success") sawSuccess = true;
         const progress: PullProgress = { status: line.status ?? "" };
         if (typeof line.digest === "string") {
           progress.digest = line.digest;
@@ -654,6 +666,9 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
           progress.completed = line.completed;
         }
         yield progress;
+      }
+      if (!sawSuccess) {
+        throw new Error("pull stream ended without a success status (connection interrupted?)");
       }
     },
 
