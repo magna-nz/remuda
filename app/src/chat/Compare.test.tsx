@@ -408,7 +408,7 @@ describe("reply overflow menu (T6 1–3)", () => {
   }
 
   it("copies the same request body the reply actually ran on", async () => {
-    const writeText = vi.fn(async () => {});
+    const writeText = vi.fn(async (_text: string) => {});
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
       configurable: true,
