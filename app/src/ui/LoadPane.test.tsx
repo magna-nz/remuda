@@ -47,15 +47,14 @@ async function openDetail(client: FakeClient) {
 }
 
 /**
- * Load the Q4 weights, reopen the pane — which lands back on the live quant's
- * detail step — then step up to the memory tray, where ejecting now lives.
+ * Load the Q4 weights, then reopen the pane — which lands on the list, with
+ * the memory tray at its top, where ejecting lives.
  */
 async function openTrayWithLoaded(client: FakeClient) {
   await openDetail(client);
   fireEvent.click(screen.getByRole("button", { name: "Load model" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
   fireEvent.click(screen.getByTitle("Choose and load a model"));
-  fireEvent.click(await screen.findByRole("button", { name: "View in memory" }));
   await screen.findByText("In memory");
 }
 
@@ -127,9 +126,9 @@ describe("LoadPane", () => {
       m.tag === "llama3.1:8b-q4_K_M" ? { ...m, isLoaded: true } : m,
     );
     const client = new FakeClient({ models });
-    // A loaded model opens on its detail step; step back to see the row.
+    // The pane opens on the list whether or not something is loaded, so the
+    // row is on screen straight away.
     await openPane(client);
-    fireEvent.click(screen.getByLabelText("Back to model list"));
 
     // findBy, not getBy: the detail step's FitPanel has async effects in
     // flight (client.show, hostStats), so stepping back can re-render after
@@ -206,7 +205,7 @@ describe("LoadPane", () => {
     await waitFor(() => expect(screen.getByText("llama3.1:8b · Q8_0 · Original")).toBeInTheDocument());
   });
 
-  it("reopening on a loaded model skips straight to its quantisation", async () => {
+  it("reopens on the model list even with a model loaded, then drills in to the live quant", async () => {
     const client = new FakeClient({ models: fixtureModels() });
     await openDetail(client);
     fireEvent.click(screen.getByText("Q8_0"));
@@ -215,11 +214,18 @@ describe("LoadPane", () => {
 
     fireEvent.click(screen.getByTitle("Choose and load a model"));
 
-    // Detail step, on the live quant, offering a reload rather than a load.
+    // The list, with the tray above it — not the loaded model's own detail
+    // step. Every installed model is one click away, as when nothing is
+    // resident.
+    expect(await screen.findByText("In memory")).toBeInTheDocument();
+    expect(screen.getByText("mistral:7b")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reload model" })).not.toBeInTheDocument();
+
+    // Drilling in still prefers the resident quant over the model's first
+    // tag, so it offers a reload rather than a load.
+    fireEvent.click(screen.getByText("llama3.1:8b"));
     expect(await screen.findByRole("button", { name: "Reload model" })).toBeInTheDocument();
-    // The quant's own note, plus the collapsed runtime line above it.
     expect(screen.getAllByText(/in memory/i).length).toBeGreaterThan(0);
-    expect(screen.getByText("In memory")).toBeInTheDocument();
   });
 
   it("filters the model list by name", async () => {
@@ -451,7 +457,6 @@ describe("LoadPane", () => {
     await screen.findByText("Hel");
 
     fireEvent.click(screen.getByTitle("Choose and load a model"));
-    fireEvent.click(await screen.findByRole("button", { name: "View in memory" }));
     const eject = await screen.findByRole("button", { name: "Eject llama3.1:8b-q4_K_M" });
     expect(eject).toBeDisabled();
     expect(eject).toHaveAttribute("title", "Wait for the reply to finish");
@@ -476,7 +481,6 @@ describe("LoadPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load model" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
     fireEvent.click(screen.getByTitle("Choose and load a model"));
-    fireEvent.click(await screen.findByRole("button", { name: "View in memory" }));
     await screen.findByRole("button", { name: "Eject llama3.1:8b-q4_K_M" });
 
     client.connected = false;
@@ -498,9 +502,8 @@ function loadedFixture(running: RunningModel[]) {
 }
 
 /**
- * Open the pane on a model that's already loaded — with exactly one resident
- * it lands on detail — then step up to the memory tray, which is where the
- * full runtime readout now lives.
+ * Open the pane on a model that's already loaded. It lands on the list, whose
+ * top is the memory tray — where the full runtime readout lives.
  */
 async function openLoadedTray(client: FakeClient) {
   render(
@@ -510,7 +513,6 @@ async function openLoadedTray(client: FakeClient) {
     </RemudaProvider>,
   );
   fireEvent.click(screen.getByTitle("Choose and load a model"));
-  fireEvent.click(await screen.findByRole("button", { name: "View in memory" }));
   await screen.findByText("In memory");
 }
 
@@ -706,8 +708,6 @@ describe("LoadPane memory tray (SPEC §5.1, docs/mockup-memory.html §02)", () =
         </RemudaProvider>,
       );
       fireEvent.click(screen.getByTitle("Choose and load a model"));
-      await act(async () => {});
-      fireEvent.click(screen.getByRole("button", { name: "View in memory" }));
       await act(async () => {});
       expect(screen.getByText("expires 5s")).toBeInTheDocument();
 

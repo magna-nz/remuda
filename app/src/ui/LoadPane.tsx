@@ -482,7 +482,6 @@ export function LoadPane() {
   const [droppedVariant, setDroppedVariant] = useState<string | null>(null);
   /** The tray row with a call in flight, or "*" while Eject all runs. */
   const [busyTag, setBusyTag] = useState<string | null>(null);
-  const seeded = useRef(false);
   /** Clock for the Expires countdown; ticks once a second while anything can expire. */
   const [nowMs, setNowMs] = useState(() => Date.now());
 
@@ -494,33 +493,21 @@ export function LoadPane() {
   }, [anyExpiring]);
 
   // Closing resets everything, so reopening re-derives from whatever is
-  // loaded then rather than from a stale prior pick. Opening on a loaded
-  // model skips the list and lands on its detail step.
+  // loaded then rather than from a stale prior pick. The pane always opens on
+  // the list — the tray at its top already answers "what's loaded?", and a
+  // resident model's detail step is one click away rather than the screen the
+  // button drops you on whether or not you wanted it.
   useEffect(() => {
-    if (!loadPaneOpen) {
-      seeded.current = false;
-      setStep("list");
-      setQuantTag(null);
-      setVariantTag(null);
-      setFilter("");
-      setPhase("idle");
-      setLoadError(null);
-      setDroppedVariant(null);
-      setBusyTag(null);
-      return;
-    }
-    if (seeded.current || entries.length === 0) return;
-    seeded.current = true;
-    // With one model resident the pane still opens on it, exactly as before.
-    // With several there is no obvious "it", so the pane opens on the tray —
-    // which is the screen that can actually answer "what's loaded?".
-    const only = loaded.length === 1 ? loaded[0] : undefined;
-    if (only) {
-      setQuantTag(only.base);
-      setVariantTag(only.variant);
-      setStep("detail");
-    }
-  }, [loadPaneOpen, entries, loaded]);
+    if (loadPaneOpen) return;
+    setStep("list");
+    setQuantTag(null);
+    setVariantTag(null);
+    setFilter("");
+    setPhase("idle");
+    setLoadError(null);
+    setDroppedVariant(null);
+    setBusyTag(null);
+  }, [loadPaneOpen]);
 
   if (!loadPaneOpen) return null;
 
