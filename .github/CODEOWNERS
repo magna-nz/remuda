@@ -1,0 +1,6 @@
+# Every path in this repo is owned by @magna-nz.
+#
+# Branch protection on `main` requires a code owner review, so this makes
+# @magna-nz's approval mandatory on every pull request. Outside contributors
+# can open PRs; only @magna-nz can approve and merge them.
+* @magna-nz
