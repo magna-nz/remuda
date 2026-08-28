@@ -195,6 +195,18 @@ jobs:
           fi
           echo "Rendered cask: version ${got_version}, sha256 ${got_sha}"
 
+      # Works for both ways of cutting a release, because both end in a
+      # tag push:
+      #   - `git push origin v0.1.1` — no release exists yet, so this
+      #     creates one.
+      #   - *Draft a new release* in the GitHub UI with "create new tag on
+      #     publish" — the release already exists by the time this runs, so
+      #     this updates it and attaches the assets.
+      #
+      # `append_body` is what makes the second case safe: without it this
+      # step's `body` *replaces* whatever was typed in the UI, silently
+      # throwing away hand-written release notes. Appending instead leaves
+      # them intact and adds the checksum and cask note underneath.
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -202,10 +214,11 @@ jobs:
             ${{ steps.package.outputs.asset }}
             ${{ steps.package.outputs.asset }}.sha256
             rendered-cask/remuda.rb
+          append_body: true
           body: |
             macOS (Apple Silicon / aarch64) build, **unsigned** — see the
-            signing TODO in .github/workflows/release.yml. Installers will
-            need to clear the quarantine attribute; see
+            signing TODO in .github/workflows/release.yml. The Homebrew cask
+            clears the Gatekeeper quarantine flag on install; see
             packaging/homebrew/remuda.rb.
 
             SHA-256: `${{ steps.package.outputs.sha256 }}`

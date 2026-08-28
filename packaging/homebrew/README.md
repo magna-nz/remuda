@@ -52,14 +52,31 @@ obscure: `npm ci` rejects a `package-lock.json` whose version disagrees with
 build, so the tagged commit no longer reproduces the artifact. The gate
 catches both before the build starts.
 
-Then tag and push:
+Then cut the tag, either way — the workflow triggers on the tag push, and
+both routes end in one:
+
+**From the terminal:**
 
 ```bash
 git tag v0.2.0 && git push origin v0.2.0
 ```
 
-`.github/workflows/release.yml` builds the app and publishes a GitHub
-release on this repo (`magna-nz/remuda`) with three assets:
+**From the GitHub UI:** *Releases → Draft a new release →* type `v0.2.0`
+into the tag box and pick **Create new tag: v0.2.0 on publish** → set the
+target to `main` → write whatever notes you want → **Publish release**.
+
+The UI route publishes an empty release first and the workflow fills it in
+a few minutes later, so the release is briefly visible with no assets on
+it. That's expected. Hand-written notes survive: the workflow's release
+step sets `append_body: true`, so its checksum-and-cask note is appended
+below whatever you typed rather than replacing it. (Without that flag the
+action overwrites the body — which is why it's set.)
+
+There's no "tag without releasing" button in the GitHub UI, so the terminal
+route is the one that lets the workflow author the whole release.
+
+Either way, `.github/workflows/release.yml` builds the app and publishes a
+GitHub release on this repo (`magna-nz/remuda`) with three assets:
 
 - `Remuda-<version>-aarch64.tar.gz` — the app bundle the cask points at
 - `Remuda-<version>-aarch64.tar.gz.sha256` — its checksum
