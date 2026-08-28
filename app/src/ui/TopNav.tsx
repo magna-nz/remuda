@@ -7,43 +7,74 @@ import "./TopNav.css";
 import { useRemuda } from "./state";
 import { displayKey, groupByModel, type ModelEntry } from "../models/grouping";
 import type { RunningModel } from "../api/types";
+import type { LoadedSelection } from "./state";
 
 function shortTag(tag: string): string {
   return tag.endsWith(":latest") ? tag.slice(0, -":latest".length) : tag;
 }
 
+function formatSize(bytes: number): string {
+  const gb = bytes / 1_000_000_000;
+  return gb >= 1 ? `${gb.toFixed(1)} GB` : `${Math.round(bytes / 1_000_000)} MB`;
+}
+
 /**
  * The control names the same three things the load pane asked for: the model,
- * the quantisation, and the Modelfile. `loaded.base` is the quant's tag, so
+ * the quantisation, and the Modelfile. `sel.base` is the quant's tag, so
  * the grouping (models/grouping.ts) is what turns it back into a model name —
  * falling back to the raw tag if this tag isn't in the list yet.
  */
-function controlLabel(loaded: { base: string; variant: string } | null, entries: ModelEntry[]): string {
-  if (!loaded) return "No model loaded";
-  const tuning = loaded.variant === loaded.base ? "Original" : shortTag(loaded.variant);
-  const entry = entries.find((e) => e.quants.some((q) => q.tag === loaded.base));
-  const quant = entry?.quants.find((q) => q.tag === loaded.base);
-  if (entry === undefined || quant === undefined) return `${loaded.base} · ${tuning}`;
+function oneModelLabel(sel: LoadedSelection, entries: ModelEntry[]): string {
+  const tuning = sel.variant === sel.base ? "Original" : shortTag(sel.variant);
+  const entry = entries.find((e) => e.quants.some((q) => q.tag === sel.base));
+  const quant = entry?.quants.find((q) => q.tag === sel.base);
+  if (entry === undefined || quant === undefined) return `${sel.base} · ${tuning}`;
   return [displayKey(entry.key), quant.quantization, tuning].filter((part) => part !== "").join(" · ");
 }
 
 /**
- * The answer-at-a-glance chip (SPEC §5.1, mockup-proposals.html §01): what
- * fraction of the loaded model sits in VRAM. `sizeBytes === 0` renders no
- * percentage at all rather than dividing by zero — the caller treats a null
- * return as "say nothing".
+ * With one model resident the control names it, exactly as it always has.
+ * With several, no single name is true — so it counts them and totals the
+ * memory, which is the number that decides whether another one will fit.
  */
-function gpuPercent(running: RunningModel[], variant: string | undefined): number | null {
-  if (variant === undefined) return null;
-  const entry = running.find((r) => r.tag === variant);
-  if (!entry || entry.sizeBytes === 0) return null;
-  return Math.round((entry.sizeVramBytes / entry.sizeBytes) * 100);
+function controlLabel(loaded: LoadedSelection[], entries: ModelEntry[], running: RunningModel[]): string {
+  const first = loaded[0];
+  if (first === undefined) return "No model loaded";
+  if (loaded.length === 1) return oneModelLabel(first, entries);
+  const total = loaded.reduce(
+    (sum, l) => sum + (running.find((r) => r.tag === l.variant)?.sizeBytes ?? 0),
+    0,
+  );
+  const size = total > 0 ? ` · ${formatSize(total)}` : "";
+  return `${loaded.length} models${size}`;
+}
+
+/**
+ * The answer-at-a-glance chip (SPEC §5.1, mockup-proposals.html §01): what
+ * fraction of resident weights sits in VRAM. Across several models it's the
+ * pooled figure, so the chip goes amber the moment *any* of them spills —
+ * which is the case worth interrupting for. `sizeBytes === 0` contributes
+ * nothing rather than dividing by zero, and an all-zero readout renders no
+ * percentage at all: the caller treats a null return as "say nothing".
+ */
+function gpuPercent(running: RunningModel[], loaded: LoadedSelection[]): number | null {
+  let total = 0;
+  let vram = 0;
+  for (const sel of loaded) {
+    const entry = running.find((r) => r.tag === sel.variant);
+    if (!entry) continue;
+    total += entry.sizeBytes;
+    vram += entry.sizeVramBytes;
+  }
+  if (total === 0) return null;
+  return Math.round((vram / total) * 100);
 }
 
 export function TopNav() {
-  const { status, loaded, loadPaneOpen, openLoadPane, closeLoadPane, openEditor, groups, running } = useRemuda();
+  const { status, loaded, activeModel, loadPaneOpen, openLoadPane, closeLoadPane, openEditor, groups, running } =
+    useRemuda();
   const entries = useMemo(() => groupByModel(groups), [groups]);
-  const pct = gpuPercent(running, loaded?.variant);
+  const pct = gpuPercent(running, loaded);
 
   return (
     <header className="titlebar">
@@ -64,8 +95,8 @@ export function TopNav() {
         aria-expanded={loadPaneOpen}
         onClick={() => (loadPaneOpen ? closeLoadPane() : openLoadPane())}
       >
-        <span className={`d${loaded ? "" : " off"}`} aria-hidden="true" />
-        <span className="mctl-t">{controlLabel(loaded, entries)}</span>
+        <span className={`d${loaded.length > 0 ? "" : " off"}`} aria-hidden="true" />
+        <span className="mctl-t">{controlLabel(loaded, entries, running)}</span>
         {pct !== null && (
           <span className={`rt-inline${pct < 100 ? " spill" : ""}`}>{pct}% GPU</span>
         )}
@@ -73,13 +104,13 @@ export function TopNav() {
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
-      {loaded && (
+      {activeModel && (
         <button
           type="button"
           className="btn iconbtn edit-modelfile"
-          title={`Edit ${loaded.variant}'s Modelfile`}
-          aria-label={`Edit ${loaded.variant}'s Modelfile`}
-          onClick={() => void openEditor(loaded.variant)}
+          title={`Edit ${activeModel.variant}'s Modelfile`}
+          aria-label={`Edit ${activeModel.variant}'s Modelfile`}
+          onClick={() => void openEditor(activeModel.variant)}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M12 20h9" />

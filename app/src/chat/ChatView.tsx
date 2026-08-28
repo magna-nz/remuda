@@ -69,6 +69,10 @@ function NoSession() {
 /** SPEC §5.3/§9: amber banner when the session's model isn't in memory. */
 function UnloadedBanner({ session }: { session: ChatSession }) {
   const { loaded, load } = useRemuda();
+  // Several models can be resident at once, so "what *is* loaded" is a list.
+  // Naming them all is the useful form: the reason this session's model
+  // isn't in memory is usually that other ones are.
+  const residents = loaded.map((l) => l.variant);
   return (
     <div className="chat-banner" role="status">
       <svg
@@ -83,8 +87,18 @@ function UnloadedBanner({ session }: { session: ChatSession }) {
         <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
       </svg>
       <div className="bt">
-        <b>{session.model}</b> isn’t loaded — currently loaded:{" "}
-        <code>{loaded ? loaded.variant : "nothing"}</code>. Load it to continue this chat.
+        <b>{session.model}</b> isn’t loaded — in memory:{" "}
+        {residents.length === 0 ? (
+          <code>nothing</code>
+        ) : (
+          residents.map((tag, i) => (
+            <span key={tag}>
+              {i > 0 && ", "}
+              <code>{tag}</code>
+            </span>
+          ))
+        )}
+        . Load it to continue this chat.
       </div>
       <button type="button" className="btn sm" onClick={() => void load(session.model)}>
         Load now
@@ -378,9 +392,11 @@ export function ChatView() {
               const thumbs = m.imageThumbs ?? [];
               return (
                 <div key={i} className={m.role === "user" ? "msg user" : "msg bot"}>
-                  <div className="av" aria-hidden="true">
-                    {m.role === "user" ? "You" : avatarFor(session.model)}
-                  </div>
+                  {m.role === "assistant" && (
+                    <div className="av" aria-hidden="true">
+                      {avatarFor(session.model)}
+                    </div>
+                  )}
                   <div className="col">
                     {/* Reasoning sits outside the bubble — machinery, not the
                         answer, and not part of a copied reply. */}
@@ -534,11 +550,6 @@ export function ChatView() {
               </span>
             )}
             {canSee && <span className="hint">drop an image in the log, or ⌘V</span>}
-            <span className="spacer" />
-            <span className="note">
-              Messages here <b>test</b> the loaded model ·{" "}
-              <span>they don’t change its saved Modelfile</span>
-            </span>
           </div>
         </div>
       )}

@@ -9,7 +9,7 @@ import { useRemuda } from "../ui/state";
 import type { View } from "../ui/state";
 
 export function ViewTabs() {
-  const { view, setView, editorDraft, loaded, openEditor } = useRemuda();
+  const { view, setView, editorDraft, activeModel, openEditor } = useRemuda();
 
   const tab = (target: View, label: string, opts?: { disabled?: boolean; title?: string; onClick?: () => void }) => (
     <button
@@ -28,21 +28,21 @@ export function ViewTabs() {
   // for a specific model happens via the pencil in TopNav or the load
   // pane's "+ New Modelfile" (SPEC §5.1, §5.4). If there's already a draft
   // (from either of those), the tab just shows it; otherwise it falls back
-  // to the currently loaded model, same as "+ New chat" needs one loaded.
+  // to the active resident model, same as "+ New chat" needs one loaded.
   function openModelfileTab() {
     if (editorDraft) {
       setView("modelfile");
       return;
     }
-    if (loaded) void openEditor(loaded.variant);
+    if (activeModel) void openEditor(activeModel.variant);
   }
 
   return (
     <div className="tabs">
       {tab("chat", "Chat")}
       {tab("modelfile", "Modelfile", {
-        disabled: !editorDraft && !loaded,
-        title: !editorDraft && !loaded ? "Load a model first" : undefined,
+        disabled: !editorDraft && !activeModel,
+        title: !editorDraft && !activeModel ? "Load a model first" : undefined,
         onClick: openModelfileTab,
       })}
     </div>

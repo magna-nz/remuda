@@ -47,15 +47,16 @@ async function openDetail(client: FakeClient) {
 }
 
 /**
- * Load the Q4 weights, then reopen the pane — which lands back on the live
- * quant's detail step, where Eject lives.
+ * Load the Q4 weights, reopen the pane — which lands back on the live quant's
+ * detail step — then step up to the memory tray, where ejecting now lives.
  */
-async function openDetailWithLoaded(client: FakeClient) {
+async function openTrayWithLoaded(client: FakeClient) {
   await openDetail(client);
   fireEvent.click(screen.getByRole("button", { name: "Load model" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
   fireEvent.click(screen.getByTitle("Choose and load a model"));
-  await screen.findByRole("button", { name: "Reload model" });
+  fireEvent.click(await screen.findByRole("button", { name: "View in memory" }));
+  await screen.findByText("In memory");
 }
 
 beforeEach(() => {
@@ -181,7 +182,9 @@ describe("LoadPane", () => {
 
     // Detail step, on the live quant, offering a reload rather than a load.
     expect(await screen.findByRole("button", { name: "Reload model" })).toBeInTheDocument();
-    expect(screen.getByText(/in memory/)).toBeInTheDocument();
+    // The quant's own note, plus the collapsed runtime line above it.
+    expect(screen.getAllByText(/in memory/i).length).toBeGreaterThan(0);
+    expect(screen.getByText("In memory")).toBeInTheDocument();
   });
 
   it("filters the model list by name", async () => {
@@ -279,60 +282,111 @@ describe("LoadPane", () => {
     expect(screen.getByRole("button", { name: "Get Models" })).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("ejects the loaded model, freeing its memory without closing the pane", async () => {
+  it("ejects a model from the memory tray, freeing it without closing the pane", async () => {
     const client = new FakeClient({ models: fixtureModels() });
-    await openDetailWithLoaded(client);
+    await openTrayWithLoaded(client);
 
     fireEvent.click(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" }));
 
     // keep_alive: 0 against the tag that was in memory (SPEC §7).
     await waitFor(() => expect(client.unloadCalls).toEqual(["llama3.1:8b-q4_K_M"]));
-    // The pane stays put and re-reads as nothing-loaded: the top control
-    // resets, the reload offer becomes a plain load, and the "in memory"
-    // note on the quant is gone.
+    // The pane stays put and the tray empties: the top control resets and
+    // the row — with its Eject — is gone.
     expect(screen.getByRole("dialog")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByText("No model loaded")).toBeInTheDocument());
-    expect(screen.getByRole("button", { name: "Load model" })).toBeInTheDocument();
-    expect(screen.queryByText(/in memory/)).not.toBeInTheDocument();
-    // Nothing loaded, nothing to eject.
     expect(screen.queryByRole("button", { name: /^Eject/ })).not.toBeInTheDocument();
   });
 
-  it("offers no Eject until something is actually loaded", async () => {
+  it("offers no tray until something is actually loaded", async () => {
     const client = new FakeClient({ models: fixtureModels() });
     await openDetail(client);
 
     expect(screen.getByRole("button", { name: "Load model" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Eject/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("In memory")).not.toBeInTheDocument();
   });
 
-  it("ejects what is in memory even while another model's detail is open", async () => {
-    const client = new FakeClient({ models: fixtureModels() });
-    await openDetailWithLoaded(client);
+  it("ejects the row the user pointed at, not merely the first resident model", async () => {
+    // Two models resident at once — the case the old single-Eject button
+    // could not express at all.
+    const models = fixtureModels().map((m) =>
+      m.tag === "llama3.1:8b-q4_K_M" || m.tag === "mistral:7b" ? { ...m, isLoaded: true } : m,
+    );
+    const client = new FakeClient({ models });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <TopNav />
+        <LoadPane />
+      </RemudaProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    // Two resident models: the pane opens on the tray rather than guessing
+    // which one to show.
+    await screen.findByText("In memory");
+    expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eject mistral:7b" })).toBeInTheDocument();
 
-    // Walk over to mistral: the selection changes, the loaded model doesn't.
-    fireEvent.click(screen.getByRole("button", { name: "Back to model list" }));
-    fireEvent.click(await screen.findByText("mistral:7b"));
-    await screen.findByText("Original (base)");
+    fireEvent.click(screen.getByRole("button", { name: "Eject mistral:7b" }));
 
-    // Load would send mistral; Eject still names — and frees — the llama tag.
-    expect(screen.getByRole("button", { name: "Load model" })).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" }));
+    await waitFor(() => expect(client.unloadCalls).toEqual(["mistral:7b"]));
+    // The other one stays put.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeInTheDocument(),
+    );
+  });
 
-    await waitFor(() => expect(client.unloadCalls).toEqual(["llama3.1:8b-q4_K_M"]));
+  it("Eject all frees every resident model, and only shows up when there's more than one", async () => {
+    const models = fixtureModels().map((m) =>
+      m.tag === "llama3.1:8b-q4_K_M" || m.tag === "mistral:7b" ? { ...m, isLoaded: true } : m,
+    );
+    const client = new FakeClient({ models });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <TopNav />
+        <LoadPane />
+      </RemudaProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    await screen.findByText("2 models in memory");
+
+    fireEvent.click(screen.getByRole("button", { name: "Eject all" }));
+
+    await waitFor(() => expect(client.unloadCalls.sort()).toEqual(["llama3.1:8b-q4_K_M", "mistral:7b"]));
+    await waitFor(() => expect(screen.getByText("No model loaded")).toBeInTheDocument());
+  });
+
+  it("Keep re-sends the load with keep_alive -1", async () => {
+    // A row with a live countdown, so the control reads "Keep" rather than
+    // offering to hand an already-pinned model back to the clock.
+    const client = loadedFixture([
+      {
+        tag: "llama3.1:8b-q4_K_M",
+        sizeBytes: 4_700_000_000,
+        sizeVramBytes: 4_700_000_000,
+        contextLength: 8192,
+        expiresAt: "2099-01-01T00:00:00.000Z",
+      },
+    ]);
+    await openLoadedTray(client);
+
+    fireEvent.click(screen.getByRole("button", { name: "Keep" }));
+
+    // The only way to restate keep_alive for resident weights is to re-load.
+    await waitFor(() =>
+      expect(client.loadCalls).toContainEqual({ tag: "llama3.1:8b-q4_K_M", keepAlive: -1 }),
+    );
   });
 
   it("surfaces a failed eject's error text verbatim and keeps the model loaded (SPEC §9)", async () => {
     const client = new FakeClient({ models: fixtureModels() });
-    await openDetailWithLoaded(client);
+    await openTrayWithLoaded(client);
     client.failUnload = "Ollama /api/generate failed (500): unable to stop model";
 
     fireEvent.click(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("unable to stop model");
-    // Still loaded, and the button is back for a retry.
-    expect(screen.getByRole("button", { name: "Reload model" })).toBeInTheDocument();
+    // Still resident, and the button is back for a retry.
     expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeEnabled();
   });
 
@@ -362,6 +416,7 @@ describe("LoadPane", () => {
     await screen.findByText("Hel");
 
     fireEvent.click(screen.getByTitle("Choose and load a model"));
+    fireEvent.click(await screen.findByRole("button", { name: "View in memory" }));
     const eject = await screen.findByRole("button", { name: "Eject llama3.1:8b-q4_K_M" });
     expect(eject).toBeDisabled();
     expect(eject).toHaveAttribute("title", "Wait for the reply to finish");
@@ -371,7 +426,7 @@ describe("LoadPane", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeEnabled());
   });
 
-  it("disables Eject while the server is disconnected", async () => {
+  it("empties the tray when the server goes away — an unreachable Ollama is not a memory readout", async () => {
     const client = new FakeClient({ models: fixtureModels() });
     // Fast poll so the dropped connection is noticed without UI interaction.
     render(
@@ -386,10 +441,18 @@ describe("LoadPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load model" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
     fireEvent.click(screen.getByTitle("Choose and load a model"));
+    fireEvent.click(await screen.findByRole("button", { name: "View in memory" }));
     await screen.findByRole("button", { name: "Eject llama3.1:8b-q4_K_M" });
 
     client.connected = false;
-    await waitFor(() => expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeDisabled());
+
+    // The tray is a live readout of /api/ps. With the server unreachable we
+    // no longer know what's resident, so it says nothing rather than
+    // offering to eject something that may already be gone.
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText("In memory")).not.toBeInTheDocument();
   });
 });
 
@@ -399,8 +462,12 @@ function loadedFixture(running: RunningModel[]) {
   return new FakeClient({ models, running });
 }
 
-/** Open the pane on a model that's already loaded — it lands on detail directly. */
-async function openLoadedDetail(client: FakeClient) {
+/**
+ * Open the pane on a model that's already loaded — with exactly one resident
+ * it lands on detail — then step up to the memory tray, which is where the
+ * full runtime readout now lives.
+ */
+async function openLoadedTray(client: FakeClient) {
   render(
     <RemudaProvider client={client} pollIntervalMs={1_000_000}>
       <TopNav />
@@ -408,11 +475,12 @@ async function openLoadedDetail(client: FakeClient) {
     </RemudaProvider>,
   );
   fireEvent.click(screen.getByTitle("Choose and load a model"));
-  await screen.findByText("Q4_K_M");
+  fireEvent.click(await screen.findByRole("button", { name: "View in memory" }));
+  await screen.findByText("In memory");
 }
 
-describe("LoadPane runtime readout (SPEC §5.1)", () => {
-  it("shows a full-GPU strip, the top-bar chip, and Eject's freed size — no RAM legend or spill warning", async () => {
+describe("LoadPane memory tray (SPEC §5.1, docs/mockup-memory.html §02)", () => {
+  it("shows a full-GPU row and the top-bar chip — no CPU note, no spill warning", async () => {
     const client = loadedFixture([
       {
         tag: "llama3.1:8b-q4_K_M",
@@ -422,26 +490,29 @@ describe("LoadPane runtime readout (SPEC §5.1)", () => {
         expiresAt: null,
       },
     ]);
-    await openLoadedDetail(client);
+    await openLoadedTray(client);
 
-    // Top-bar chip and the strip's own badge — both read the same figure.
+    // Top-bar chip and the row's own badge — both read the same figure.
     expect(screen.getAllByText("100% GPU")).toHaveLength(2);
     expect(document.querySelectorAll(".rt-inline.spill")).toHaveLength(0);
-    // Nothing off-GPU: no RAM legend entry, no spill warning.
-    expect(screen.queryByText(/^RAM /)).not.toBeInTheDocument();
+    expect(document.querySelectorAll(".slot.spill")).toHaveLength(0);
+    // Nothing off-GPU: no CPU share, no spill warning.
+    expect(screen.queryByText(/on CPU$/)).not.toBeInTheDocument();
     expect(screen.queryByText(/running on the CPU/)).not.toBeInTheDocument();
-    expect(screen.getByText(/^VRAM /)).toHaveTextContent("VRAM 4.7 GB");
+    // The row's own size, and the tray's total — identical with one model
+    // resident, so each is asserted where it lives rather than by text alone.
+    expect(document.querySelector(".slot .slot-sub")).toHaveTextContent("4.7 GB");
+    expect(document.querySelector(".pfield > label .rhs")).toHaveTextContent("4.7 GB");
     // Context equals the model's own max, so no "/ max" suffix.
-    expect(screen.getByText("8,192")).toBeInTheDocument();
-    // expiresAt: null is an infinite keep_alive, not a broken countdown.
-    expect(screen.getByText("never")).toBeInTheDocument();
-    // Eject now names the memory it frees.
-    expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toHaveTextContent(
-      "Eject 4.7 GB",
-    );
+    expect(screen.getByText(/^ctx 8,192$/)).toBeInTheDocument();
+    // expiresAt: null is an infinite keep_alive — a state, not a countdown.
+    expect(screen.getByText("kept")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeInTheDocument();
+    // Already pinned, so the control offers the other direction.
+    expect(screen.getByRole("button", { name: "Let expire" })).toBeInTheDocument();
   });
 
-  it("spills to CPU: amber chip, a RAM legend entry, and the CPU warning", async () => {
+  it("spills to CPU: amber chip, an amber rail, the CPU share and the warning", async () => {
     const client = loadedFixture([
       {
         tag: "llama3.1:8b-q4_K_M",
@@ -451,38 +522,30 @@ describe("LoadPane runtime readout (SPEC §5.1)", () => {
         expiresAt: null,
       },
     ]);
-    await openLoadedDetail(client);
+    await openLoadedTray(client);
 
     expect(screen.getAllByText("62% GPU")).toHaveLength(2);
     expect(document.querySelectorAll(".rt-inline.spill")).toHaveLength(2);
-    expect(screen.getByText(/^RAM /)).toHaveTextContent("RAM 1.8 GB");
-    const warning = screen.getByText(/running on the CPU/);
-    expect(warning).toHaveTextContent("1.8 GB is running on the CPU.");
+    // The rail is the at-a-glance signal, so it must actually flip.
+    expect(document.querySelectorAll(".slot.spill")).toHaveLength(1);
+    expect(screen.getByText("1.8 GB on CPU")).toBeInTheDocument();
+    expect(screen.getByText(/running on the CPU/)).toHaveTextContent("1.8 GB is running on the CPU.");
   });
 
   it("renders no percentage or bar when sizeBytes is 0, rather than dividing by zero", async () => {
     const client = loadedFixture([
       { tag: "llama3.1:8b-q4_K_M", sizeBytes: 0, sizeVramBytes: 0, contextLength: null, expiresAt: null },
     ]);
-    await openLoadedDetail(client);
+    await openLoadedTray(client);
 
     expect(screen.queryByText(/% GPU/)).not.toBeInTheDocument();
     expect(document.querySelector(".rt-bar")).not.toBeInTheDocument();
-    // Both unknowns render as an em dash rather than a broken number:
-    // contextLength: null, and a size the server reported as 0. Addressed by
-    // cell so this can't be satisfied by one dash standing in for both.
-    const cellValue = (label: string) =>
-      screen.getByText(label).parentElement?.querySelector(".v")?.textContent?.trim();
-    // Context still shows the model's trained max beside the unknown runner
-    // value, so it reads "— / 8,192"; Total size has nothing to pair with.
-    expect(cellValue("Context")).toMatch(/^—/);
-    expect(cellValue("Total size")).toBe("—");
-    // Eject falls back to its plain label when there's nothing to size.
-    // Asserted on the exact text: `toHaveTextContent("Eject")` is a substring
-    // match and passed happily on the "Eject 0 MB" this is meant to prevent.
-    expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toHaveTextContent(
-      /^Eject$/,
-    );
+    // A size the server reported as 0 is "it didn't say" — the row omits the
+    // figure rather than claiming the model occupies 0 MB. Same for context.
+    expect(screen.queryByText(/GB$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/^ctx /)).not.toBeInTheDocument();
+    // The row is still there, and can still be ejected.
+    expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeInTheDocument();
   });
 
   it("shows the model's trained max alongside the running context length", async () => {
@@ -495,13 +558,89 @@ describe("LoadPane runtime readout (SPEC §5.1)", () => {
         expiresAt: null,
       },
     ]);
-    await openLoadedDetail(client);
+    await openLoadedTray(client);
 
-    expect(screen.getByText("2,048")).toBeInTheDocument();
+    expect(screen.getByText(/^ctx 2,048/)).toBeInTheDocument();
     expect(screen.getByText("/ 8,192")).toBeInTheDocument();
   });
 
-  it("ticks the Expires countdown once a second and stops at zero rather than going negative", async () => {
+  it("totals the resident models rather than making the user add them up", async () => {
+    const models = fixtureModels().map((m) =>
+      m.tag === "llama3.1:8b-q4_K_M" || m.tag === "mistral:7b" ? { ...m, isLoaded: true } : m,
+    );
+    const client = new FakeClient({
+      models,
+      running: [
+        {
+          tag: "llama3.1:8b-q4_K_M",
+          sizeBytes: 4_700_000_000,
+          sizeVramBytes: 4_700_000_000,
+          contextLength: 8192,
+          expiresAt: null,
+        },
+        {
+          tag: "mistral:7b",
+          sizeBytes: 4_100_000_000,
+          sizeVramBytes: 4_100_000_000,
+          contextLength: 8192,
+          expiresAt: null,
+        },
+      ],
+    });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <TopNav />
+        <LoadPane />
+      </RemudaProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    await screen.findByText("In memory");
+
+    // The tray's own total, and the same figure summarised in the top nav.
+    expect(screen.getByText("8.8 GB")).toBeInTheDocument();
+    expect(screen.getByText("2 models · 8.8 GB")).toBeInTheDocument();
+  });
+
+  it("goes amber in the nav when any one resident model spills, not only when all do", async () => {
+    const models = fixtureModels().map((m) =>
+      m.tag === "llama3.1:8b-q4_K_M" || m.tag === "mistral:7b" ? { ...m, isLoaded: true } : m,
+    );
+    const client = new FakeClient({
+      models,
+      running: [
+        {
+          tag: "llama3.1:8b-q4_K_M",
+          sizeBytes: 4_000_000_000,
+          sizeVramBytes: 4_000_000_000,
+          contextLength: 8192,
+          expiresAt: null,
+        },
+        {
+          tag: "mistral:7b",
+          sizeBytes: 4_000_000_000,
+          sizeVramBytes: 2_000_000_000,
+          contextLength: 8192,
+          expiresAt: null,
+        },
+      ],
+    });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <TopNav />
+        <LoadPane />
+      </RemudaProvider>,
+    );
+    fireEvent.click(screen.getByTitle("Choose and load a model"));
+    await screen.findByText("In memory");
+
+    // Pooled: 6 GB of 8 GB in VRAM. Under 100%, so the nav chip warns.
+    expect(document.querySelector(".modelctl .rt-inline")).toHaveClass("spill");
+    expect(screen.getByText("75% GPU")).toBeInTheDocument();
+    // But only the model that actually spills gets an amber rail.
+    expect(document.querySelectorAll(".slot.spill")).toHaveLength(1);
+  });
+
+  it("ticks the expiry countdown once a second and stops at zero rather than going negative", async () => {
     vi.useFakeTimers();
     try {
       vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
@@ -522,17 +661,19 @@ describe("LoadPane runtime readout (SPEC §5.1)", () => {
       );
       fireEvent.click(screen.getByTitle("Choose and load a model"));
       await act(async () => {});
-      expect(screen.getByText("5s")).toBeInTheDocument();
+      fireEvent.click(screen.getByRole("button", { name: "View in memory" }));
+      await act(async () => {});
+      expect(screen.getByText("expires 5s")).toBeInTheDocument();
 
       await act(async () => {
         vi.advanceTimersByTime(2000);
       });
-      expect(screen.getByText("3s")).toBeInTheDocument();
+      expect(screen.getByText("expires 3s")).toBeInTheDocument();
 
       await act(async () => {
         vi.advanceTimersByTime(10_000);
       });
-      expect(screen.getByText("0s")).toBeInTheDocument();
+      expect(screen.getByText("expires 0s")).toBeInTheDocument();
     } finally {
       vi.useRealTimers();
     }

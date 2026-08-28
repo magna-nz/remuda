@@ -3,7 +3,7 @@
  *
  * The saved-session list: each row shows the title, the model tag it ran on
  * with a status dot (green = loaded now, hollow amber + "unloaded" = not),
- * and a relative time. "+ New chat" binds a session to the currently loaded
+ * and a relative time. "+ New chat" binds a session to the active resident
  * model, so it needs one loaded. Search filters by title substring.
  */
 import { useState } from "react";
@@ -48,7 +48,7 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
 }
 
 export function Sidebar() {
-  const { view, setView, sessions, activeSessionId, loaded, newChat } = useRemuda();
+  const { view, setView, sessions, activeSessionId, activeModel, newChat } = useRemuda();
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();
@@ -75,8 +75,8 @@ export function Sidebar() {
         <button
           type="button"
           className="btn primary wide"
-          disabled={!loaded}
-          title={loaded ? undefined : "Load a model first"}
+          disabled={!activeModel}
+          title={activeModel ? undefined : "Load a model first"}
           onClick={newChat}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">

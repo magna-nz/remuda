@@ -52,7 +52,143 @@ function formatCountdown(expiresAt: string | null, nowMs: number): string {
   return m > 0 ? `${m}m ${s}s` : `${s}s`;
 }
 
-type LoadPhase = "idle" | "loading" | "ejecting" | "done";
+type LoadPhase = "idle" | "loading" | "done";
+
+/** The VRAM/RAM split for one resident model, or null when the server said nothing. */
+interface Split {
+  gpuPct: number;
+  spilling: boolean;
+  vramBytes: number;
+  ramBytes: number;
+}
+
+function splitOf(entry: RunningModel): Split | null {
+  if (entry.sizeBytes <= 0) return null;
+  const vramBytes = entry.sizeVramBytes;
+  const ramBytes = Math.max(0, entry.sizeBytes - vramBytes);
+  return {
+    gpuPct: Math.round((vramBytes / entry.sizeBytes) * 100),
+    spilling: vramBytes < entry.sizeBytes,
+    vramBytes,
+    ramBytes,
+  };
+}
+
+/**
+ * One resident model in the memory tray.
+ *
+ * Everything here is about memory, not about the model on disk: what it
+ * costs, whether it fits on the GPU, when it expires, and the two things you
+ * can do about that. It deliberately does *not* offer Load — that belongs to
+ * the model's own detail step, one level down.
+ */
+function MemorySlot({
+  entry,
+  maxContext,
+  nowMs,
+  active,
+  busy,
+  disabled,
+  onEject,
+  onKeep,
+}: {
+  entry: RunningModel;
+  maxContext: number | null;
+  nowMs: number;
+  active: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onEject: () => void;
+  onKeep: (kept: boolean) => void;
+}) {
+  const split = splitOf(entry);
+  const kept = entry.expiresAt === null;
+  const spilling = split?.spilling ?? false;
+  return (
+    <div className={`slot${spilling ? " spill" : ""}${active ? " active" : ""}`}>
+      <div className="slot-top">
+        <span className="slot-tag" title={entry.tag}>
+          {shortTag(entry.tag)}
+        </span>
+        {active && <span className="inuse">this chat</span>}
+        <span className="slot-grow" />
+        {split !== null && (
+          <span className={`rt-inline${spilling ? " spill" : ""}`}>{split.gpuPct}% GPU</span>
+        )}
+      </div>
+      {split !== null && (
+        <div className="rt-bar">
+          <i className="gpu" style={{ width: `${split.gpuPct}%` }} />
+          {spilling && <i className="cpu" style={{ width: `${100 - split.gpuPct}%` }} />}
+        </div>
+      )}
+      <div className="slot-sub">
+        {entry.sizeBytes > 0 && <span>{formatSize(entry.sizeBytes)}</span>}
+        {entry.contextLength !== null && (
+          <>
+            <span className="sep" aria-hidden="true">·</span>
+            {/* The trained max only earns its place when it differs from what
+                the model was actually loaded with — otherwise it's the same
+                number printed twice. */}
+            <span>
+              ctx {entry.contextLength.toLocaleString("en-US")}
+              {maxContext !== null && maxContext !== entry.contextLength && (
+                <small> / {maxContext.toLocaleString("en-US")}</small>
+              )}
+            </span>
+          </>
+        )}
+        <span className="sep" aria-hidden="true">·</span>
+        {/* An expiry that never arrives is a different fact from a countdown,
+            so it reads as a state rather than as "never" in a time slot. */}
+        <span className={kept ? "keptnote" : undefined}>
+          {kept ? "kept" : `expires ${formatCountdown(entry.expiresAt, nowMs)}`}
+        </span>
+        {spilling && split !== null && (
+          <>
+            <span className="sep" aria-hidden="true">·</span>
+            <span className="warnish">{formatSize(split.ramBytes)} on CPU</span>
+          </>
+        )}
+      </div>
+      {/* Actions get their own row rather than trailing the facts: how much
+          metadata a model reports varies, and rows that change shape with it
+          are hard to scan down. */}
+      <div className="slot-acts">
+          <button
+            type="button"
+            className="btn sm ghost"
+            disabled={busy || disabled}
+            title={kept ? `Let ${entry.tag} expire again` : `Keep ${entry.tag} in memory — no expiry`}
+            onClick={() => onKeep(!kept)}
+          >
+            {kept ? "Let expire" : "Keep"}
+          </button>
+          <button
+            type="button"
+            className="btn sm eject"
+            disabled={busy || disabled}
+            aria-label={`Eject ${entry.tag}`}
+            title={disabled ? "Wait for the reply to finish" : `Unload ${entry.tag} from memory`}
+            onClick={onEject}
+          >
+            {busy ? "…" : "Eject"}
+          </button>
+      </div>
+      {spilling && split !== null && (
+        <div className="rt-warn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
+          </svg>
+          <div>
+            <b>{formatSize(split.ramBytes)} is running on the CPU.</b> Expect a large drop in tok/s. Eject
+            another model, try a smaller quant, or lower <code>num_ctx</code>.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function LoadPane() {
   const {
@@ -70,19 +206,28 @@ export function LoadPane() {
     confirmDeleteModel,
     setView,
     unload,
+    unloadAll,
+    setKept,
     streamingSessionId,
+    sessions,
+    activeSessionId,
   } = useRemuda();
 
   const entries = useMemo(() => groupByModel(groups), [groups]);
   /**
-   * What's actually in memory (SPEC §5.1's runtime strip), independent of
-   * the pane's current selection — the same rule Eject already follows: it
-   * names whatever is loaded, not whatever the pane happens to be showing.
+   * What's actually in memory (SPEC §5.1's runtime strip) — every resident
+   * model, not the pane's current selection. This is machine state, so it
+   * lives at the pane's root rather than inside any one model's detail.
+   *
+   * A resident tag with no /api/ps entry is dropped rather than rendered
+   * blank: the two reads are separate requests and can disagree for one
+   * tick, and a row with no numbers in it says less than no row.
    */
-  const runningEntry: RunningModel | null = useMemo(
-    () => (loaded ? (running.find((r) => r.tag === loaded.variant) ?? null) : null),
-    [running, loaded],
+  const slots = useMemo(
+    () => loaded.flatMap((sel) => running.filter((r) => r.tag === sel.variant)),
+    [loaded, running],
   );
+  const totalResidentBytes = slots.reduce((sum, r) => sum + r.sizeBytes, 0);
 
   const [step, setStep] = useState<"list" | "detail">("list");
   /** The chosen quant's tag — `base` in the store's LoadedSelection. */
@@ -94,15 +239,18 @@ export function LoadPane() {
   const [loadError, setLoadError] = useState<string | null>(null);
   /** A tuning dropped by a quant switch, so the pane can say why. */
   const [droppedVariant, setDroppedVariant] = useState<string | null>(null);
+  /** The tray row with a call in flight, or "*" while Eject all runs. */
+  const [busyTag, setBusyTag] = useState<string | null>(null);
   const seeded = useRef(false);
-  /** Clock for the Expires countdown; ticks once a second while something's loaded. */
+  /** Clock for the Expires countdown; ticks once a second while anything can expire. */
   const [nowMs, setNowMs] = useState(() => Date.now());
 
+  const anyExpiring = slots.some((r) => r.expiresAt !== null);
   useEffect(() => {
-    if (runningEntry === null || runningEntry.expiresAt === null) return;
+    if (!anyExpiring) return;
     const id = window.setInterval(() => setNowMs(Date.now()), 1000);
     return () => window.clearInterval(id);
-  }, [runningEntry]);
+  }, [anyExpiring]);
 
   // Closing resets everything, so reopening re-derives from whatever is
   // loaded then rather than from a stale prior pick. Opening on a loaded
@@ -117,13 +265,18 @@ export function LoadPane() {
       setPhase("idle");
       setLoadError(null);
       setDroppedVariant(null);
+      setBusyTag(null);
       return;
     }
     if (seeded.current || entries.length === 0) return;
     seeded.current = true;
-    if (loaded) {
-      setQuantTag(loaded.base);
-      setVariantTag(loaded.variant);
+    // With one model resident the pane still opens on it, exactly as before.
+    // With several there is no obvious "it", so the pane opens on the tray —
+    // which is the screen that can actually answer "what's loaded?".
+    const only = loaded.length === 1 ? loaded[0] : undefined;
+    if (only) {
+      setQuantTag(only.base);
+      setVariantTag(only.variant);
       setStep("detail");
     }
   }, [loadPaneOpen, entries, loaded]);
@@ -132,40 +285,25 @@ export function LoadPane() {
 
   const entry = entries.find((e) => e.quants.some((q) => q.tag === quantTag)) ?? null;
   const quant = entry?.quants.find((q) => q.tag === quantTag) ?? null;
-  const isReload = loaded?.variant === variantTag;
-
-  // Runtime strip (SPEC §5.1, mockup-proposals.html §01). sizeBytes === 0 is
-  // "the server said nothing useful" — no percentage, no bar, no split.
-  const gpuPct =
-    runningEntry && runningEntry.sizeBytes > 0
-      ? Math.round((runningEntry.sizeVramBytes / runningEntry.sizeBytes) * 100)
-      : null;
-  const spilling =
-    runningEntry !== null && runningEntry.sizeBytes > 0 && runningEntry.sizeVramBytes < runningEntry.sizeBytes;
-  const vramBytes = runningEntry?.sizeVramBytes ?? 0;
-  const ramBytes = runningEntry ? Math.max(0, runningEntry.sizeBytes - runningEntry.sizeVramBytes) : 0;
-  const gpuBarPct = runningEntry && runningEntry.sizeBytes > 0 ? (vramBytes / runningEntry.sizeBytes) * 100 : 0;
-  const cpuBarPct = spilling ? 100 - gpuBarPct : 0;
-  // The model's trained max, for "used / max" — looked up in the flat model
-  // list rather than QuantOption, which doesn't carry contextLength.
-  const runningMaxContext = runningEntry
-    ? (models.find((m) => m.tag === runningEntry.tag)?.contextLength ?? null)
-    : null;
-  // Eject's size (SPEC §5.1c) is the same lookup the strip uses — both are
-  // about what's in memory, not the pane's current selection. A reported 0
-  // is "the server didn't say", exactly as it is for the GPU split above, so
-  // it falls back to the plain label rather than promising to free 0 MB.
-  const ejectSizeLabel =
-    runningEntry && runningEntry.sizeBytes > 0 ? formatSize(runningEntry.sizeBytes) : null;
+  // "Reload" only when the exact tag Load would send is already resident.
+  const isReload = variantTag !== null && loaded.some((l) => l.variant === variantTag);
+  /** This step's own model, if it happens to be in memory — one line, not a card. */
+  const detailEntry = variantTag !== null ? (running.find((r) => r.tag === variantTag) ?? null) : null;
+  const detailSplit = detailEntry ? splitOf(detailEntry) : null;
+  const activeSessionModel = sessions.find((s) => s.id === activeSessionId)?.model;
+  // Ejecting mid-stream would pull the weights out from under the reply.
+  const ejectBlocked = !status.connected || streamingSessionId !== null;
 
   function drillIn(target: ModelEntry) {
-    // Prefer the quant that's already loaded, so reopening a model lands on
-    // what's in memory rather than on its first tag.
-    const live = loaded ? target.quants.find((q) => q.tag === loaded.base) : undefined;
+    // Prefer a quant of *this* model that's already resident, so reopening it
+    // lands on what's in memory rather than on its first tag. With several
+    // models loaded only this one's residency is relevant here.
+    const residentHere = loaded.find((l) => target.quants.some((q) => q.tag === l.base));
+    const live = residentHere ? target.quants.find((q) => q.tag === residentHere.base) : undefined;
     const next = live ?? target.quants[0];
     if (next === undefined) return;
     setQuantTag(next.tag);
-    setVariantTag(live && loaded ? loaded.variant : next.tag);
+    setVariantTag(live && residentHere ? residentHere.variant : next.tag);
     setStep("detail");
     setPhase("idle");
     setLoadError(null);
@@ -218,24 +356,47 @@ export function LoadPane() {
   }
 
   /**
-   * Hand the loaded model's memory back (SPEC §7, `keep_alive: 0`).
+   * Hand one model's memory back (SPEC §7, `keep_alive: 0`).
    *
-   * Unlike Load, this always acts on what's *in memory* — not on the pane's
-   * current selection — so the button names the tag it frees. The pane stays
-   * open: the quant's "in memory" note and the Load/Reload label flip on the
-   * refresh, which is the confirmation that it worked.
+   * Named by row, so it always frees the tag the user pointed at rather than
+   * a pane-wide notion of "the" model. The pane stays open: the row leaving
+   * the tray is the confirmation that it worked.
    */
-  async function handleEject() {
-    if (!loaded) return;
-    setPhase("ejecting");
+  async function handleEject(tag: string) {
+    setBusyTag(tag);
     setLoadError(null);
     try {
-      await unload();
-      setPhase("idle");
+      await unload(tag);
     } catch (err) {
       // SPEC §9: the server's text, verbatim.
-      setPhase("idle");
       setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyTag(null);
+    }
+  }
+
+  async function handleEjectAll() {
+    setBusyTag("*");
+    setLoadError(null);
+    try {
+      await unloadAll();
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyTag(null);
+    }
+  }
+
+  /** Pin a row against its keep_alive expiry, or hand it back to the clock. */
+  async function handleKeep(tag: string, kept: boolean) {
+    setBusyTag(tag);
+    setLoadError(null);
+    try {
+      await setKept(tag, kept);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyTag(null);
     }
   }
 
@@ -337,6 +498,54 @@ export function LoadPane() {
               </button>
             </div>
           ) : step === "list" || entry === null ? (
+            <>
+              {/* What's in memory now, at the pane's root — machine state,
+                  so it sits above the installed list rather than inside any
+                  one model's detail (SPEC §5.1, docs/mockup-memory.html §02). */}
+              {slots.length > 0 && (
+                <div className="pfield">
+                  <label>
+                    In memory
+                    {totalResidentBytes > 0 && <span className="rhs">{formatSize(totalResidentBytes)}</span>}
+                  </label>
+                  <div className="tray">
+                    {slots.map((rt) => (
+                      <MemorySlot
+                        key={rt.tag}
+                        entry={rt}
+                        maxContext={models.find((m) => m.tag === rt.tag)?.contextLength ?? null}
+                        nowMs={nowMs}
+                        active={rt.tag === activeSessionModel}
+                        busy={busyTag === rt.tag || busyTag === "*"}
+                        disabled={ejectBlocked}
+                        onEject={() => void handleEject(rt.tag)}
+                        onKeep={(kept) => void handleKeep(rt.tag, kept)}
+                      />
+                    ))}
+                    {slots.length > 1 && (
+                      <div className="trayfoot">
+                        <span>
+                          {slots.length} models in memory
+                        </span>
+                        <button
+                          type="button"
+                          className="btn sm ghost"
+                          disabled={busyTag !== null || ejectBlocked}
+                          onClick={() => void handleEjectAll()}
+                        >
+                          {busyTag === "*" ? "Ejecting…" : "Eject all"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {loadError !== null && (
+                    <div className="perror" role="alert">
+                      {loadError}
+                    </div>
+                  )}
+                </div>
+              )}
+
             <div className="pfield">
               <div className="pfilter">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} aria-hidden="true">
@@ -356,7 +565,7 @@ export function LoadPane() {
                 ) : (
                   visible.map((e) => {
                     const tuned = variantCount(e);
-                    const live = loaded !== null && e.quants.some((q) => q.tag === loaded.base);
+                    const live = loaded.some((l) => e.quants.some((q) => q.tag === l.base));
                     // Capabilities are per-installed-tag (POST /api/show), not
                     // per derived model — the first quant stands in for the
                     // whole row, same as the glyph and the "N quants" count.
@@ -399,76 +608,40 @@ export function LoadPane() {
               </div>
               <div className="pfoot">Quantisations and tuned Modelfiles live inside each model.</div>
             </div>
+            </>
           ) : (
             <>
-              {/* Runtime strip (SPEC §5.1, mockup-proposals.html §01): what's
-                  actually in memory. Independent of the entry on screen —
-                  same rule as Eject (it names whatever is loaded, not
-                  whatever the pane is showing). */}
-              {runningEntry !== null && (
-                <div className="pfield">
-                  <label>In memory now</label>
-                  <div className="rt">
-                    <div className="rt-top">
-                      <span className="rt-tag">{runningEntry.tag}</span>
-                      {gpuPct !== null && (
-                        <span className={`rt-badge rt-inline${spilling ? " spill" : ""}`}>{gpuPct}% GPU</span>
-                      )}
-                    </div>
-                    {runningEntry.sizeBytes > 0 && (
-                      <>
-                        <div className="rt-bar">
-                          <i className="gpu" style={{ width: `${gpuBarPct}%` }} />
-                          {spilling && <i className="cpu" style={{ width: `${cpuBarPct}%` }} />}
-                        </div>
-                        <div className="rt-legend">
-                          <span>
-                            <i className="rt-dot gpu" aria-hidden="true" />
-                            VRAM {formatSize(vramBytes)}
-                          </span>
-                          {spilling && (
-                            <span>
-                              <i className="rt-dot cpu" aria-hidden="true" />
-                              RAM {formatSize(ramBytes)}
-                            </span>
-                          )}
-                        </div>
-                      </>
-                    )}
-                    <div className="rt-grid">
-                      <div className="rt-cell">
-                        <div className="k">Context</div>
-                        <div className="v">
-                          {runningEntry.contextLength === null ? "—" : runningEntry.contextLength.toLocaleString("en-US")}
-                          {runningMaxContext !== null && runningMaxContext !== runningEntry.contextLength && (
-                            <small> / {runningMaxContext.toLocaleString("en-US")}</small>
-                          )}
-                        </div>
-                      </div>
-                      <div className="rt-cell">
-                        <div className="k">Expires</div>
-                        <div className="v">{formatCountdown(runningEntry.expiresAt, nowMs)}</div>
-                      </div>
-                      <div className="rt-cell">
-                        <div className="k">Total size</div>
-                        <div className="v">
-                          {runningEntry.sizeBytes > 0 ? formatSize(runningEntry.sizeBytes) : "—"}
-                        </div>
-                      </div>
-                    </div>
-                    {spilling && (
-                      <div className="rt-warn">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                          <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
-                        </svg>
-                        <div>
-                          <b>{formatSize(ramBytes)} is running on the CPU.</b> Expect a large drop in tok/s. Try a
-                          smaller quant, or a lower <code>num_ctx</code>.
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              {/* This step is about a model on disk — its quants, its
+                  Modelfiles, and the button that loads it. Its only claim on
+                  runtime is whether *this* model is resident, which is one
+                  line; the full readout lives in the tray at the pane's root
+                  (docs/mockup-memory.html §03). */}
+              {detailEntry !== null && (
+                // The whole line is the control — a separate "view in memory"
+                // button next to a label reading "In memory" said it twice,
+                // and wrapped as soon as the numbers got long.
+                <button
+                  type="button"
+                  className="minirt"
+                  onClick={drillOut}
+                  aria-label="View in memory"
+                  title="See everything that's in memory"
+                >
+                  <span className="lead">In memory</span>
+                  <span>
+                    {[
+                      detailEntry.sizeBytes > 0 ? formatSize(detailEntry.sizeBytes) : null,
+                      detailSplit !== null ? `${detailSplit.gpuPct}% GPU` : null,
+                      detailEntry.expiresAt === null ? "kept" : formatCountdown(detailEntry.expiresAt, nowMs),
+                    ]
+                      .filter((part) => part !== null)
+                      .join(" · ")}
+                  </span>
+                  <span className="slot-grow" />
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M9 6l6 6-6 6" />
+                  </svg>
+                </button>
               )}
 
               <div className="pfield">
@@ -552,41 +725,19 @@ export function LoadPane() {
 
               <div className="ploadwrap">
                 <div className="pactions">
+                  {/* Load only. Ejecting moved to the memory tray, where it
+                      is per-row: a single Eject here could only ever mean one
+                      of several resident models, and picking for the user is
+                      exactly the guess that made this pane wrong. */}
                   <button
                     type="button"
                     className="btn primary wide"
                     onClick={() => void handleLoad()}
-                    disabled={phase === "loading" || phase === "ejecting" || !variantTag || !status.connected}
+                    disabled={phase === "loading" || !variantTag || !status.connected}
                     title={status.connected ? undefined : "Ollama isn't running"}
                   >
                     {phase === "loading" ? "Loading…" : isReload ? "Reload model" : "Load model"}
                   </button>
-                  {/* Ejecting is about what's in memory, so this shows
-                      whenever anything is loaded — including while another
-                      model's detail is on screen — and names the tag it
-                      frees rather than the one Load would send. */}
-                  {loaded !== null && (
-                    <button
-                      type="button"
-                      className="btn eject"
-                      onClick={() => void handleEject()}
-                      disabled={phase !== "idle" || !status.connected || streamingSessionId !== null}
-                      aria-label={`Eject ${loaded.variant}`}
-                      title={
-                        !status.connected
-                          ? "Ollama isn't running"
-                          : streamingSessionId !== null
-                            ? "Wait for the reply to finish"
-                            : `Unload ${loaded.variant} from memory`
-                      }
-                    >
-                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                        <path d="M12 4l7 9H5z" />
-                        <path d="M5 18h14" />
-                      </svg>
-                      {phase === "ejecting" ? "Ejecting…" : `Eject${ejectSizeLabel ? ` ${ejectSizeLabel}` : ""}`}
-                    </button>
-                  )}
                 </div>
                 {variantTag !== null && (
                   <div className="psummary">
@@ -603,10 +754,12 @@ export function LoadPane() {
                 {(phase === "loading" || phase === "done") && (
                   <div className="pprogress">
                     <div className="meter">
-                      <i
-                        className={phase === "loading" ? "indeterminate" : undefined}
-                        style={{ width: phase === "done" ? "100%" : "55%" }}
-                      />
+                      {/* Ollama reports no progress for a load — the call
+                          simply blocks until the weights are resident. So the
+                          bar sweeps rather than fills: a bar parked at some
+                          fraction reads as "this far along", which would be a
+                          number we don't have. */}
+                      <i className={phase === "loading" ? "indeterminate" : undefined} />
                     </div>
                     <div className="pptext">
                       {phase === "done"
