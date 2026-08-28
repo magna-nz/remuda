@@ -73,16 +73,11 @@ ollama serve
 brew install --cask magna-nz/tap/remuda
 ```
 
-The build is unsigned (no Apple Developer program), so macOS shows a Gatekeeper prompt the first
-time. Skip it with `--no-quarantine`:
+Apple Silicon, macOS 12+. The build is unsigned (no Apple Developer program), so macOS would
+normally quarantine it — the cask clears that flag on install, and the app opens straight away.
 
-```sh
-brew install --cask --no-quarantine magna-nz/tap/remuda
-```
-
-<sub>Other ways past it: right-click <strong>Remuda.app → Open → Open</strong> once, or run
-<code>xattr -dr com.apple.quarantine /Applications/Remuda.app</code>. See
-<a href="packaging/homebrew/README.md">packaging/homebrew</a> for release and tap mechanics.</sub>
+<sub>If macOS still balks, run <code>xattr -dr com.apple.quarantine /Applications/Remuda.app</code>.
+See <a href="packaging/homebrew/README.md">packaging/homebrew</a> for release and tap mechanics.</sub>
 
 Or from source:
 
