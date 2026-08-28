@@ -1,11 +1,22 @@
 import "../chat/test/localStorage";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Settings } from "./Settings";
+import { DOCS_BASE_URL, Settings } from "./Settings";
 import { RemudaProvider } from "./state";
 import { FakeClient } from "./test/FakeClient";
 
 const SETTINGS_KEY = "remuda.settings.v1";
+
+/**
+ * Stand in for the Tauri bridge that `withGlobalTauri` injects (mirrors
+ * `api/host.test.ts`'s helper — that file is out of this section's scope, so
+ * this is its own copy rather than a shared import).
+ */
+function stubBridge(impl: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>) {
+  const invoke = vi.fn(impl);
+  (window as unknown as { __TAURI__?: unknown }).__TAURI__ = { core: { invoke } };
+  return invoke;
+}
 
 /** A minimal Response-shaped object covering what client.ts's version() touches. */
 function jsonResponse(data: unknown, status = 200): Response {
@@ -24,6 +35,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
 });
 
 describe("Settings", () => {
@@ -125,6 +137,70 @@ describe("Settings", () => {
     expect(screen.getByRole("switch", { name: "Confirm before deleting a model" })).toHaveAttribute(
       "aria-checked",
       "false",
+    );
+  });
+});
+
+describe("Documentation section (T8)", () => {
+  it("renders its links: a few deep links plus the repository, not one undifferentiated 'Docs' link", () => {
+    const client = new FakeClient({ connected: true });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Getting started" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "The Modelfile editor" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Troubleshooting" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Repository" })).toBeInTheDocument();
+  });
+
+  it("clicking a link calls the bridge with the expected https:// URL, in the system browser not an <a>", () => {
+    const invoke = stubBridge(async () => null);
+    const client = new FakeClient({ connected: true });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Getting started" }));
+
+    expect(invoke).toHaveBeenCalledWith("plugin:opener|open_url", {
+      url: `${DOCS_BASE_URL}getting-started.html`,
+    });
+  });
+
+  it("clicking outside the desktop shell rejects without an unhandled rejection, and surfaces the message", async () => {
+    const client = new FakeClient({ connected: true });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    // No __TAURI__ bridge stubbed: openExternal rejects with "…desktop app…".
+    fireEvent.click(screen.getByRole("button", { name: "Repository" }));
+
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/desktop app/));
+  });
+
+  it("surfaces a bridge failure rather than swallowing it", async () => {
+    stubBridge(async () => {
+      throw "url not allowed on the configured scope";
+    });
+    const client = new FakeClient({ connected: true });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Troubleshooting" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent(/url not allowed on the configured scope/),
     );
   });
 });

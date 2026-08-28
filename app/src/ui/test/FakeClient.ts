@@ -4,6 +4,7 @@
  * implementation another agent owns; tests only need the shape.
  */
 import type {
+  ArchParams,
   ChatChunk,
   ChatMessage,
   CreateRequest,
@@ -89,6 +90,13 @@ export interface FakeClientOptions {
    * a later load() will NOT change it.
    */
   running?: RunningModel[];
+
+  /**
+   * Architecture parameters `show()` reports, per tag. A tag with no entry
+   * gets `null` — the honest default, matching a server whose `model_info`
+   * didn't carry enough to predict against (SPEC-tuning T4).
+   */
+  archParamsByTag?: Record<string, ArchParams>;
 }
 
 function abortError(): DOMException {
@@ -102,7 +110,7 @@ export class FakeClient implements OllamaClient {
   failVersion: boolean;
   failLoad: string | undefined;
   failUnload: string | undefined;
-  loadCalls: { tag: string; keepAlive: KeepAlive }[] = [];
+  loadCalls: { tag: string; keepAlive: KeepAlive; numCtx?: number }[] = [];
   chatChunks: ChatChunk[] | undefined;
   failChat: string | undefined;
   /** Every chat() call, including the think level and run options it carried. */
@@ -113,6 +121,8 @@ export class FakeClient implements OllamaClient {
     think?: ThinkLevel;
     options?: RunOptions;
   }[] = [];
+  private readonly archParamsByTag: Record<string, ArchParams>;
+
   private chatQueue: ChatChunk[] = [];
   private chatWaiter: ((chunk: ChatChunk) => void) | null = null;
 
@@ -148,6 +158,7 @@ export class FakeClient implements OllamaClient {
     this.failPull = options.failPull;
     this.failListGroups = options.failListGroups;
     this.running = options.running;
+    this.archParamsByTag = options.archParamsByTag ?? {};
   }
 
   async version(): Promise<ServerStatus> {
@@ -248,14 +259,22 @@ export class FakeClient implements OllamaClient {
       },
       contextLength: model?.contextLength ?? null,
       capabilities: model?.capabilities ?? [],
+      archParams: this.archParamsByTag[tag] ?? null,
     };
   }
 
-  async load(tag: string, keepAlive: KeepAlive): Promise<void> {
+  async load(
+    tag: string,
+    keepAlive: KeepAlive,
+    _signal?: AbortSignal,
+    numCtx?: number,
+  ): Promise<void> {
     if (this.failLoad !== undefined) {
       throw new Error(this.failLoad);
     }
-    this.loadCalls.push({ tag, keepAlive });
+    // Recorded only when set, so existing `toEqual({ tag, keepAlive })`
+    // assertions keep passing — an undefined key would fail them.
+    this.loadCalls.push(numCtx === undefined ? { tag, keepAlive } : { tag, keepAlive, numCtx });
     // Additive, like Ollama: loading a model doesn't evict the others until
     // OLLAMA_MAX_LOADED_MODELS forces it.
     this.models = this.models.map((m) => (m.tag === tag ? { ...m, isLoaded: true } : m));

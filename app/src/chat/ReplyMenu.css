@@ -1,0 +1,85 @@
+/* Reply overflow menu (docs/mockup-tuning.html #t6 card 2: .menu / .mi / .msep). */
+
+.replymenu {
+  position: relative;
+  display: inline-flex;
+}
+
+.replymenu > .iconbtn {
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--faint);
+}
+
+.replymenu > .iconbtn:hover,
+.replymenu > .iconbtn[aria-expanded="true"] {
+  background: var(--raised);
+  border-color: var(--border);
+  color: var(--ink-2);
+}
+
+.replymenu > .iconbtn svg {
+  width: 13px;
+  height: 13px;
+}
+
+.replymenu .menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  z-index: 40;
+  width: 236px;
+  border: 1px solid var(--border-strong);
+  border-radius: 10px;
+  background: var(--surface-2);
+  box-shadow: var(--shadow-lg);
+  padding: 5px;
+}
+
+.replymenu .mi {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  font-size: 12.5px;
+  text-align: left;
+  color: var(--ink-2);
+}
+
+.replymenu .mi:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.replymenu .mi:disabled {
+  color: var(--faint);
+}
+
+.replymenu .mi .ic {
+  width: 15px;
+  text-align: center;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.replymenu .mi .kbd {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--faint);
+}
+
+.replymenu .msep {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 6px;
+}

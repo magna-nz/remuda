@@ -116,3 +116,20 @@
 .conn-readout.off .dot {
   background: var(--crit);
 }
+
+.docs-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.docs-error {
+  border-color: color-mix(in srgb, var(--crit) 32%, var(--border));
+  background: var(--crit-tint);
+}
+
+.docs-error .st {
+  color: var(--crit);
+  font-size: 12.5px;
+}

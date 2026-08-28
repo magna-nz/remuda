@@ -4,6 +4,7 @@
  * base URL, which defaults to loopback.
  */
 import type {
+  ArchParams,
   ChatChunk,
   ChatMessage,
   CreateRequest,
@@ -19,6 +20,7 @@ import type {
   RunningModel,
   ServerStatus,
   ThinkLevel,
+  ToolCall,
 } from "./types";
 import { DEFAULT_BASE_URL, RUN_OPTION_KEYS } from "./types";
 import { ndjson } from "./ndjson";
@@ -70,7 +72,7 @@ interface WireShowResponse {
 }
 
 interface WireChatLine {
-  message?: { content?: string; thinking?: string };
+  message?: { content?: string; thinking?: string; tool_calls?: unknown };
   done?: boolean;
   eval_count?: number;
   eval_duration?: number;
@@ -181,6 +183,48 @@ function contextLengthFrom(
   return null;
 }
 
+/** model_info's architecture-family sizing, read under the `general.
+ * architecture` prefix. All-or-nothing: a partial ArchParams is worse than
+ * none, since the consumer computes a memory figure from it and a wrong
+ * figure costs the user a five-minute model load. */
+function archParamsFrom(
+  modelInfo: Record<string, unknown> | undefined,
+): ArchParams | null {
+  if (!modelInfo) {
+    return null;
+  }
+  const architecture = modelInfo["general.architecture"];
+  if (typeof architecture !== "string") {
+    return null;
+  }
+  const blockCount = modelInfo[`${architecture}.block_count`];
+  const headCount = modelInfo[`${architecture}.attention.head_count`];
+  const headCountKv = modelInfo[`${architecture}.attention.head_count_kv`];
+  const embeddingLength = modelInfo[`${architecture}.embedding_length`];
+  if (
+    typeof blockCount !== "number" ||
+    typeof headCount !== "number" ||
+    typeof headCountKv !== "number" ||
+    typeof embeddingLength !== "number"
+  ) {
+    return null;
+  }
+  const out: ArchParams = {
+    architecture,
+    blockCount,
+    headCount,
+    headCountKv,
+    embeddingLength,
+  };
+  // Optional: only trusted when positive numbers, and each stands alone —
+  // a model may declare one and not the other.
+  const keyLength = modelInfo[`${architecture}.attention.key_length`];
+  const valueLength = modelInfo[`${architecture}.attention.value_length`];
+  if (typeof keyLength === "number" && keyLength > 0) out.keyLength = keyLength;
+  if (typeof valueLength === "number" && valueLength > 0) out.valueLength = valueLength;
+  return out;
+}
+
 /** POST /api/show's `capabilities`, defensively: anything that isn't an
  * array of strings reads as "none reported". Kept as free strings — Ollama
  * adds capabilities between releases (see pull/catalog.ts). */
@@ -255,6 +299,16 @@ function wireMessage(message: ChatMessage): Record<string, unknown> {
   if (message.images !== undefined && message.images.length > 0) {
     out.images = message.images;
   }
+  // Re-encoded to the wire shape rather than passed through: the domain type
+  // is `{ name, arguments }`, Ollama's is `{ function: { name, arguments } }`.
+  if (message.toolCalls !== undefined && message.toolCalls.length > 0) {
+    out.tool_calls = message.toolCalls.map((call) => ({
+      function: { name: call.name, arguments: call.arguments },
+    }));
+  }
+  if (message.toolName !== undefined && message.toolName !== "") {
+    out.tool_name = message.toolName;
+  }
   return out;
 }
 
@@ -276,6 +330,38 @@ function wireMessage(message: ChatMessage): Record<string, unknown> {
 function wireThink(think: ThinkLevel | undefined): string | boolean | null {
   if (think === undefined) return null;
   return think === "off" ? false : think;
+}
+
+/** `message.tool_calls`, defensively: anything that isn't an array yields
+ * no calls at all. A member missing a string `function.name` is dropped
+ * rather than coerced into a fake call; a missing/non-object `arguments`
+ * defaults to `{}`. Ollama returns `arguments` already parsed — never
+ * `JSON.parse` it here. */
+function toolCallsFrom(raw: unknown): ToolCall[] {
+  if (!Array.isArray(raw)) {
+    return [];
+  }
+  const out: ToolCall[] = [];
+  for (const entry of raw) {
+    if (typeof entry !== "object" || entry === null) {
+      continue;
+    }
+    const fn = (entry as { function?: unknown }).function;
+    if (typeof fn !== "object" || fn === null) {
+      continue;
+    }
+    const name = (fn as { name?: unknown }).name;
+    if (typeof name !== "string") {
+      continue;
+    }
+    const args = (fn as { arguments?: unknown }).arguments;
+    const isPlainObject = typeof args === "object" && args !== null && !Array.isArray(args);
+    out.push({
+      name,
+      arguments: isPlainObject ? (args as Record<string, unknown>) : {},
+    });
+  }
+  return out;
 }
 
 /* ── Factory ────────────────────────────────────────────────────────────── */
@@ -471,6 +557,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         },
         contextLength: contextLengthFrom(raw.model_info),
         capabilities: capabilitiesFrom(raw),
+        archParams: archParamsFrom(raw.model_info),
       };
     },
 
@@ -478,13 +565,21 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       tag: string,
       keepAlive: KeepAlive,
       signal?: AbortSignal,
+      numCtx?: number,
     ): Promise<void> {
-      const res = await send(
-        "POST",
-        "/api/generate",
-        { model: tag, prompt: "", keep_alive: keepAlive, stream: false },
-        signal,
-      );
+      const body: Record<string, unknown> = {
+        model: tag,
+        prompt: "",
+        keep_alive: keepAlive,
+        stream: false,
+      };
+      // Omitted rather than sent as null when unset, matching wireOptions —
+      // an explicit num_ctx overrides the Modelfile's PARAMETER, so sending
+      // one the user didn't choose would silently override their own file.
+      if (typeof numCtx === "number" && numCtx > 0) {
+        body.options = { num_ctx: numCtx };
+      }
+      const res = await send("POST", "/api/generate", body, signal);
       await res.text();
     },
 
@@ -506,6 +601,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         signal?: AbortSignal;
         think?: ThinkLevel;
         options?: RunOptions;
+        tools?: unknown[];
       },
     ): AsyncIterable<ChatChunk> {
       const requestBody: Record<string, unknown> = {
@@ -521,6 +617,9 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       const options = wireOptions(opts.options);
       if (options !== null) {
         requestBody.options = options;
+      }
+      if (opts.tools !== undefined && opts.tools.length > 0) {
+        requestBody.tools = opts.tools;
       }
       const res = await send("POST", "/api/chat", requestBody, opts.signal);
       const body = requireBody(res, "/api/chat");
@@ -540,6 +639,10 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         const thinking = line.message?.thinking;
         if (typeof thinking === "string" && thinking !== "") {
           chunk.thinking = thinking;
+        }
+        const toolCalls = toolCallsFrom(line.message?.tool_calls);
+        if (toolCalls.length > 0) {
+          chunk.toolCalls = toolCalls;
         }
         if (
           done &&

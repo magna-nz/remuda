@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Troubleshooting — Remuda</title>
+<meta name="description" content="Ollama not running, a model spilling to RAM, and context filling up.">
+<link rel="icon" href="assets/mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/mark.svg" alt="">
+      <b>Remuda</b>
+    </a>
+    <nav class="sitenav">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="modelfile-editor.html">Modelfile editor</a>
+      <a href="comparing.html">Comparing</a>
+      <a href="memory.html">Memory</a>
+      <a href="troubleshooting.html" class="active">Troubleshooting</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="eyebrow">Guide</div>
+  <h1>Troubleshooting</h1>
+  <p class="lede">The handful of things that go wrong, and what to do about each.</p>
+
+  <h2>"Ollama isn't running"</h2>
+  <p>Remuda is a client. If it can't reach a server, it says so with a persistent banner rather than
+  quietly failing every action — mutating actions (load, save, pull, delete) are disabled while it's
+  up. Two ways out:</p>
+  <ul>
+    <li><b>Start Ollama</b>, from the banner itself, spawns <code>ollama serve</code> for you. If
+      Ollama isn't installed this fails with the underlying error verbatim (for example, "No such
+      file or directory") rather than a generic message.</li>
+    <li><b>Retry</b> re-runs the health check immediately, for when Ollama was already starting up or
+      you started it yourself in a terminal.</li>
+  </ul>
+  <p>Remuda also health-checks on a timer, so the banner clears on its own once the server answers.</p>
+
+  <h2>A model spills to system RAM</h2>
+  <p>When a loaded model doesn't fit entirely in VRAM, the runtime chip turns amber and names the
+  split — how much is on the GPU, how much fell back to system RAM. Expect a large drop in tokens per
+  second; a spilled model behaves like a different, much slower model, not a slightly slower one.</p>
+  <p>Three ways out, in order of effort:</p>
+  <ul>
+    <li>Eject another loaded model to free VRAM for this one.</li>
+    <li>Use a smaller quantisation — <b>Save as…</b> in the Modelfile editor can quantise a variant
+      on the way in.</li>
+    <li>Lower <code>num_ctx</code>, since the context window's KV cache is part of what has to fit.</li>
+  </ul>
+  <p>Before loading, the <a href="memory.html">fit predictor</a> can flag a spill in advance, at a
+  chosen context length, so this is visible before you wait out a load.</p>
+
+  <h2>Context filling up</h2>
+  <p>Each reply reports the context used against the model's <code>num_ctx</code>. As a chat gets
+  long, that figure climbs toward the ceiling; once it's reached, the server starts dropping the
+  oldest turns to make room, which can make a model seem to "forget" earlier context.</p>
+  <p><code>num_ctx</code> is a load-time setting, not a sampling one — raising it makes Ollama reload
+  the model with a larger KV cache, which costs more memory and can push a model that fit into a
+  spill. Prompt-eval tokens/second, shown after every reply, is the figure that matters most when
+  deciding whether to raise it: a slow prompt-eval rate means a large context is already expensive.</p>
+
+  <div class="pager">
+    <a href="memory.html">&larr; Understanding memory</a>
+    <a href="index.html">Overview &rarr;</a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Remuda is MIT-licensed.</span>
+    <a href="https://github.com/magna-nz/remuda">github.com/magna-nz/remuda</a>
+  </div>
+</footer>
+</body>
+</html>

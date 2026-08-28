@@ -21,7 +21,7 @@ import { useEffect, useState, type ClipboardEvent, type DragEvent, type Keyboard
 import "./ChatView.css";
 import { useRemuda, type LastStats } from "../ui/state";
 import type { Model, ThinkLevel } from "../api/types";
-import { shortTag, type ChatSession } from "./sessions";
+import { shortTag, type ChatSession, type Lane, type Message } from "./sessions";
 import { ThinkingBlock } from "./ThinkingBlock";
 import {
   RunControls,
@@ -30,6 +30,20 @@ import {
   describeOverrides,
   groupDigits,
 } from "./RunControls";
+// T2 — A/B compare (docs/SPEC-tuning.md, docs/mockup-tuning.html #t2).
+import {
+  LANES,
+  effectiveLaneOptions,
+  historyForLane,
+  laneChipLabel,
+  laneConfig,
+  randomSeed,
+  swapsModel,
+  winnerBy,
+} from "./compare";
+// T6 items 1–3 — the reply overflow menu (mockup-tuning #t6, card 2).
+import { ReplyMenu, copyText } from "./ReplyMenu";
+import { asCurl, asOllamaRun, type ExportInput } from "./exportRequest";
 import {
   AttachButton,
   MessageAttachments,
@@ -205,6 +219,107 @@ function StatsStrip({ stats, contextLength }: { stats: LastStats; contextLength:
   );
 }
 
+/* ── A/B lanes (docs/SPEC-tuning.md T2) ───────────────────────────────── */
+
+/** The metrics a lane can win. Deliberately not summed — see `winnerBy`. */
+type LaneMetric = "gen" | "prompt" | "total";
+
+function laneWinners(
+  a: LastStats | null,
+  b: LastStats | null,
+): Record<LaneMetric, Lane | null> {
+  return {
+    gen: winnerBy(a?.tokPerSec, b?.tokPerSec, "higher"),
+    prompt: winnerBy(a?.promptTokPerSec, b?.promptTokPerSec, "higher"),
+    // Wall time: less is better, and it is the one metric where that flips.
+    total: winnerBy(a?.totalMs, b?.totalMs, "lower"),
+  };
+}
+
+/**
+ * One lane's four numbers, in fixed grid positions.
+ *
+ * The positions are the point: two lanes' figures are only comparable at a
+ * glance if `gen` sits above `gen`. So every cell renders whether or not the
+ * server reported it — an absent number is an em dash holding its place, not
+ * a missing row that shifts the other three up and misaligns the footers.
+ *
+ * The win marker is per metric and there is no total. "Which is better" is
+ * the judgement the user is here to make.
+ */
+function LaneStats({
+  lane,
+  stats,
+  wins,
+}: {
+  lane: Lane;
+  stats: LastStats | null;
+  wins: Record<LaneMetric, Lane | null>;
+}) {
+  const cls = (metric: LaneMetric) => `stat${wins[metric] === lane ? " win" : ""}`;
+  return (
+    <div className="lanestats" aria-label={`Lane ${lane.toUpperCase()} timings`}>
+      <span className={cls("gen")}>
+        gen <b>{stats === null ? "—" : `${stats.tokPerSec} tok/s`}</b>
+      </span>
+      <span className={cls("prompt")}>
+        prompt{" "}
+        <b>
+          {stats?.promptTokPerSec == null ? "—" : `${groupDigits(stats.promptTokPerSec)} tok/s`}
+        </b>
+      </span>
+      <span className={cls("total")}>
+        total <b>{stats?.totalMs == null ? "—" : `${(stats.totalMs / 1000).toFixed(2)} s`}</b>
+      </span>
+      {/* Unmarked on purpose: a longer answer is not a better one. */}
+      <span className="stat">out <b>{stats === null ? "—" : `${stats.evalCount} tok`}</b></span>
+    </div>
+  );
+}
+
+interface LaneSlot {
+  message: Message;
+  /** Position in the transcript — what the export needs to rebuild history. */
+  index: number;
+}
+
+type Row =
+  | { kind: "single"; key: string; index: number; message: Message }
+  | { kind: "lanes"; key: string; a: LaneSlot | null; b: LaneSlot | null };
+
+/**
+ * Group the transcript into rows: unlaned messages full width, and each
+ * turn's two lane replies side by side.
+ *
+ * A turn is "the run of laned messages that hasn't filled this lane yet",
+ * which is what keeps two consecutive compare turns from collapsing into one
+ * row, and what lets a half-finished pair (lane A written, lane B cancelled
+ * before it started) still render as a pair with one side empty.
+ */
+function toRows(messages: Message[]): Row[] {
+  const rows: Row[] = [];
+  for (let i = 0; i < messages.length; i += 1) {
+    const message = messages[i];
+    const lane = message.lane;
+    if (lane === undefined) {
+      rows.push({ kind: "single", key: `m${i}`, index: i, message });
+      continue;
+    }
+    const last = rows[rows.length - 1];
+    if (last !== undefined && last.kind === "lanes" && last[lane] === null) {
+      last[lane] = { message, index: i };
+    } else {
+      rows.push({
+        kind: "lanes",
+        key: `m${i}`,
+        a: lane === "a" ? { message, index: i } : null,
+        b: lane === "b" ? { message, index: i } : null,
+      });
+    }
+  }
+  return rows;
+}
+
 const THINK_LEVELS: { value: ThinkLevel; label: string }[] = [
   { value: "off", label: "off" },
   { value: "low", label: "low" },
@@ -218,18 +333,36 @@ export function ChatView() {
     activeSessionId,
     models,
     running,
+    keepAlive,
     streamingSessionId,
     streamError,
+    errorsByMessage,
     lastStats,
+    statsByMessage,
+    compareRun,
     sendMessage,
     cancelGeneration,
     setSessionOptions,
     setSessionThink,
     bakeOptionsIntoEditor,
+    toggleCompare,
+    setLaneConfig,
+    setPinnedSeed,
+    sendCompare,
+    keepLane,
+    regenerateReply,
+    promoteToSystem,
   } = useRemuda();
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingImage[]>([]);
   const [runOpen, setRunOpen] = useState(false);
+  // Per lane, not per turn: a lane's overrides are one set of values, and the
+  // popover that edits them is anchored to the composer like the single-lane
+  // one. Both may be open at once — comparing two knob panels side by side is
+  // the whole point, and RunControls' `scope` is what makes that addressable.
+  const [laneRunOpen, setLaneRunOpen] = useState<Record<Lane, boolean>>({ a: false, b: false });
+  // One reply menu open at a time, keyed by message id.
+  const [menuFor, setMenuFor] = useState<string | null>(null);
   const [dropping, setDropping] = useState(false);
 
   const session = sessions.find((s) => s.id === activeSessionId) ?? null;
@@ -239,6 +372,8 @@ export function ChatView() {
   useEffect(() => {
     setPending([]);
     setRunOpen(false);
+    setLaneRunOpen({ a: false, b: false });
+    setMenuFor(null);
     setDropping(false);
   }, [sessionId]);
 
@@ -253,11 +388,17 @@ export function ChatView() {
   const canSee = capabilities.includes("vision");
 
   const modelIsLoaded = models.some((m) => m.tag === session.model && m.isLoaded);
-  const streaming = streamingSessionId !== null;
+  const compare = session.compare;
+  const compareHere = compareRun !== null && compareRun.sessionId === session.id;
+  // A compare run holds the app-wide guard across the gap between its lanes,
+  // so "something is generating" is the union of the two.
+  const streaming = streamingSessionId !== null || compareRun !== null;
   const streamingHere = streamingSessionId === session.id;
+  const busyHere = streamingHere || compareHere;
   const last = session.messages[session.messages.length - 1];
   // SPEC §9: before the first token, "warming up…" instead of an empty bubble.
-  const warming = streamingHere && last?.role === "assistant" && last.content === "";
+  const warming =
+    streamingHere && last?.role === "assistant" && last.lane === undefined && last.content === "";
   const stats = !streamingHere && lastStats?.sessionId === session.id ? lastStats : null;
   const overrides = session.options ?? {};
   const overrideCount = countOverrides(overrides);
@@ -288,7 +429,8 @@ export function ChatView() {
     const thumbs = pending.map((p) => p.thumb);
     setDraft("");
     setPending([]);
-    void sendMessage(
+    const send = compare === undefined ? sendMessage : sendCompare;
+    void send(
       text,
       images.length > 0 ? images : undefined,
       thumbs.length > 0 ? thumbs : undefined,
@@ -339,6 +481,234 @@ export function ChatView() {
     addFiles(imageFilesFrom(e.dataTransfer));
   };
 
+  /**
+   * The exact request that produced (or would re-produce) one reply.
+   *
+   * Rebuilt from the same three things the send path used — the history
+   * before the reply, the configuration that ran it, and the keep_alive in
+   * effect — so "Copy as curl" hands over what was actually sent rather than
+   * a plausible-looking reconstruction. A lane reply is rebuilt against its
+   * own lane's history, because that is the conversation it answered.
+   */
+  const exportFor = (message: Message, index: number): ExportInput => {
+    const lane = message.lane;
+    if (lane !== undefined && compare !== undefined) {
+      const config = laneConfig(compare, lane);
+      return {
+        tag: config.model,
+        messages: historyForLane(session.messages.slice(0, index), lane),
+        options: effectiveLaneOptions(compare, lane),
+        think: config.think,
+        keepAlive,
+      };
+    }
+    return {
+      tag: session.model,
+      messages:
+        lane === undefined
+          ? session.messages.slice(0, index)
+          : historyForLane(session.messages.slice(0, index), lane),
+      options: session.options,
+      think: session.think,
+      keepAlive,
+    };
+  };
+
+  /** The overflow menu for one reply (T6 items 1–3). */
+  const replyMenu = (message: Message, index: number, name: string) => {
+    const input = exportFor(message, index);
+    const seed = input.options?.seed ?? null;
+    const id = message.id;
+    return (
+      <ReplyMenu
+        name={name}
+        open={menuFor !== null && menuFor === id}
+        onToggle={() => setMenuFor((prev) => (prev === id ? null : (id ?? null)))}
+        onClose={() => setMenuFor(null)}
+        seed={seed}
+        // No id means a session written before ids were persisted: there is
+        // nothing to stream a re-roll back into, so the item stays off.
+        busy={streaming || id === undefined}
+        onPromote={() => void promoteToSystem(message.content)}
+        onRegenerateSameSeed={() => {
+          if (id !== undefined) void regenerateReply(session.id, id);
+        }}
+        onRegenerateNewSeed={() => {
+          if (id !== undefined) void regenerateReply(session.id, id, randomSeed(seed ?? undefined));
+        }}
+        onCopyCurl={() => void copyText(asCurl(input))}
+        onCopyOllamaRun={() => void copyText(asOllamaRun(input))}
+      />
+    );
+  };
+
+  /** One full-width message — the single-lane transcript, unchanged. */
+  const renderMessage = (m: Message, i: number) => {
+    const isLast = i === session.messages.length - 1;
+    if (m.role === "assistant" && isLast && warming) {
+      return (
+        <div key={i} className="msg bot">
+          <div className="av" aria-hidden="true">
+            {avatarFor(session.model)}
+          </div>
+          <div className="col">
+            {m.thinking !== undefined && m.thinking !== "" && (
+              <ThinkingBlock text={m.thinking} live={streamingHere} />
+            )}
+            <div className="bubble warming">
+              warming up <code className="modeltag">{session.model}</code>…
+            </div>
+          </div>
+        </div>
+      );
+    }
+    const thumbs = m.imageThumbs ?? [];
+    return (
+      <div key={i} className={m.role === "user" ? "msg user" : "msg bot"}>
+        {m.role === "assistant" && (
+          <div className="av" aria-hidden="true">
+            {avatarFor(session.model)}
+          </div>
+        )}
+        <div className="col">
+          {/* Reasoning sits outside the bubble — machinery, not the
+              answer, and not part of a copied reply. */}
+          {m.role === "assistant" && m.thinking !== undefined && m.thinking !== "" && (
+            <ThinkingBlock
+              text={m.thinking}
+              // Ollama streams all reasoning before any content, so
+              // the first content token is when thinking ended.
+              // Leaving `live` true for the whole reply made the
+              // header report the reply's duration as the thinking
+              // time — wrong by the length of the answer.
+              live={isLast && streamingHere && m.content === ""}
+            />
+          )}
+          {m.role === "user" && thumbs.length > 0 && (
+            <MessageAttachments thumbs={thumbs} full={m.images !== undefined} />
+          )}
+          <div className="bubble">
+            {m.content}
+            {m.role === "assistant" && isLast && streamingHere && (
+              <span className="caret" aria-hidden="true" />
+            )}
+          </div>
+          {m.role === "assistant" && (
+            <div className="msgfoot">{replyMenu(m, i, `for message ${i + 1}`)}</div>
+          )}
+          {m.role === "assistant" && isLast && stats !== null && (
+            <>
+              <StatsStrip
+                stats={stats}
+                // The runner's context, not the trained ceiling:
+                // "5 000 / 262 144" while the runner sits at 32 768
+                // misreports how close the chat is to filling up.
+                contextLength={runningCtx ?? model?.contextLength ?? null}
+              />
+              {overrideCount > 0 && (
+                <div className="runnote">
+                  {describeOverrides(overrides)} — set for this chat
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  /** One lane of one compare turn (mockup-tuning #t2: .lane). */
+  const renderLane = (
+    row: Extract<Row, { kind: "lanes" }>,
+    lane: Lane,
+    turn: number,
+    isLastRow: boolean,
+    wins: Record<LaneMetric, Lane | null>,
+  ) => {
+    const slot = lane === "a" ? row.a : row.b;
+    const message = slot?.message ?? null;
+    const config = compare === undefined ? null : laneConfig(compare, lane);
+    const laneStats =
+      message?.id !== undefined ? (statsByMessage[message.id] ?? null) : null;
+    const laneError = message?.id !== undefined ? errorsByMessage[message.id] : undefined;
+    // Only the newest row can be live; an older turn is finished by definition.
+    const run = compareHere && isLastRow ? compareRun : null;
+    const generating = run !== null && run.lane === lane;
+    const content = message?.content ?? "";
+    const thinking = message?.thinking ?? "";
+    // Sequential lanes (SPEC §8): B waits for A, and says so rather than
+    // sitting blank as though it had answered with nothing.
+    const queued = run !== null && run.lane === "a" && lane === "b" && content === "";
+    const warmingLane = generating && content === "" && thinking === "";
+    const upper = lane.toUpperCase();
+
+    return (
+      <div className={`lane ${lane}`} key={lane}>
+        <div className="lanehead">
+          <span className="lanetag" aria-hidden="true">
+            {upper}
+          </span>
+          {isLastRow && config !== null ? (
+            // The chip is the lane's whole identity (T2), shown only on the
+            // newest turn: a past turn's configuration was never recorded, so
+            // a chip there would be labelling old output with today's
+            // settings. The one you can *click* lives in the compare bar,
+            // once per lane rather than once per turn.
+            <span className="cfgchip">{laneChipLabel(config)}</span>
+          ) : (
+            <span className="lanename">Lane {upper}</span>
+          )}
+          <span className="spacer" />
+          {message !== null && replyMenu(message, slot?.index ?? 0, `for lane ${upper}, turn ${turn}`)}
+        </div>
+        {thinking !== "" && <ThinkingBlock text={thinking} live={generating && content === ""} />}
+        {queued ? (
+          <div className="lanebody queued">queued</div>
+        ) : warmingLane ? (
+          <div className="lanebody queued">
+            warming up <code className="modeltag">{config?.model ?? session.model}</code>…
+          </div>
+        ) : (
+          <div className="lanebody">
+            {content}
+            {generating && <span className="caret" aria-hidden="true" />}
+            {/*
+             * This lane's own failure. The app-wide `streamError` is a single
+             * slot the sibling lane clears when it starts, so without an
+             * addressable copy a failed lane renders as an empty bubble with
+             * the explanation discarded.
+             */}
+            {laneError !== undefined && (
+              <p className="lane-error" role="status">
+                {laneError}
+              </p>
+            )}
+          </div>
+        )}
+        <LaneStats lane={lane} stats={laneStats} wins={wins} />
+        {isLastRow && (
+          <div className="lanefoot">
+            <button
+              type="button"
+              className={`btn sm${lane === "a" ? " primary" : ""}`}
+              // The two buttons read the same and do opposite things, so the
+              // accessible name has to say which side "this" is.
+              aria-label={`Keep lane ${upper}`}
+              disabled={streaming}
+              onClick={() => keepLane(session.id, lane)}
+            >
+              Keep this side
+            </button>
+            <span className="lanemodel">{shortTag(config?.model ?? session.model)}</span>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const rows = compare === undefined ? null : toRows(session.messages);
+  let turn = 0;
+
   return (
     <div
       className={`chatmain${dropping ? " dropping" : ""}`}
@@ -346,6 +716,31 @@ export function ChatView() {
       onDragLeave={onDragLeave}
       onDrop={onDrop}
     >
+      {canChat && (
+        <div className="chathead">
+          {/* No session title here on purpose — the sidebar already names the
+              chat, and a second copy in the main column is a second thing to
+              keep in sync for no gain. */}
+          <span className="spacer" />
+          <button
+            type="button"
+            className={`cmpbtn${compare === undefined ? "" : " on"}`}
+            aria-label="Compare"
+            aria-pressed={compare !== undefined}
+            title="Run one prompt against two configurations"
+            onClick={() => {
+              // The popovers belong to the mode they were opened in: the
+              // session-level one has no pill to close it while compare is
+              // on, and the lane ones have no lanes once it is off.
+              setRunOpen(false);
+              setLaneRunOpen({ a: false, b: false });
+              toggleCompare(session.id);
+            }}
+          >
+            ⇄ Compare{compare === undefined ? "" : " · on"}
+          </button>
+        </div>
+      )}
       {!modelIsLoaded && <UnloadedBanner session={session} />}
       {!canChat && <EmbeddingGate tag={session.model} />}
 
@@ -370,76 +765,30 @@ export function ChatView() {
           </div>
         ) : (
           <div className="chatlog">
-            {session.messages.map((m, i) => {
-              const isLast = i === session.messages.length - 1;
-              if (m.role === "assistant" && isLast && warming) {
-                return (
-                  <div key={i} className="msg bot">
-                    <div className="av" aria-hidden="true">
-                      {avatarFor(session.model)}
-                    </div>
-                    <div className="col">
-                      {m.thinking !== undefined && m.thinking !== "" && (
-                        <ThinkingBlock text={m.thinking} live={streamingHere} />
-                      )}
-                      <div className="bubble warming">
-                        warming up <code className="modeltag">{session.model}</code>…
+            {rows === null
+              ? session.messages.map((m, i) => renderMessage(m, i))
+              : rows.map((row, ri) => {
+                  if (row.kind === "single") return renderMessage(row.message, row.index);
+                  turn += 1;
+                  const isLastRow = ri === rows.length - 1;
+                  const statsA =
+                    row.a?.message.id !== undefined
+                      ? (statsByMessage[row.a.message.id] ?? null)
+                      : null;
+                  const statsB =
+                    row.b?.message.id !== undefined
+                      ? (statsByMessage[row.b.message.id] ?? null)
+                      : null;
+                  const wins = laneWinners(statsA, statsB);
+                  return (
+                    <div key={row.key}>
+                      <div className="sharedtag">one prompt · both lanes</div>
+                      <div className="lanes">
+                        {LANES.map((lane) => renderLane(row, lane, turn, isLastRow, wins))}
                       </div>
                     </div>
-                  </div>
-                );
-              }
-              const thumbs = m.imageThumbs ?? [];
-              return (
-                <div key={i} className={m.role === "user" ? "msg user" : "msg bot"}>
-                  {m.role === "assistant" && (
-                    <div className="av" aria-hidden="true">
-                      {avatarFor(session.model)}
-                    </div>
-                  )}
-                  <div className="col">
-                    {/* Reasoning sits outside the bubble — machinery, not the
-                        answer, and not part of a copied reply. */}
-                    {m.role === "assistant" && m.thinking !== undefined && m.thinking !== "" && (
-                      <ThinkingBlock
-                        text={m.thinking}
-                        // Ollama streams all reasoning before any content, so
-                        // the first content token is when thinking ended.
-                        // Leaving `live` true for the whole reply made the
-                        // header report the reply's duration as the thinking
-                        // time — wrong by the length of the answer.
-                        live={isLast && streamingHere && m.content === ""}
-                      />
-                    )}
-                    {m.role === "user" && thumbs.length > 0 && (
-                      <MessageAttachments thumbs={thumbs} full={m.images !== undefined} />
-                    )}
-                    <div className="bubble">
-                      {m.content}
-                      {m.role === "assistant" && isLast && streamingHere && (
-                        <span className="caret" aria-hidden="true" />
-                      )}
-                    </div>
-                    {m.role === "assistant" && isLast && stats !== null && (
-                      <>
-                        <StatsStrip
-                          stats={stats}
-                          // The runner's context, not the trained ceiling:
-                          // "5 000 / 262 144" while the runner sits at 32 768
-                          // misreports how close the chat is to filling up.
-                          contextLength={runningCtx ?? model?.contextLength ?? null}
-                        />
-                        {overrideCount > 0 && (
-                          <div className="runnote">
-                            {describeOverrides(overrides)} — set for this chat
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                })}
             {streamError !== null && streamingSessionId === null && (
               <div className="chat-error" role="alert">
                 {streamError}
@@ -448,9 +797,87 @@ export function ChatView() {
           </div>
         ))}
 
+      {canChat && compare !== undefined && (
+        <div className="cmpbar">
+          {LANES.map((lane) => {
+            const upper = lane.toUpperCase();
+            const config = laneConfig(compare, lane);
+            return (
+              <span key={lane} className="lanepick">
+                <span className="lanetag" aria-hidden="true">
+                  {upper}
+                </span>
+                <select
+                  aria-label={`Lane ${upper} model`}
+                  value={config.model}
+                  disabled={streaming}
+                  onChange={(e) => {
+                    const tag = e.target.value;
+                    setLaneConfig(session.id, lane, {
+                      model: tag,
+                      modelfile:
+                        models.find((m) => m.tag === tag)?.isVariant === true ? tag : null,
+                    });
+                  }}
+                >
+                  {models.map((m) => (
+                    <option key={m.tag} value={m.tag}>
+                      {m.tag}
+                    </option>
+                  ))}
+                </select>
+                {/* Reachable before the first send: a comparison you can only
+                    configure after running it once is configured too late. */}
+                <button
+                  type="button"
+                  className="cfgchip"
+                  aria-label={`Lane ${upper} configuration`}
+                  aria-expanded={laneRunOpen[lane]}
+                  onClick={() => setLaneRunOpen((prev) => ({ ...prev, [lane]: !prev[lane] }))}
+                >
+                  {laneChipLabel(config)}
+                </button>
+              </span>
+            );
+          })}
+          <span className="spacer" />
+          {compare.seed === null ? (
+            <button
+              type="button"
+              className="pin calm"
+              title="Two configurations under two different seeds measure sampling noise"
+              onClick={() => setPinnedSeed(session.id, randomSeed())}
+            >
+              seeds not pinned · pin one
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="pin"
+              title="Unpin the shared seed and let each lane use its own"
+              onClick={() => setPinnedSeed(session.id, null)}
+            >
+              seed {compare.seed} · pinned for this run
+            </button>
+          )}
+          {swapsModel(compare) ? (
+            <span className="pin warn" role="status">
+              swaps model between lanes · slower first run
+            </span>
+          ) : (
+            <span className="pin calm">same model · no swap</span>
+          )}
+          {compareHere && (
+            <button type="button" className="btn sm" onClick={cancelGeneration}>
+              Cancel run
+            </button>
+          )}
+        </div>
+      )}
+
       {canChat && (
         <div className="composer">
-          {runOpen && (
+          {runOpen && compare === undefined && (
             <RunControls
               options={overrides}
               modelContextLength={model?.contextLength ?? null}
@@ -465,6 +892,31 @@ export function ChatView() {
               }}
             />
           )}
+          {compare !== undefined && (laneRunOpen.a || laneRunOpen.b) && (
+            <div className="lanepops">
+              {LANES.filter((lane) => laneRunOpen[lane]).map((lane) => {
+                const config = laneConfig(compare, lane);
+                const laneModel = models.find((m) => m.tag === config.model) ?? null;
+                const laneRunningCtx =
+                  running.find((r) => r.tag === config.model)?.contextLength ?? null;
+                return (
+                  <RunControls
+                    key={lane}
+                    scope={`Lane ${lane.toUpperCase()}`}
+                    options={config.options ?? {}}
+                    modelContextLength={laneModel?.contextLength ?? null}
+                    runningContextLength={laneRunningCtx}
+                    onChange={(next) => setLaneConfig(session.id, lane, { options: next })}
+                    onClose={() => setLaneRunOpen((prev) => ({ ...prev, [lane]: false }))}
+                    onBake={() => {
+                      setLaneRunOpen((prev) => ({ ...prev, [lane]: false }));
+                      void bakeOptionsIntoEditor(config.model, config.options ?? {});
+                    }}
+                  />
+                );
+              })}
+            </div>
+          )}
           {canSee && (
             <PendingAttachments
               items={pending}
@@ -478,13 +930,15 @@ export function ChatView() {
             <textarea
               rows={1}
               value={draft}
-              placeholder={`Message ${session.model}…`}
+              placeholder={
+                compare === undefined ? `Message ${session.model}…` : "Message both lanes…"
+              }
               aria-label="Message"
               onChange={(e) => setDraft(e.target.value)}
               onKeyDown={onComposerKeyDown}
               onPaste={onPaste}
             />
-            {streamingHere ? (
+            {busyHere ? (
               <button
                 type="button"
                 className="send stop"
@@ -520,7 +974,10 @@ export function ChatView() {
             )}
           </div>
           <div className="note-strip">
-            {canThink && (
+            {/* In compare mode the lanes own the configuration, and a
+                session-level pill beside them would name overrides that no
+                request will carry. */}
+            {canThink && compare === undefined && (
               <span className="seg" role="group" aria-label="Think">
                 <span className="lbl">Think</span>
                 {THINK_LEVELS.map(({ value, label }) => (
@@ -536,12 +993,14 @@ export function ChatView() {
                 ))}
               </span>
             )}
-            <RunControlsPill
-              count={overrideCount}
-              open={runOpen}
-              onToggle={() => setRunOpen((v) => !v)}
-            />
-            {ctxReloads && overrides.numCtx !== undefined && (
+            {compare === undefined && (
+              <RunControlsPill
+                count={overrideCount}
+                open={runOpen}
+                onToggle={() => setRunOpen((v) => !v)}
+              />
+            )}
+            {compare === undefined && ctxReloads && overrides.numCtx !== undefined && (
               <span className="ctx-chip" title="Context length is applied at load time">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />

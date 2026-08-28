@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Understanding memory — Remuda</title>
+<meta name="description" content="The runtime chips, the fit predictor, and why the fit figure is an estimate.">
+<link rel="icon" href="assets/mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/mark.svg" alt="">
+      <b>Remuda</b>
+    </a>
+    <nav class="sitenav">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="modelfile-editor.html">Modelfile editor</a>
+      <a href="comparing.html">Comparing</a>
+      <a href="memory.html" class="active">Memory</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="eyebrow">Guide</div>
+  <h1>Understanding memory</h1>
+  <p class="lede">What the runtime chips mean, and where the fit predictor's numbers come from.</p>
+
+  <h2>The runtime chips</h2>
+  <p>While a model is loaded, the top bar and the load pane show what <code>ollama ps</code> knows:
+  a <span class="badge">all on GPU · 5.6 GB</span> chip when the whole thing fits in VRAM, or an amber
+  <span class="badge amber">28.4 GB GPU + 9.1 GB RAM</span> chip the moment any of it spills into
+  system RAM. A model fully on GPU and the same model spilling behave like different products — a
+  spill costs a large drop in tokens per second — so the split is shown up front rather than folded
+  into one green dot.</p>
+  <p>Each chip opens a popover with more detail: the context the runner was started with against the
+  model's trained maximum, and a live countdown to when <code>keep_alive</code> expires
+  (<i>never</i>, for an infinite one). This readout always describes whatever is actually loaded in
+  Ollama — browsing a different model in the load pane never changes what the chips report.</p>
+
+  <h2>The fit predictor</h2>
+  <p>Before you load a model, the load pane can estimate whether it — and a chosen context length —
+  will fit in the GPU's share of memory, so a load that's going to spill is visible before you wait
+  for it. It's built from figures Ollama already reports: the model's architecture
+  (<code>/api/show</code>), its installed weight size, and how much memory the host actually has.</p>
+
+  <div class="callout warn">
+    <p><b>The fit figure is an estimate, not a measurement.</b> Two things it can't know in advance:</p>
+    <ul>
+      <li>It assumes an <b>f16 KV cache</b> — the size Ollama uses by default. If you run a
+        quantised cache (<code>OLLAMA_KV_CACHE_TYPE=q8_0</code> or smaller), no endpoint reports
+        that, so the predictor has no way to see it and the estimate runs high.</li>
+      <li><b>GPU utilisation is not available on Apple Silicon.</b> There is no supported API for it,
+        so Remuda never shows a GPU-percent figure and the predictor leans on the VRAM/RAM split
+        instead.</li>
+    </ul>
+  </div>
+
+  <h2>Calibration</h2>
+  <p>The first time a model actually loads cleanly on GPU, Remuda compares the real result against
+  what it predicted and remembers the ratio, per model tag. Every later prediction for that tag folds
+  that ratio back in, so the estimate gets closer to reality the more you actually load the model. A
+  spilled or partial load is never used as a calibration point — it isn't a clean reading.</p>
+  <p>When there's nothing to go on — the server didn't report enough about the architecture, or there
+  is no memory reading at all — the predictor says so plainly rather than showing a number it can't
+  back up.</p>
+
+  <div class="pager">
+    <a href="comparing.html">&larr; Comparing configurations</a>
+    <a href="troubleshooting.html">Troubleshooting &rarr;</a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Remuda is MIT-licensed.</span>
+    <a href="https://github.com/magna-nz/remuda">github.com/magna-nz/remuda</a>
+  </div>
+</footer>
+</body>
+</html>

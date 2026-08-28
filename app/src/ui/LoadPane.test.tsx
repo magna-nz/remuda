@@ -1,13 +1,13 @@
 import "../chat/test/localStorage";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoadPane } from "./LoadPane";
 import { TopNav } from "./TopNav";
 import { ChatView } from "../chat/ChatView";
 import { Sidebar } from "./Sidebar";
 import { RemudaProvider } from "./state";
 import { FakeClient, makeModel } from "./test/FakeClient";
-import type { RunningModel } from "../api/types";
+import type { ArchParams, RunningModel } from "../api/types";
 
 /**
  * Two quantisations of one model (the quant lives in the tag, as an upstream
@@ -59,8 +59,40 @@ async function openTrayWithLoaded(client: FakeClient) {
   await screen.findByText("In memory");
 }
 
+/**
+ * Stand in for the Tauri bridge `hostStats()` reaches through
+ * (api/host.ts, api/host.test.ts's own stubBridge). Absent, every test's
+ * `hostStats()` resolves to null — the no-Tauri-bridge default this whole
+ * suite otherwise runs under.
+ */
+function stubHostBridge(memTotalBytes: number) {
+  (window as unknown as { __TAURI__?: unknown }).__TAURI__ = {
+    core: {
+      invoke: async () => ({
+        memTotalBytes,
+        memUsedBytes: 0,
+        ollamaCpuPercent: null,
+        gpuPercent: null,
+      }),
+    },
+  };
+}
+
+/** A llama3.1:8b-shaped architecture — matches models/fit.test.ts's fixture. */
+const LLAMA_8B_ARCH: ArchParams = {
+  architecture: "llama",
+  blockCount: 32,
+  headCount: 32,
+  headCountKv: 8,
+  embeddingLength: 4096,
+};
+
 beforeEach(() => {
   window.localStorage.clear();
+});
+
+afterEach(() => {
+  delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
 });
 
 describe("LoadPane", () => {
@@ -99,8 +131,11 @@ describe("LoadPane", () => {
     await openPane(client);
     fireEvent.click(screen.getByLabelText("Back to model list"));
 
-    expect(screen.getByText("tuned")).toBeInTheDocument();
-    expect(screen.getByText("loaded")).toBeInTheDocument();
+    // findBy, not getBy: the detail step's FitPanel has async effects in
+    // flight (client.show, hostStats), so stepping back can re-render after
+    // the click settles. A synchronous assertion here is flaky under load.
+    expect(await screen.findByText("tuned")).toBeInTheDocument();
+    expect(await screen.findByText("loaded")).toBeInTheDocument();
   });
 
   it("drilling in shows each quantisation with its literal tag, and that quant's Modelfiles", async () => {
@@ -492,9 +527,12 @@ describe("LoadPane memory tray (SPEC §5.1, docs/mockup-memory.html §02)", () =
     ]);
     await openLoadedTray(client);
 
-    // Top-bar chip and the row's own badge — both read the same figure.
-    expect(screen.getAllByText("100% GPU")).toHaveLength(2);
+    // The row's own badge, and the top-bar chip's relabelled equivalent
+    // (SPEC-tuning T7) — both read the same underlying figure.
+    expect(screen.getByText("100% on GPU")).toBeInTheDocument();
+    expect(screen.getByText("all on GPU · 4.7 GB")).toBeInTheDocument();
     expect(document.querySelectorAll(".rt-inline.spill")).toHaveLength(0);
+    expect(document.querySelectorAll(".rchip.warn")).toHaveLength(0);
     expect(document.querySelectorAll(".slot.spill")).toHaveLength(0);
     // Nothing off-GPU: no CPU share, no spill warning.
     expect(screen.queryByText(/on CPU$/)).not.toBeInTheDocument();
@@ -503,8 +541,10 @@ describe("LoadPane memory tray (SPEC §5.1, docs/mockup-memory.html §02)", () =
     // resident, so each is asserted where it lives rather than by text alone.
     expect(document.querySelector(".slot .slot-sub")).toHaveTextContent("4.7 GB");
     expect(document.querySelector(".pfield > label .rhs")).toHaveTextContent("4.7 GB");
-    // Context equals the model's own max, so no "/ max" suffix.
-    expect(screen.getByText(/^ctx 8,192$/)).toBeInTheDocument();
+    // Context equals the model's own max, so no "/ max" suffix. Scoped to the
+    // row itself — the top bar's own ctx chip (SPEC-tuning T7) reads "ctx
+    // 8,192" too, since nothing has replied yet to say how much is used.
+    expect(document.querySelector(".slot .slot-sub")).toHaveTextContent(/ctx 8,192/);
     // expiresAt: null is an infinite keep_alive — a state, not a countdown.
     expect(screen.getByText("kept")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Eject llama3.1:8b-q4_K_M" })).toBeInTheDocument();
@@ -524,8 +564,10 @@ describe("LoadPane memory tray (SPEC §5.1, docs/mockup-memory.html §02)", () =
     ]);
     await openLoadedTray(client);
 
-    expect(screen.getAllByText("62% GPU")).toHaveLength(2);
-    expect(document.querySelectorAll(".rt-inline.spill")).toHaveLength(2);
+    expect(screen.getByText("62% on GPU")).toBeInTheDocument();
+    expect(screen.getByText("2.9 GB GPU + 1.8 GB RAM")).toBeInTheDocument();
+    expect(document.querySelectorAll(".rt-inline.spill")).toHaveLength(1);
+    expect(document.querySelectorAll(".rchip.warn")).toHaveLength(1);
     // The rail is the at-a-glance signal, so it must actually flip.
     expect(document.querySelectorAll(".slot.spill")).toHaveLength(1);
     expect(screen.getByText("1.8 GB on CPU")).toBeInTheDocument();
@@ -538,7 +580,7 @@ describe("LoadPane memory tray (SPEC §5.1, docs/mockup-memory.html §02)", () =
     ]);
     await openLoadedTray(client);
 
-    expect(screen.queryByText(/% GPU/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/% on GPU/)).not.toBeInTheDocument();
     expect(document.querySelector(".rt-bar")).not.toBeInTheDocument();
     // A size the server reported as 0 is "it didn't say" — the row omits the
     // figure rather than claiming the model occupies 0 MB. Same for context.
@@ -560,7 +602,9 @@ describe("LoadPane memory tray (SPEC §5.1, docs/mockup-memory.html §02)", () =
     ]);
     await openLoadedTray(client);
 
-    expect(screen.getByText(/^ctx 2,048/)).toBeInTheDocument();
+    // Scoped to the row — the top bar's own ctx chip (SPEC-tuning T7) reads
+    // "ctx 2,048" too, off the same running context length.
+    expect(document.querySelector(".slot .slot-sub")).toHaveTextContent(/ctx 2,048/);
     expect(screen.getByText("/ 8,192")).toBeInTheDocument();
   });
 
@@ -633,9 +677,11 @@ describe("LoadPane memory tray (SPEC §5.1, docs/mockup-memory.html §02)", () =
     fireEvent.click(screen.getByTitle("Choose and load a model"));
     await screen.findByText("In memory");
 
-    // Pooled: 6 GB of 8 GB in VRAM. Under 100%, so the nav chip warns.
-    expect(document.querySelector(".modelctl .rt-inline")).toHaveClass("spill");
-    expect(screen.getByText("75% GPU")).toBeInTheDocument();
+    // Pooled: 6 GB of 8 GB in VRAM (SPEC-tuning T7 relabels the old "75%
+    // GPU" pooled figure as the split itself). Under 100%, so the nav chip
+    // warns even though only one of the two resident models actually spills.
+    expect(document.querySelector(".rchip")).toHaveClass("warn");
+    expect(screen.getByText("6.0 GB GPU + 2.0 GB RAM")).toBeInTheDocument();
     // But only the model that actually spills gets an amber rail.
     expect(document.querySelectorAll(".slot.spill")).toHaveLength(1);
   });
@@ -709,5 +755,123 @@ describe("LoadPane capability chips (SPEC §5.1, §2)", () => {
     // vision is known; frobnicate isn't — both render, neither throws.
     expect(screen.getByText("vision")).toBeInTheDocument();
     expect(screen.getByText("frobnicate")).toBeInTheDocument();
+  });
+});
+
+describe("LoadPane fit predictor (SPEC-tuning.md T4)", () => {
+  it("sends no num_ctx unless the user actually moves the slider — a Modelfile's own PARAMETER keeps winning", async () => {
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+
+    await waitFor(() => expect(client.loadCalls).toHaveLength(1));
+    // The key is absent, not undefined — an explicit num_ctx would silently
+    // override the model's own PARAMETER num_ctx.
+    expect(client.loadCalls[0]).not.toHaveProperty("numCtx");
+  });
+
+  it("sends the chosen num_ctx once the slider has been moved", async () => {
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    const slider = document.querySelector(".ctxrange") as HTMLInputElement;
+    expect(slider).not.toBeNull();
+    fireEvent.change(slider, { target: { value: "8192" } });
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+
+    await waitFor(() => expect(client.loadCalls).toHaveLength(1));
+    expect(client.loadCalls[0]?.numCtx).toBe(8192);
+  });
+
+  it("renders the no-prediction state when hostStats() is null — the default outside the desktop shell", async () => {
+    // archParams IS available here — this test isolates the hostStats()-null
+    // path specifically, not the (also common) archParams-null path.
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    expect(await screen.findByText("No prediction available")).toBeInTheDocument();
+    expect(screen.getByText("usable VRAM is unknown on this machine")).toBeInTheDocument();
+    // No fabricated fit track and no fabricated number.
+    expect(document.querySelector(".track .fit")).toBeNull();
+    expect(document.querySelector(".track .over")).toBeNull();
+    expect(document.querySelector(".track .tick")).toBeNull();
+    expect(screen.queryByText(/≈/)).not.toBeInTheDocument();
+  });
+
+  it("renders the no-prediction state when archParams is null, even with host stats available", async () => {
+    stubHostBridge(32_000_000_000);
+    // fixtureModels() ships no archParamsByTag entries at all.
+    const client = new FakeClient({ models: fixtureModels() });
+    await openDetail(client);
+
+    expect(await screen.findByText("No prediction available")).toBeInTheDocument();
+    expect(screen.getByText("model_info didn't report enough to predict")).toBeInTheDocument();
+    expect(document.querySelector(".track .tick")).toBeNull();
+    expect(screen.queryByText(/≈/)).not.toBeInTheDocument();
+  });
+
+  it("predicts a fit (green) or a spill (amber) once archParams and host stats are both known", async () => {
+    // Weights 4.7 GB + KV at ctx 4,096 (~0.537 GB) = ~5.237 GB, under usable.
+    // Weights + KV at ctx 8,192 (the fixture's trained/slider-max context,
+    // ~1.074 GB KV) = ~5.774 GB, over it — so raising the slider to its max
+    // moves this same model from fits to spills.
+    stubHostBridge(7_400_000_000); // usable = 5.55 GB (75% Apple Silicon heuristic)
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    // Default ctx (4,096) fits.
+    expect(await screen.findByText("✓ Fits entirely on GPU")).toBeInTheDocument();
+    expect(document.querySelector(".track .fit")).not.toBeNull();
+
+    fireEvent.change(screen.getByLabelText("Context length"), { target: { value: "8192" } });
+
+    expect(await screen.findByText(/⚠ Spills .+ to system RAM/)).toBeInTheDocument();
+  });
+
+  it("readout says Estimated before calibration and Calibrated after a real load", async () => {
+    stubHostBridge(32_000_000_000);
+    // A realistic residency, because the calibration factor corrects the KV
+    // term alone: weights 4.7 GB + a KV 20% above prediction at ctx 8192
+    // (131,072 B/token x 8192 = 1.074 GB predicted, 1.288 GB observed).
+    // The fake's default residency reports sizeVramBytes === sizeBytes — a
+    // runner holding zero KV cache — which is not an observation at all, and
+    // is now correctly rejected rather than recorded as a 0.82 "correction".
+    const OBSERVED_VRAM = 4_700_000_000 + 1_288_490_189;
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+      running: [
+        {
+          tag: "llama3.1:8b-q4_K_M",
+          sizeBytes: OBSERVED_VRAM,
+          sizeVramBytes: OBSERVED_VRAM,
+          contextLength: 8192,
+          expiresAt: null,
+        },
+      ],
+    });
+    await openDetail(client);
+
+    expect(
+      await screen.findByText("Estimated · assumes an f16 KV cache · load once to calibrate"),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+
+    expect(
+      await screen.findByText("Calibrated from your last load of this model · f16 KV cache"),
+    ).toBeInTheDocument();
   });
 });

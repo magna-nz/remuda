@@ -14,12 +14,15 @@
  * Loading is still the explicit act — nothing here loads until Load is
  * clicked.
  */
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useReducer, useRef, useState } from "react";
 import "./LoadPane.css";
 import { useRemuda } from "./state";
 import { Capabilities } from "./Capabilities";
 import { displayKey, groupByModel, variantCount, type ModelEntry, type QuantOption } from "../models/grouping";
-import type { RunningModel } from "../api/types";
+import type { ArchParams, OllamaClient, RunningModel } from "../api/types";
+import { hostStats, type HostStats } from "../api/host";
+import { predictFit, usableVramFromHostMemory } from "../models/fit";
+import { calibrationFactorFor, recordFitObservation } from "../models/fitCalibration";
 
 function shortTag(tag: string): string {
   return tag.endsWith(":latest") ? tag.slice(0, -":latest".length) : tag;
@@ -113,7 +116,7 @@ function MemorySlot({
         {active && <span className="inuse">this chat</span>}
         <span className="slot-grow" />
         {split !== null && (
-          <span className={`rt-inline${spilling ? " spill" : ""}`}>{split.gpuPct}% GPU</span>
+          <span className={`rt-inline${spilling ? " spill" : ""}`}>{split.gpuPct}% on GPU</span>
         )}
       </div>
       {split !== null && (
@@ -190,6 +193,232 @@ function MemorySlot({
   );
 }
 
+/** "21000" → "21K" — the tick labels, which have no room for full numbers. */
+function formatCtxShort(n: number): string {
+  return n >= 1000 ? `${Math.round(n / 1000)}K` : `${n}`;
+}
+
+/** A default context to open the slider on: modest, never above the trained max. */
+const DEFAULT_CTX = 4096;
+/** Slider ceiling when the server never reported the model's trained context. */
+const FALLBACK_MAX_CTX = 32768;
+const CTX_SLIDER_MIN = 512;
+const CTX_SLIDER_STEP = 256;
+
+/**
+ * The Context field (SPEC-tuning T4): a slider that predicts, before Load is
+ * even clicked, whether a context length fits the model in VRAM.
+ *
+ * Its own component — not inlined into LoadPane's already-large detail step —
+ * so it can own `key={variantTag}` at the call site: switching quant or
+ * Modelfile is a new model as far as the slider is concerned, and remounting
+ * is a cleaner reset than threading another tag-keyed effect through.
+ *
+ * Three states, matching docs/mockup-tuning.html#t4 exactly:
+ *  - no prediction (archParams is null, or hostStats() is null): no fit
+ *    track, no tick, no fabricated number — a sentence saying what's missing.
+ *  - fits: green track, "Fits entirely on GPU".
+ *  - spills: amber past the ceiling, "Spills N to system RAM".
+ */
+function FitPanel({
+  client,
+  tag,
+  weightsBytes,
+  trainedCtx,
+  resident,
+  onCtxChosen,
+}: {
+  client: OllamaClient;
+  tag: string;
+  weightsBytes: number;
+  /** The model's trained max context (POST /api/show's contextLength), or null. */
+  trainedCtx: number | null;
+  /** This tag's live /api/ps entry, if resident — for calibrating after a real load. */
+  resident: RunningModel | null;
+  /**
+   * Fires only once the user has actually moved the slider. Until then the
+   * load sends no `num_ctx` at all, so a Modelfile's own `PARAMETER num_ctx`
+   * keeps winning — silently overriding it with our default would be the
+   * predictor changing the thing it claims only to predict.
+   */
+  onCtxChosen: (ctx: number) => void;
+}) {
+  const [archParams, setArchParams] = useState<ArchParams | null>(null);
+  const [hostMem, setHostMem] = useState<HostStats | null>(null);
+  const [ctx, setCtx] = useState(() => Math.min(DEFAULT_CTX, trainedCtx ?? DEFAULT_CTX));
+  /** Bumped after recordFitObservation writes, so the "Calibrated" copy
+   * reflects it immediately rather than waiting for an unrelated re-render. */
+  const [calibrationVersion, bumpCalibration] = useReducer((n: number) => n + 1, 0);
+  /** Guards against re-recording the same reading twice for one residency. */
+  const recordedKey = useRef<string | null>(null);
+
+  // POST /api/show, for this one tag's model_info — archParams is
+  // all-or-nothing (api/client.ts), so a partial reading never reaches here.
+  useEffect(() => {
+    let cancelled = false;
+    client
+      .show(tag)
+      .then((detail) => {
+        if (!cancelled) setArchParams(detail.archParams);
+      })
+      .catch(() => {
+        if (!cancelled) setArchParams(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client, tag]);
+
+  // Resolves to null with no Tauri bridge — every vitest run, every plain
+  // browser tab — and the no-prediction state below renders correctly for it.
+  useEffect(() => {
+    let cancelled = false;
+    hostStats()
+      .then((stats) => {
+        if (!cancelled) setHostMem(stats);
+      })
+      .catch(() => {
+        if (!cancelled) setHostMem(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const usableVramBytes = hostMem !== null ? usableVramFromHostMemory(hostMem.memTotalBytes) : null;
+  const calibrationFactor = calibrationFactorFor(tag);
+  const calibrated = calibrationFactor !== null;
+  const fit = predictFit({
+    archParams,
+    weightsBytes,
+    usableVramBytes,
+    ctx,
+    trainedCtx,
+    calibrationFactor: calibrationFactor ?? 1,
+  });
+
+  // The estimate self-corrects (SPEC-tuning T4): once this tag is actually
+  // resident and fully on GPU, compare what a *raw* (uncalibrated) prediction
+  // at its real running context would have said against what /api/ps
+  // actually reports, and store the ratio. A spilled or partial load isn't a
+  // clean calibration point, so it's excluded here rather than in
+  // fitCalibration.ts, which has no way to know residency on its own.
+  useEffect(() => {
+    if (resident === null || resident.sizeBytes <= 0 || resident.contextLength === null) return;
+    if (archParams === null || usableVramBytes === null) return;
+    const spilling = resident.sizeVramBytes < resident.sizeBytes;
+    if (spilling) return;
+    const key = `${tag}:${resident.sizeVramBytes}:${resident.contextLength}`;
+    if (recordedKey.current === key) return;
+    const raw = predictFit({
+      archParams,
+      weightsBytes,
+      usableVramBytes,
+      ctx: resident.contextLength,
+      trainedCtx,
+      calibrationFactor: 1,
+    });
+    if (raw.ok) {
+      // The factor is applied to the KV term alone (fit.ts), because the
+      // weights figure is already exact — so the observation has to be a
+      // KV-only ratio too. Recording actual/predictedTotal here and applying
+      // it to KV corrected only the ~18% of the total that KV represents,
+      // while the readout claimed the number was "calibrated".
+      recordFitObservation(
+        tag,
+        raw.kvBytes,
+        resident.sizeVramBytes - raw.weightsBytes,
+      );
+      recordedKey.current = key;
+      bumpCalibration();
+    }
+  }, [resident, archParams, usableVramBytes, weightsBytes, trainedCtx, tag]);
+
+  // Embedding models report trained contexts as low as 256, which would put
+  // the ceiling under the slider's floor: max < min yields a NaN track width
+  // and lets one drag pin a num_ctx *above* the model's trained maximum.
+  const sliderMax = Math.max(CTX_SLIDER_MIN, trainedCtx ?? FALLBACK_MAX_CTX);
+  const pct = (n: number) =>
+    sliderMax <= CTX_SLIDER_MIN
+      ? 0
+      : Math.min(100, Math.max(0, ((n - CTX_SLIDER_MIN) / (sliderMax - CTX_SLIDER_MIN)) * 100));
+  const fitPct = fit.ok ? pct(Math.min(fit.ctxCeiling, sliderMax)) : 0;
+  const showsCeiling = fit.ok && fit.ctxCeiling < sliderMax;
+
+  const fitreadClass = !fit.ok ? "none" : fit.fits ? "ok" : "spill";
+  const r1 = !fit.ok
+    ? "No prediction available"
+    : fit.fits
+      ? "✓ Fits entirely on GPU"
+      : `⚠ Spills ${formatSize(fit.spillBytes)} to system RAM`;
+  const r2 = fit.ok
+    ? `≈ ${formatSize(fit.totalBytes)} of ${formatSize(fit.usableVramBytes)} usable · ${formatSize(fit.weightsBytes)} weights + ${formatSize(fit.kvBytes)} KV`
+    : archParams === null
+      ? "model_info didn't report enough to predict"
+      : "usable VRAM is unknown on this machine";
+  const r3 = fit.ok
+    ? calibrated
+      ? "Calibrated from your last load of this model · f16 KV cache"
+      : "Estimated · assumes an f16 KV cache · load once to calibrate"
+    : archParams === null
+      ? "The server didn't say enough to predict. Load it and Remuda will measure."
+      : "Available inside the Remuda desktop app — load it and Remuda will measure from /api/ps.";
+
+  // calibrationVersion has no direct reader: re-reading calibrationFactorFor
+  // above on every render is what actually picks up a fresh write, and this
+  // dependency only exists to force that render after bumpCalibration().
+  void calibrationVersion;
+
+  return (
+    <div className="pfield">
+      <div className="ctxhead">
+        <label htmlFor="pane-ctx">Context</label>
+        <span className="cv">{ctx.toLocaleString("en-US")}</span>
+      </div>
+      <div className="track">
+        {fit.ok && (
+          <>
+            <div className="fit" style={{ width: `${fitPct}%` }} />
+            {showsCeiling && <div className="over" style={{ left: `${fitPct}%`, right: 0 }} />}
+            {showsCeiling && (
+              <div className="tick" style={{ left: `${fitPct}%` }}>
+                <span>fits to {formatCtxShort(fit.ctxCeiling)}</span>
+              </div>
+            )}
+          </>
+        )}
+        {/* SPEC-tuning T4: no prediction means no tick at all, not even the
+            trained-context one — a tick implies a track worth reading. */}
+        {fit.ok && trainedCtx !== null && (
+          <div className="tick trained" style={{ left: `${pct(trainedCtx)}%` }}>
+            <span>{formatCtxShort(trainedCtx)} trained</span>
+          </div>
+        )}
+        <input
+          type="range"
+          id="pane-ctx"
+          className="ctxrange"
+          min={CTX_SLIDER_MIN}
+          max={sliderMax}
+          step={CTX_SLIDER_STEP}
+          value={ctx}
+          onChange={(e) => {
+            const next = Number(e.target.value);
+            setCtx(next);
+            onCtxChosen(next);
+          }}
+          aria-label="Context length"
+        />
+      </div>
+      <div className={`fitread ${fitreadClass}`}>
+        <span className="r1">{r1}</span>
+        <span className="r2">{r2}</span>
+        <span className="r3">{r3}</span>
+      </div>
+    </div>
+  );
+}
+
 export function LoadPane() {
   const {
     models,
@@ -237,6 +466,18 @@ export function LoadPane() {
   const [filter, setFilter] = useState("");
   const [phase, setPhase] = useState<LoadPhase>("idle");
   const [loadError, setLoadError] = useState<string | null>(null);
+  /**
+   * The context the user deliberately chose on the fit slider, or null when
+   * they never touched it — in which case the load sends no `num_ctx` and
+   * Ollama/the Modelfile decides, as before (SPEC-tuning T4).
+   */
+  const [chosenCtx, setChosenCtx] = useState<number | null>(null);
+
+  // Picking a different model drops any context the user chose for the last
+  // one — carrying it across would apply one model's ceiling to another's.
+  useEffect(() => {
+    setChosenCtx(null);
+  }, [variantTag]);
   /** A tuning dropped by a quant switch, so the pane can say why. */
   const [droppedVariant, setDroppedVariant] = useState<string | null>(null);
   /** The tray row with a call in flight, or "*" while Eject all runs. */
@@ -343,7 +584,7 @@ export function LoadPane() {
     setPhase("loading");
     setLoadError(null);
     try {
-      await load(variantTag);
+      await load(variantTag, chosenCtx ?? undefined);
       setPhase("done");
       window.setTimeout(() => {
         closeLoadPane();
@@ -631,7 +872,7 @@ export function LoadPane() {
                   <span>
                     {[
                       detailEntry.sizeBytes > 0 ? formatSize(detailEntry.sizeBytes) : null,
-                      detailSplit !== null ? `${detailSplit.gpuPct}% GPU` : null,
+                      detailSplit !== null ? `${detailSplit.gpuPct}% on GPU` : null,
                       detailEntry.expiresAt === null ? "kept" : formatCountdown(detailEntry.expiresAt, nowMs),
                     ]
                       .filter((part) => part !== null)
@@ -722,6 +963,18 @@ export function LoadPane() {
                   </div>
                 )}
               </div>
+
+              {variantTag !== null && (
+                <FitPanel
+                  key={variantTag}
+                  client={client}
+                  tag={variantTag}
+                  weightsBytes={models.find((m) => m.tag === variantTag)?.sizeBytes ?? quant?.sizeBytes ?? 0}
+                  trainedCtx={models.find((m) => m.tag === variantTag)?.contextLength ?? null}
+                  resident={detailEntry}
+                  onCtxChosen={setChosenCtx}
+                />
+              )}
 
               <div className="ploadwrap">
                 <div className="pactions">

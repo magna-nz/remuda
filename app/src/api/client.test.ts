@@ -488,6 +488,67 @@ describe("show", () => {
     const detail = await createClient().show("llava:7b");
     expect(detail.capabilities).toEqual(["completion", "vision"]);
   });
+
+  /* ── archParams ─────────────────────────────────────────────────────── */
+
+  it("parses archParams from a full model_info fixture", async () => {
+    stubFetch({
+      "/api/show": () =>
+        jsonResponse({
+          modelfile: "FROM x",
+          model_info: {
+            "general.architecture": "llama",
+            "llama.block_count": 32,
+            "llama.attention.head_count": 32,
+            "llama.attention.head_count_kv": 8,
+            "llama.embedding_length": 4096,
+          },
+        }),
+    });
+    const detail = await createClient().show("llama3.1:8b");
+    expect(detail.archParams).toEqual({
+      architecture: "llama",
+      blockCount: 32,
+      headCount: 32,
+      headCountKv: 8,
+      embeddingLength: 4096,
+    });
+  });
+
+  it("archParams is null when general.architecture is absent", async () => {
+    stubFetch({
+      "/api/show": () =>
+        jsonResponse({
+          modelfile: "FROM x",
+          model_info: {
+            "llama.block_count": 32,
+            "llama.attention.head_count": 32,
+            "llama.attention.head_count_kv": 8,
+            "llama.embedding_length": 4096,
+          },
+        }),
+    });
+    const detail = await createClient().show("llama3.1:8b");
+    expect(detail.archParams).toBeNull();
+  });
+
+  it("archParams is null when exactly one of the four numeric keys is missing", async () => {
+    stubFetch({
+      "/api/show": () =>
+        jsonResponse({
+          modelfile: "FROM x",
+          model_info: {
+            "general.architecture": "llama",
+            "llama.block_count": 32,
+            "llama.attention.head_count": 32,
+            "llama.attention.head_count_kv": 8,
+            // "llama.embedding_length" deliberately omitted.
+          },
+        }),
+    });
+    const detail = await createClient().show("llama3.1:8b");
+    expect(detail.archParams).toBeNull();
+  });
 });
 
 /* ── chat() ─────────────────────────────────────────────────────────────── */
@@ -697,6 +758,68 @@ describe("chat", () => {
     expect(chunk.stats).toEqual({ evalCount: 8, evalDurationNs: 1000000000 });
     expect(chunk.stats).not.toHaveProperty("promptEvalCount");
   });
+
+  /* ── tools ──────────────────────────────────────────────────────────── */
+
+  it("sends `tools` verbatim when supplied, and omits the key entirely when not", async () => {
+    const tools = [{ type: "function", function: { name: "get_weather" } }];
+    expect(await chatBody({ keepAlive: "5m", tools })).toMatchObject({ tools });
+    expect(await chatBody({ keepAlive: "5m" })).not.toHaveProperty("tools");
+    expect(await chatBody({ keepAlive: "5m", tools: [] })).not.toHaveProperty("tools");
+  });
+
+  it("yields tool_calls with arguments still an object, never JSON.parse'd", async () => {
+    stubFetch({
+      "/api/chat": () =>
+        streamResponse([
+          '{"message":{"content":"","tool_calls":[{"function":{"name":"get_weather",' +
+            '"arguments":{"city":"Wellington"}}}]},"done":false}\n',
+          '{"message":{"content":""},"done":true}\n',
+        ]),
+    });
+    const [chunk] = await collect(
+      createClient().chat("m:1b", [{ role: "user", content: "hi" }], { keepAlive: "5m" }),
+    );
+    expect(chunk.toolCalls).toEqual([
+      { name: "get_weather", arguments: { city: "Wellington" } },
+    ]);
+  });
+
+  it("drops malformed tool_calls entries defensively", async () => {
+    stubFetch({
+      "/api/chat": () =>
+        streamResponse([
+          '{"message":{"content":"","tool_calls":[' +
+            '{"function":{"name":"a","arguments":"not-an-object"}},' +
+            '{"function":{"arguments":{"x":1}}},' +
+            '{"function":{"name":"b"}}' +
+            ']},"done":false}\n',
+          '{"message":{"content":""},"done":true}\n',
+        ]),
+    });
+    const [chunk] = await collect(
+      createClient().chat("m:1b", [{ role: "user", content: "hi" }], { keepAlive: "5m" }),
+    );
+    // "a" survives with arguments defaulted to {}; the entry missing
+    // function.name is dropped; "b" survives with arguments defaulted to {}.
+    expect(chunk.toolCalls).toEqual([
+      { name: "a", arguments: {} },
+      { name: "b", arguments: {} },
+    ]);
+  });
+
+  it("yields no toolCalls field at all when tool_calls isn't an array", async () => {
+    stubFetch({
+      "/api/chat": () =>
+        streamResponse([
+          '{"message":{"content":"hi","tool_calls":"nope"},"done":true}\n',
+        ]),
+    });
+    const [chunk] = await collect(
+      createClient().chat("m:1b", [{ role: "user", content: "hi" }], { keepAlive: "5m" }),
+    );
+    expect(chunk).not.toHaveProperty("toolCalls");
+  });
 });
 
 /* ── errors ─────────────────────────────────────────────────────────────── */
@@ -905,5 +1028,101 @@ describe("truncated stream detection", () => {
       await collect(createClient().pull("llama3.1:8b"));
     };
     await expect(iterate()).rejects.toThrow(/pull stream ended without a success status/);
+  });
+});
+
+/* ── load: num_ctx ─────────────────────────────────────────────────────── */
+
+describe("load", () => {
+  it("omits options entirely when no num_ctx is chosen", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m");
+
+    const body = bodyOf(stub.mock.calls[0][1]);
+    expect(body).toEqual({
+      model: "llama3.1:8b",
+      prompt: "",
+      keep_alive: "5m",
+      stream: false,
+    });
+    // Absent, not null: an explicit options block would override the
+    // Modelfile's own PARAMETER num_ctx (SPEC-tuning T4).
+    expect(body).not.toHaveProperty("options");
+  });
+
+  it("sends num_ctx as a load-time option when one is chosen", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, 16384);
+
+    expect(bodyOf(stub.mock.calls[0][1])).toEqual({
+      model: "llama3.1:8b",
+      prompt: "",
+      keep_alive: "5m",
+      stream: false,
+      options: { num_ctx: 16384 },
+    });
+  });
+
+  it("ignores a non-positive num_ctx rather than sending a nonsense window", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, 0);
+
+    expect(bodyOf(stub.mock.calls[0][1])).not.toHaveProperty("options");
+  });
+});
+
+/* ── chat: tool results going back out ─────────────────────────────────── */
+
+describe("chat outbound tool messages", () => {
+  it("re-encodes assistant toolCalls to Ollama's shape and sends tool_name", async () => {
+    const stub = stubFetch({
+      "/api/chat": () => streamResponse(['{"done":true,"eval_count":1,"eval_duration":1}\n']),
+    });
+    await collect(
+      createClient().chat(
+        "qwen2.5:7b",
+        [
+          { role: "user", content: "weather in Wellington?" },
+          {
+            role: "assistant",
+            content: "",
+            toolCalls: [{ name: "get_weather", arguments: { city: "Wellington" } }],
+          },
+          { role: "tool", content: '{"temp_c":13}', toolName: "get_weather" },
+        ],
+        { keepAlive: "5m" },
+      ),
+    );
+
+    const body = bodyOf(stub.mock.calls[0][1]) as { messages: unknown[] };
+    // Domain shape is { name, arguments }; the wire nests it under `function`.
+    expect(body.messages[1]).toEqual({
+      role: "assistant",
+      content: "",
+      tool_calls: [{ function: { name: "get_weather", arguments: { city: "Wellington" } } }],
+    });
+    expect(body.messages[2]).toEqual({
+      role: "tool",
+      content: '{"temp_c":13}',
+      tool_name: "get_weather",
+    });
+  });
+
+  it("omits tool_calls and tool_name when absent — an ordinary turn is unchanged", async () => {
+    const stub = stubFetch({
+      "/api/chat": () => streamResponse(['{"done":true,"eval_count":1,"eval_duration":1}\n']),
+    });
+    await collect(
+      createClient().chat("qwen2.5:7b", [{ role: "user", content: "hi" }], { keepAlive: "5m" }),
+    );
+
+    const body = bodyOf(stub.mock.calls[0][1]) as { messages: unknown[] };
+    expect(body.messages[0]).toEqual({ role: "user", content: "hi" });
   });
 });

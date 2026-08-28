@@ -3,5 +3,11 @@
   "identifier": "default",
   "description": "Default capabilities for the main Remuda window",
   "windows": ["main"],
-  "permissions": ["core:default"]
+  "permissions": [
+    "core:default",
+    {
+      "identifier": "opener:allow-open-url",
+      "allow": [{ "url": "http://*" }, { "url": "https://*" }]
+    }
+  ]
 }

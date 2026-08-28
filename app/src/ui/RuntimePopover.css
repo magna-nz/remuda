@@ -1,0 +1,168 @@
+/* Runtime popover (SPEC-tuning T7, docs/mockup-tuning.html §t7 `.rpop`). */
+
+.rpop {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 320px;
+  max-height: min(80vh, 640px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+  overflow: hidden auto;
+}
+
+.rpop-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.rpop-h b {
+  font-size: 12.5px;
+}
+
+.rpop-h .hs {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.rpop .spacer {
+  flex: 1;
+}
+
+.rsec {
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--border);
+}
+
+.rsec:last-of-type {
+  border-bottom: none;
+}
+
+.rlab {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--ink-2);
+  margin-bottom: 7px;
+}
+
+.rlab .rv {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.rlab .rv.good {
+  color: var(--good);
+}
+
+.rlab .rv.warn {
+  color: var(--warn);
+}
+
+.segbar {
+  display: flex;
+  height: 7px;
+  border-radius: 4px;
+  overflow: hidden;
+  background: var(--border);
+}
+
+.segbar i {
+  display: block;
+  height: 100%;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 7px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.legend i {
+  width: 7px;
+  height: 7px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.spark {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 32px;
+}
+
+.spark i {
+  flex: 1 1 auto;
+  min-width: 2px;
+  background: var(--ember);
+  border-radius: 1px;
+}
+
+.meter {
+  height: 7px;
+  border-radius: 4px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.meter i {
+  display: block;
+  height: 100%;
+  background: var(--good);
+  border-radius: 4px;
+}
+
+.meter.warn i {
+  background: var(--warn);
+}
+
+.absent {
+  font-size: 12px;
+  color: var(--faint);
+  font-style: italic;
+}
+
+.rnote {
+  margin-top: 7px;
+  font-size: 11px;
+  color: var(--faint);
+  line-height: 1.4;
+}
+
+.rfoot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 13px;
+  flex: 0 0 auto;
+}
+
+.rfoot .keepalive {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}

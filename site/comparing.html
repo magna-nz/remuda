@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Comparing configurations — Remuda</title>
+<meta name="description" content="The A/B run: two lanes, sequential execution, and why the seed is pinned.">
+<link rel="icon" href="assets/mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/mark.svg" alt="">
+      <b>Remuda</b>
+    </a>
+    <nav class="sitenav">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="modelfile-editor.html">Modelfile editor</a>
+      <a href="comparing.html" class="active">Comparing</a>
+      <a href="memory.html">Memory</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="eyebrow">Guide</div>
+  <h1>Comparing configurations</h1>
+  <p class="lede">Send one message to two configurations at once and read the replies side by side.</p>
+
+  <h2>Two lanes</h2>
+  <p>A compare turn runs on two lanes, A and B. Each lane can carry its own sampling overrides —
+  temperature, top-p, top-k, and the rest — so you can ask, for instance, "does raising temperature
+  actually change this answer" without re-typing the prompt twice. Your message is sent once; each
+  lane continues its <i>own</i> conversation from there, so a later turn in lane A never sees lane B's
+  reply as if it were history.</p>
+
+  <h2>Sequential, not parallel</h2>
+  <p>The two lanes run one after another, not concurrently. That keeps the readout — tokens per
+  second, load time — meaningful for each lane on its own, rather than two requests contending for
+  the same GPU and both numbers being wrong.</p>
+
+  <h2>Why the seed is pinned</h2>
+  <p>Left alone, sampling is randomized per request, so two runs of the exact same configuration can
+  read differently for reasons that have nothing to do with the configuration. When neither lane sets
+  its own seed, Remuda pins one seed and uses it for both — so a compare measures the
+  <i>configurations</i>, not sampling noise. Setting a seed on one lane deliberately is treated as an
+  intentional per-lane difference and unpins the pair.</p>
+  <p><b>Regenerate · same seed</b> reruns both lanes on the seed that was pinned for them. It's
+  disabled when no seed was ever pinned — Remuda won't invent one just to offer the button.</p>
+
+  <div class="pager">
+    <a href="modelfile-editor.html">&larr; The Modelfile editor</a>
+    <a href="memory.html">Understanding memory &rarr;</a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Remuda is MIT-licensed.</span>
+    <a href="https://github.com/magna-nz/remuda">github.com/magna-nz/remuda</a>
+  </div>
+</footer>
+</body>
+</html>

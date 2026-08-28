@@ -147,9 +147,14 @@ describe("ChatView", () => {
     await waitFor(() => {
       const stored = JSON.parse(window.localStorage.getItem(SESSIONS_STORAGE_KEY) ?? "[]");
       expect(stored[0].title).toBe("Say hello");
+      // Message ids ARE persisted now (SPEC-tuning T2). They were stripped
+      // when they were only a live routing handle; compare mode makes them
+      // part of the record — `lane` needs an id beside it, and the reply
+      // overflow menu addresses a message by id after a restart. Still an
+      // exact-shape assertion: an unexpected extra field fails here.
       expect(stored[0].messages).toEqual([
-        { role: "user", content: "Say hello" },
-        { role: "assistant", content: "Hello!" },
+        { id: expect.stringMatching(/^m-/), role: "user", content: "Say hello" },
+        { id: expect.stringMatching(/^m-/), role: "assistant", content: "Hello!" },
       ]);
     });
   });
@@ -348,7 +353,10 @@ describe("ChatView", () => {
     // content on the way to storage either.
     await waitFor(() => {
       const stored = JSON.parse(window.localStorage.getItem(SESSIONS_STORAGE_KEY) ?? "[]");
+      // Exact shape, with the now-persisted id (see the note above). `lane`
+      // is absent because this is a single-lane chat.
       expect(stored[0].messages[1]).toEqual({
+        id: expect.stringMatching(/^m-/),
         role: "assistant",
         content: "Timsort.",
         thinking: "Mostly-sorted is the word.",

@@ -1,0 +1,1196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Remuda — the tuning loop</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+:root{
+  --bg:#191817; --surface:#1e1d1b; --surface-2:#262523; --raised:#302e2b;
+  --border:#3a3733; --border-strong:#55504a;
+  --ink:#f2efe9; --ink-2:#dcd7ce; --muted:#a29c91; --faint:#7b756a;
+  --ember:#6165c6; --ember-press:#6b4fa8; --ember-tint:#262445; --ember-ink:#a9a5ea;
+  --good:#89c360; --good-tint:#1e2a16;
+  --warn:#f1ae27; --warn-tint:#2e2610;
+  --crit:#e75140; --crit-tint:#2f1714;
+  --cap-tools:#8fb6e8; --cap-tools-tint:#1b2431;
+  --cap-vision:#d9a2e6; --cap-vision-tint:#2a1e2e;
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 8px 24px -10px rgba(0,0,0,.55);
+  --shadow-lg:0 22px 60px -16px rgba(0,0,0,.7);
+  --radius:12px;
+  --ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono","Cascadia Code",monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;color:inherit}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em}
+code{font-family:var(--mono)}
+::selection{background:var(--ember-tint)}
+
+/* ---------- page chrome ---------- */
+.page{max-width:1080px;margin:0 auto;padding:34px 24px 90px}
+.page > header h1{font-size:21px}
+.page > header p{margin:8px 0 0;color:var(--muted);font-size:13.5px;max-width:74ch}
+.page > header .meta{margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+.premise{margin-top:18px;padding:14px 16px;border:1px solid var(--border);border-left:2px solid var(--ember);border-radius:10px;background:var(--surface);font-size:13.5px;color:var(--ink-2);max-width:80ch}
+.premise b{color:var(--ink)}
+
+.toc{margin-top:22px;display:grid;grid-template-columns:repeat(auto-fill,minmax(228px,1fr));gap:8px}
+.toc a{display:flex;gap:10px;align-items:baseline;text-decoration:none;padding:9px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface);color:var(--ink)}
+.toc a:hover{background:var(--surface-2);border-color:var(--border-strong)}
+.toc a .n{font-family:var(--mono);font-size:11px;color:var(--ember-ink)}
+.toc a .t{font-size:12.5px;font-weight:600}
+.toc a .e{margin-left:auto;font-size:10.5px;color:var(--faint)}
+
+.sec{margin-top:56px;padding-top:34px;border-top:1px solid var(--border)}
+.sec > .num{font-family:var(--mono);font-size:12px;color:var(--ember-ink);letter-spacing:.06em}
+.sec > h2{font-size:17.5px;margin-top:5px}
+.sec > .why{margin:9px 0 0;color:var(--ink-2);font-size:13.5px;max-width:74ch}
+.sec > .why + .why{margin-top:8px;color:var(--muted)}
+.api{margin:14px 0 18px;display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.api .k{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-right:2px}
+.api code{font-size:11.5px;background:var(--surface-2);border:1px solid var(--border);padding:2px 8px;border-radius:6px;color:var(--ink-2)}
+.api code.new{border-color:color-mix(in srgb,var(--ember) 40%,transparent);color:var(--ember-ink)}
+.caption{margin:11px 2px 0;font-size:12.5px;color:var(--muted);max-width:82ch}
+.caption b{color:var(--ink-2);font-weight:600}
+.caption + .caption{margin-top:7px}
+.cap-line{margin:0 0 14px;font-size:12.5px;color:var(--faint)}
+.subhead{margin:30px 0 12px;font-size:13px;font-weight:700;color:var(--ink-2);display:flex;align-items:center;gap:9px}
+.subhead:before{content:"";width:14px;height:1px;background:var(--border-strong)}
+
+/* ---------- fake app window ---------- */
+.win{position:relative;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--bg);box-shadow:var(--shadow)}
+.topnav{display:flex;align-items:center;gap:10px;height:50px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--surface);flex:0 0 auto}
+.traffic{display:flex;gap:7px}
+.traffic i{width:10px;height:10px;border-radius:50%;background:var(--border-strong);display:block}
+.brand{display:flex;align-items:center;gap:8px;margin-left:3px}
+.brand b{font-weight:800;letter-spacing:-.02em;font-size:14px}
+.mark{width:22px;height:22px;border-radius:6px;background:linear-gradient(150deg,var(--ember),var(--ember-press));display:grid;place-items:center;color:#fff;font-weight:800;font-size:12px;flex:0 0 auto}
+.divider{width:1px;height:20px;background:var(--border-strong);flex:0 0 auto}
+.modelctl{display:inline-flex;align-items:center;gap:9px;padding:6px 11px;border-radius:9px;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--ink);box-shadow:var(--shadow);flex:0 0 auto}
+.modelctl .mctl-t{font-family:var(--mono);font-size:12.5px;font-weight:500}
+.modelctl .car{color:var(--muted);font-size:10px}
+.topnav .spacer{flex:1}
+.conn{display:inline-flex;align-items:center;gap:7px;font-family:var(--mono);font-size:11.5px;font-weight:500;padding:4px 10px;border-radius:999px;background:var(--good-tint);color:var(--good);border:1px solid color-mix(in srgb,var(--good) 25%,transparent)}
+.conn .dot{width:7px;height:7px;border-radius:50%;background:var(--good)}
+
+/* runtime chips in the top bar */
+.rchip{display:inline-flex;align-items:center;gap:6px;padding:4px 9px;border-radius:8px;background:var(--surface-2);border:1px solid var(--border);color:var(--ink-2);font-family:var(--mono);font-size:11px;font-weight:500;white-space:nowrap;flex:0 0 auto}
+.rchip.good{background:var(--good-tint);color:var(--good);border-color:color-mix(in srgb,var(--good) 26%,transparent)}
+.rchip.warn{background:var(--warn-tint);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+.rchip .d{width:6px;height:6px;border-radius:50%;background:currentColor;flex:0 0 auto}
+.rchip .sub{color:var(--faint)}
+.rchip.warn .sub{color:color-mix(in srgb,var(--warn) 65%,var(--faint))}
+
+.shell{display:flex;min-height:0}
+.sidebar{width:206px;flex:0 0 auto;background:var(--bg);border-right:1px solid var(--border);padding:10px 8px;display:flex;flex-direction:column;gap:2px}
+.side-label{padding:8px 8px 5px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:6px}
+.side-label .cnt{margin-left:auto;font-family:var(--mono);font-weight:500;letter-spacing:0;text-transform:none;font-size:10.5px}
+.sess{display:block;width:100%;min-width:0;overflow:hidden;text-align:left;border:1px solid transparent;background:transparent;border-radius:10px;padding:8px 10px}
+.sess:hover{background:var(--raised)}
+.sess.active{background:var(--surface-2);border-color:var(--border-strong)}
+.sess .stitle{font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sess .smodel{display:flex;align-items:center;gap:6px;margin-top:3px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.sess .sdot{width:6px;height:6px;border-radius:50%;background:var(--good);flex:0 0 auto}
+.sess .sdot.bench{background:var(--ember);border-radius:2px}
+.main{flex:1;min-width:0;background:var(--surface);display:flex;flex-direction:column}
+.tabs{display:flex;align-items:center;gap:2px;padding:0 14px;border-bottom:1px solid var(--border);background:var(--surface);flex:0 0 auto}
+.tab{padding:12px 11px 11px;font-size:12.5px;font-weight:600;color:var(--muted);background:transparent;border:0;border-bottom:2px solid transparent;display:inline-flex;align-items:center;gap:6px}
+.tab.active{color:var(--ink);border-bottom-color:var(--ember)}
+.tabs .spacer{flex:1}
+.tab .capdot{width:6px;height:6px;border-radius:50%;background:var(--cap-tools)}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px;padding:8px 12px;font-weight:600;font-size:13px;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--ink)}
+.btn:hover{background:var(--raised)}
+.btn.primary{background:var(--ember);border-color:transparent;color:#fff;box-shadow:var(--shadow)}
+.btn.primary:hover{background:var(--ember-press)}
+.btn.wide{width:100%}
+.btn.sm{padding:5px 10px;font-size:12px;border-radius:8px}
+.btn.xs{padding:3px 8px;font-size:11px;border-radius:7px}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{background:var(--raised);color:var(--ink)}
+.btn.danger{color:var(--crit);border-color:color-mix(in srgb,var(--crit) 32%,transparent);background:transparent}
+.iconbtn{width:28px;height:28px;display:grid;place-items:center;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted);flex:0 0 auto}
+.iconbtn:hover{background:var(--raised);color:var(--ink)}
+.seg{display:inline-flex;padding:2px;background:var(--bg);border:1px solid var(--border);border-radius:9px;gap:2px}
+.seg button{padding:5px 11px;font-size:12px;font-weight:600;border:0;background:transparent;color:var(--muted);border-radius:7px}
+.seg button.on{background:var(--surface-2);color:var(--ink);box-shadow:var(--shadow)}
+.meter{height:6px;border-radius:999px;background:var(--border);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--ember);border-radius:999px}
+.meter.good i{background:var(--good)}
+.meter.warn i{background:var(--warn)}
+
+/* ---------- T1 history ---------- */
+.mfhead{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--border)}
+.mfhead .mft{font-family:var(--mono);font-size:12.5px;font-weight:500}
+.mfhead .spacer{flex:1}
+.histwrap{display:flex;min-height:0}
+.timeline{width:250px;flex:0 0 auto;border-right:1px solid var(--border);padding:8px;overflow:auto;background:var(--bg)}
+.hentry{width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:9px;padding:9px 10px;display:block;margin-bottom:2px;position:relative}
+.hentry:hover{background:var(--raised)}
+.hentry.on{background:var(--surface-2);border-color:var(--border-strong)}
+.hentry .hr1{display:flex;align-items:center;gap:7px}
+.hentry .hkind{font-size:11px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--faint)}
+.hentry.on .hkind{color:var(--ember-ink)}
+.hentry .htime{margin-left:auto;font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.hentry .hsum{margin-top:4px;font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hentry .hsum .plus{color:var(--good)}
+.hentry .hsum .minus{color:var(--crit)}
+.hbadge{display:inline-block;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 6px;border-radius:5px;background:var(--good-tint);color:var(--good)}
+.hbadge.drift{background:var(--warn-tint);color:var(--warn)}
+.diffpane{flex:1;min-width:0;display:flex;flex-direction:column}
+.diffbar{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.diffbar .dt{font-size:12.5px;color:var(--muted)}
+.diffbar .dt b{color:var(--ink);font-weight:600}
+.diffbar .spacer{flex:1}
+.diff{flex:1;overflow:auto;font-family:var(--mono);font-size:12px;line-height:1.75;padding:10px 0}
+.dl{display:flex;padding:0 14px 0 0}
+.dl .gut{width:52px;flex:0 0 auto;text-align:right;padding-right:12px;color:var(--faint);font-size:11px;user-select:none}
+.dl .txt{white-space:pre-wrap;color:var(--ink-2)}
+.dl.add{background:color-mix(in srgb,var(--good) 11%,transparent)}
+.dl.add .txt{color:var(--good)}
+.dl.del{background:color-mix(in srgb,var(--crit) 11%,transparent)}
+.dl.del .txt{color:var(--crit)}
+.dl.hunk{background:var(--surface-2)}
+.dl.hunk .txt{color:var(--faint)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>Remuda — the tuning loop</h1>
+  <p>Seven features that deepen the one thing Remuda already does that no other Ollama GUI does:
+     <b>edit → reload → retest</b>. Mockups are built from the shipped design tokens, so what is
+     drawn here is what the app can render.</p>
+  <div class="premise">
+    <b>The premise every screen below is checked against.</b> Every competing Ollama GUI — Open WebUI,
+    Msty, Enchanted, Chatbox, LM Studio — is a chat window, and competes on chat surface. Remuda does
+    not win there. Remuda's user is the person <b>tuning</b> a model, and the loop they run is the
+    product. Nothing here is a chat feature.
+  </div>
+  <div class="meta">docs/mockup-tuning.html · companion to SPEC-tuning.md</div>
+  <nav class="toc">
+    <a href="#t1"><span class="n">T1</span><span class="t">Modelfile history</span><span class="e">S</span></a>
+    <a href="#t2"><span class="n">T2</span><span class="t">A/B run</span><span class="e">M</span></a>
+    <a href="#t3"><span class="n">T3</span><span class="t">Tool playground</span><span class="e">M</span></a>
+    <a href="#t4"><span class="n">T4</span><span class="t">Fit predictor</span><span class="e">M</span></a>
+    <a href="#t5"><span class="n">T5</span><span class="t">Bench</span><span class="e">L</span></a>
+    <a href="#t6"><span class="n">T6</span><span class="t">Four small ones</span><span class="e">XS</span></a>
+    <a href="#t7"><span class="n">T7</span><span class="t">Runtime telemetry</span><span class="e">S–M</span></a>
+  </nav>
+</header>
+
+<!-- ═══════════════════ T1 ═══════════════════ -->
+<section class="sec" id="t1">
+  <div class="num">T1 · SMALL · BUILD FIRST</div>
+  <h2>Modelfile history — the undo the loop never had</h2>
+  <p class="why">Remuda's pitch is that the edit→reload→retest loop is fast. A fast loop makes
+     <b>mistakes</b> fast too, and the failure it creates is specific: <em>"I had it behaving three
+     saves ago and I can't get back."</em></p>
+  <p class="why">Every Save already funnels through one path and <code>rawText</code> is already the
+     declared source of truth (SPEC §6), so this is a store slice and a diff view. No new API calls.</p>
+  <div class="api"><span class="k">Ollama</span><code>none</code><span class="k">storage</span><code>remuda.modelfile-history.v1</code><span class="k">surface</span><code>third view in the editor</code></div>
+
+  <p class="cap-line">History is a third segment beside <b>Form</b> and <b>Raw</b> — not a modal,
+     not a new tab. Timeline left, unified diff right.</p>
+
+  <div class="win">
+    <div class="topnav">
+      <div class="traffic"><i></i><i></i><i></i></div>
+      <div class="brand"><span class="mark">R</span><b>Remuda</b></div>
+      <span class="divider"></span>
+      <button class="modelctl"><span class="mctl-t">llama3.1:8b · terse-v2</span><span class="car">▾</span></button>
+      <span class="rchip good"><span class="d"></span>all on GPU · 5.6 GB</span>
+      <span class="spacer"></span>
+      <span class="conn"><span class="dot"></span>connected</span>
+    </div>
+    <div class="shell" style="height:462px">
+      <div class="sidebar">
+        <div class="side-label">Recent</div>
+        <button class="sess"><span class="stitle">Support tone rewrite</span><span class="smodel"><span class="sdot"></span>terse-v2</span></button>
+        <button class="sess"><span class="stitle">Undo a git rebase</span><span class="smodel"><span class="sdot"></span>terse-v2</span></button>
+        <button class="sess"><span class="stitle">Explain this stack trace</span><span class="smodel"><span class="sdot"></span>llama3.1:8b</span></button>
+      </div>
+      <div class="main">
+        <div class="tabs">
+          <button class="tab">Chat</button>
+          <button class="tab active">Modelfile</button>
+        </div>
+        <div class="mfhead">
+          <span class="mft">terse-v2.Modelfile</span>
+          <span class="spacer"></span>
+          <div class="seg"><button>Form</button><button>Raw</button><button class="on">History</button></div>
+        </div>
+        <div class="histwrap" style="flex:1;min-height:0">
+          <div class="timeline">
+            <button class="hentry">
+              <span class="hr1"><span class="hkind">Edited outside</span><span class="htime">now</span></span>
+              <span class="hsum"><span class="hbadge drift">drift</span> file changed on disk</span>
+            </button>
+            <button class="hentry on">
+              <span class="hr1"><span class="hkind">Save</span><span class="htime">14:22</span></span>
+              <span class="hsum"><span class="plus">+4</span> <span class="minus">−1</span> · SYSTEM, temperature</span>
+            </button>
+            <button class="hentry">
+              <span class="hr1"><span class="hkind">Save</span><span class="htime">14:09</span></span>
+              <span class="hsum"><span class="plus">+1</span> · stop</span>
+            </button>
+            <button class="hentry">
+              <span class="hr1"><span class="hkind">Save</span><span class="htime">13:54</span></span>
+              <span class="hsum"><span class="plus">+2</span> <span class="minus">−2</span> · top_p, top_k</span>
+            </button>
+            <button class="hentry">
+              <span class="hr1"><span class="hkind">Save as…</span><span class="htime">Tue</span></span>
+              <span class="hsum">forked from llama3.1:8b</span>
+            </button>
+          </div>
+          <div class="diffpane">
+            <div class="diffbar">
+              <span class="dt"><b>14:22</b> → working copy</span>
+              <span class="spacer"></span>
+              <button class="btn xs ghost">Copy</button>
+              <button class="btn xs">Restore this</button>
+            </div>
+            <div class="diff">
+              <div class="dl hunk"><span class="gut"></span><span class="txt">@@ SYSTEM @@</span></div>
+              <div class="dl"><span class="gut">3</span><span class="txt">FROM llama3.1:8b</span></div>
+              <div class="dl"><span class="gut">4</span><span class="txt"></span></div>
+              <div class="dl del"><span class="gut">5</span><span class="txt">SYSTEM """You are a helpful support agent. Answer questions clearly."""</span></div>
+              <div class="dl add"><span class="gut">5</span><span class="txt">SYSTEM """You are a support agent. Answer in at most three sentences.</span></div>
+              <div class="dl add"><span class="gut">6</span><span class="txt">Never apologise. If you do not know, say so and stop."""</span></div>
+              <div class="dl"><span class="gut">7</span><span class="txt"></span></div>
+              <div class="dl hunk"><span class="gut"></span><span class="txt">@@ PARAMETER @@</span></div>
+              <div class="dl add"><span class="gut">8</span><span class="txt">PARAMETER temperature 0.4</span></div>
+              <div class="dl add"><span class="gut">9</span><span class="txt">PARAMETER stop "&lt;/answer&gt;"</span></div>
+              <div class="dl"><span class="gut">10</span><span class="txt">PARAMETER top_p 0.9</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption"><b>Restore does not create.</b> It loads the snapshot into the editor as an
+     <em>unsaved draft</em> and switches to Raw. It does not run <code>ollama create</code> and does not
+     reload the model — the user still hits Save, which goes through the normal confirm. A history
+     feature that silently rebuilds a model on click is a trap, not a safety net.</p>
+  <p class="caption"><b>Drift is surfaced, not resolved.</b> The top entry appears only when the live
+     file hashes to nothing in the ring — someone edited it outside Remuda. That is SPEC §12 question 4
+     observed rather than answered, and saying so is better than showing a stale snapshot as "current".</p>
+  <p class="caption"><b>Sizing.</b> Modelfiles run 1–2 KB, so a 40-deep ring per model is ~80 KB — an
+     order of magnitude under the budget that forced image thumbs in SPEC §6.</p>
+</section>
+
+<style>
+/* ---------- T2 A/B ---------- */
+.chathead{display:flex;align-items:center;gap:9px;padding:10px 14px;border-bottom:1px solid var(--border);background:var(--surface)}
+.chathead .ct{font-size:13px;font-weight:600}
+.chathead .spacer{flex:1}
+.cmpbtn{display:inline-flex;align-items:center;gap:6px;padding:5px 10px;border-radius:8px;font-size:12px;font-weight:600;border:1px solid color-mix(in srgb,var(--ember) 45%,transparent);background:var(--ember-tint);color:var(--ember-ink)}
+.chatarea{padding:16px 16px 0;overflow:auto;flex:1;min-height:0}
+.umsg{display:flex;justify-content:flex-end;margin-bottom:14px}
+.umsg .bub{background:var(--ink);color:var(--surface);padding:9px 13px;border-radius:12px;border-bottom-right-radius:4px;font-size:13px;max-width:74%}
+.sharedtag{display:flex;align-items:center;gap:9px;margin:0 0 12px;font-size:11px;color:var(--faint)}
+.sharedtag:before,.sharedtag:after{content:"";flex:1;height:1px;background:var(--border)}
+.lanes{display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:stretch}
+.lane{border:1px solid var(--border);border-radius:12px;background:var(--bg);overflow:hidden;display:flex;flex-direction:column}
+.lane.a{border-top:2px solid var(--ember)}
+.lane.b{border-top:2px solid var(--cap-vision)}
+.lanehead{display:flex;align-items:center;gap:8px;padding:9px 11px;border-bottom:1px solid var(--border);background:var(--surface-2)}
+.lanetag{width:18px;height:18px;border-radius:5px;display:grid;place-items:center;font-size:10.5px;font-weight:800;flex:0 0 auto;background:var(--ember);color:#fff}
+.lane.b .lanetag{background:var(--cap-vision);color:#241a28}
+.cfgchip{display:inline-flex;align-items:center;gap:6px;min-width:0;padding:3px 8px;border-radius:7px;border:1px solid var(--border-strong);background:var(--bg);font-family:var(--mono);font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cfgchip .ov{color:var(--ember-ink);font-weight:600}
+.lanehead .spacer{flex:1}
+.lanebody{flex:1;padding:11px 12px;font-size:12.5px;line-height:1.62;color:var(--ink-2);min-height:104px}
+.lanebody.queued{color:var(--faint);display:flex;align-items:center;justify-content:center;gap:8px;font-family:var(--mono);font-size:11.5px}
+.caret{display:inline-block;width:7px;height:13px;background:var(--ember);vertical-align:-2px;border-radius:1px}
+.stats{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;padding:9px 12px;border-top:1px solid var(--border);background:var(--surface-2)}
+.stat{font-family:var(--mono);font-size:10.5px;color:var(--faint);display:flex;gap:5px;align-items:baseline;min-width:0}
+.stat b{color:var(--ink-2);font-weight:600}
+.stat.win b{color:var(--good)}
+.stat.win:after{content:"▲";color:var(--good);font-size:8px}
+.lanefoot{padding:9px 12px;border-top:1px solid var(--border);display:flex;gap:8px}
+.cmpbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;padding:9px 14px;border-top:1px solid var(--border);background:var(--bg)}
+.pin{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-family:var(--mono);font-size:10.5px;background:var(--ember-tint);color:var(--ember-ink);border:1px solid color-mix(in srgb,var(--ember) 32%,transparent)}
+.pin.warn{background:var(--warn-tint);color:var(--warn);border-color:color-mix(in srgb,var(--warn) 32%,transparent)}
+.pin.calm{background:var(--surface-2);color:var(--muted);border-color:var(--border)}
+.composer{padding:10px 14px 12px;border-top:1px solid var(--border);background:var(--surface)}
+.cbox{display:flex;align-items:center;gap:10px;border:1px solid var(--border-strong);border-radius:12px;padding:8px 8px 8px 13px;background:var(--surface-2)}
+.cbox .ph{flex:1;color:var(--faint);font-size:13px}
+.cbox .send{width:32px;height:32px;border-radius:9px;background:var(--ember);color:#fff;border:0;display:grid;place-items:center;font-size:14px;flex:0 0 auto}
+
+/* ---------- T3 tools ---------- */
+.toolwrap{display:flex;min-height:0}
+.toolside{width:296px;flex:0 0 auto;border-right:1px solid var(--border);background:var(--bg);display:flex;flex-direction:column}
+.toolside-h{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border)}
+.toolside-h b{font-size:12px}
+.toolside-h .spacer{flex:1}
+.jsonbox{flex:1;overflow:auto;padding:11px 12px;font-family:var(--mono);font-size:11px;line-height:1.7;white-space:pre;color:var(--ink-2)}
+.jk{color:var(--cap-tools)}.jv{color:var(--good)}.jp{color:var(--faint)}.jn{color:var(--warn)}
+.toolmain{flex:1;min-width:0;display:flex;flex-direction:column}
+.tally{display:flex;align-items:center;gap:10px;padding:9px 14px;border-bottom:1px solid var(--border);background:var(--surface-2);font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tally b{color:var(--ink)}
+.tally .ok{color:var(--good)}.tally .bad{color:var(--crit)}
+.tally .spacer{flex:1}
+.tcard{border:1px solid var(--border);border-radius:11px;background:var(--bg);overflow:hidden;margin:0 0 12px}
+.tcard-h{display:flex;align-items:center;gap:8px;padding:9px 11px;background:var(--cap-tools-tint);border-bottom:1px solid var(--border)}
+.tcard-h .fn{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--cap-tools)}
+.tcard-h .spacer{flex:1}
+.vb{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px}
+.vb.ok{background:var(--good-tint);color:var(--good)}
+.vb.bad{background:var(--crit-tint);color:var(--crit)}
+.vb.miss{background:var(--warn-tint);color:var(--warn)}
+.args{padding:10px 12px;font-family:var(--mono);font-size:11.5px;line-height:1.9}
+.argrow{display:flex;align-items:baseline;gap:8px}
+.argrow .ak{color:var(--cap-tools)}
+.argrow .av{color:var(--ink-2)}
+.argrow .note{margin-left:auto;font-size:10px;color:var(--crit)}
+.argrow.okrow .note{color:var(--good)}
+.argrow.missrow .ak{color:var(--warn)}
+.argrow.missrow .note{color:var(--warn)}
+.respond{border-top:1px dashed var(--border-strong);padding:9px 11px;display:flex;align-items:center;gap:9px;background:var(--surface-2)}
+.respond .rl{font-size:11px;color:var(--muted);white-space:nowrap}
+.respond .ri{flex:1;border:1px solid var(--border-strong);border-radius:8px;background:var(--bg);padding:6px 9px;font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.plainreply{border:1px dashed var(--border-strong);border-radius:11px;padding:10px 12px;font-size:12.5px;color:var(--ink-2)}
+.plainreply .pl{display:inline-block;margin-bottom:5px;font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--warn);background:var(--warn-tint);padding:2px 7px;border-radius:5px}
+
+/* ---------- T4 fit ---------- */
+.panerow{display:flex;gap:16px;flex-wrap:wrap}
+.mpane{width:376px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow-lg);overflow:hidden}
+.mpane-h{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--border)}
+.mpane-h b{font-size:13.5px}
+.mpane-h .hsub{font-size:11px;color:var(--faint);font-family:var(--mono)}
+.mpane-h .spacer{flex:1}
+.mpane-b{padding:13px 14px;display:flex;flex-direction:column;gap:14px}
+.pfield > label{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-bottom:8px}
+.pmodel{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid transparent;background:transparent;border-radius:9px;padding:8px 9px;color:var(--ink)}
+.pmodel.active{background:var(--ember-tint);border-color:color-mix(in srgb,var(--ember) 30%,transparent)}
+.pmodel .pg{width:28px;height:28px;border-radius:7px;flex:0 0 auto;display:grid;place-items:center;font-family:var(--mono);font-weight:600;font-size:11px;background:var(--raised);color:var(--muted)}
+.pmodel.active .pg{background:var(--ember);color:#fff}
+.pmodel .pn{font-family:var(--mono);font-size:12.5px;font-weight:500;display:block}
+.pmodel .ps{font-size:11px;color:var(--muted);display:block}
+.ctxhead{display:flex;align-items:baseline;gap:8px;margin-bottom:9px}
+.ctxhead label{margin:0}
+.ctxhead .cv{margin-left:auto;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink)}
+.track{position:relative;height:8px;border-radius:999px;background:var(--border);overflow:visible;margin:22px 0 12px}
+.track .fit{position:absolute;left:0;top:0;bottom:0;background:var(--good);border-radius:999px 0 0 999px}
+.track .over{position:absolute;top:0;bottom:0;background:var(--warn);opacity:.55}
+.track .knob{position:absolute;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:var(--ink);border:2px solid var(--surface-2);box-shadow:var(--shadow)}
+.track .tick{position:absolute;top:-6px;bottom:-6px;width:1px;background:var(--border-strong)}
+.track .tick span{position:absolute;top:-16px;left:50%;transform:translateX(-50%);font-family:var(--mono);font-size:9.5px;color:var(--faint);white-space:nowrap}
+.fitread{border-radius:10px;padding:10px 11px;font-size:12px;display:flex;flex-direction:column;gap:5px}
+.fitread.ok{background:var(--good-tint);border:1px solid color-mix(in srgb,var(--good) 26%,transparent)}
+.fitread.spill{background:var(--warn-tint);border:1px solid color-mix(in srgb,var(--warn) 30%,transparent)}
+.fitread.none{background:var(--surface);border:1px solid var(--border)}
+.fitread .r1{display:flex;align-items:center;gap:7px;font-weight:600}
+.fitread.ok .r1{color:var(--good)}
+.fitread.spill .r1{color:var(--warn)}
+.fitread.none .r1{color:var(--muted)}
+.fitread .r2{font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.fitread .r3{font-size:10.5px;color:var(--faint)}
+.fitread .r3 b{color:var(--muted);font-weight:600}
+</style>
+
+<!-- ═══════════════════ T2 ═══════════════════ -->
+<section class="sec" id="t2">
+  <div class="num">T2 · MEDIUM · THE FLAGSHIP</div>
+  <h2>A/B run — one prompt, two configs, both sets of numbers</h2>
+  <p class="why">The thing the audience already does, badly, in two terminal windows with a scrollback
+     buffer between them. It is the <b>actual question behind every Modelfile edit</b> — is this better? —
+     and today Remuda answers it the way <code>ollama run</code> does: by making the user remember what
+     the last answer looked like.</p>
+  <p class="why">No local Ollama GUI does side-by-side. It is the most visible differentiator on this list.</p>
+  <div class="api"><span class="k">Ollama</span><code>POST /api/chat</code><span class="k">new</span><code>none</code><span class="k">surface</span><code>two lanes inside the existing chat</code></div>
+
+  <p class="cap-line">Two lanes inside the chat, not a new destination — the user is already in a
+     conversation when the question arises.</p>
+
+  <div class="win">
+    <div class="topnav">
+      <div class="traffic"><i></i><i></i><i></i></div>
+      <div class="brand"><span class="mark">R</span><b>Remuda</b></div>
+      <span class="divider"></span>
+      <button class="modelctl"><span class="mctl-t">llama3.1:8b · terse-v2</span><span class="car">▾</span></button>
+      <span class="rchip good"><span class="d"></span>all on GPU · 5.6 GB</span>
+      <span class="spacer"></span>
+      <span class="conn"><span class="dot"></span>connected</span>
+    </div>
+    <div class="shell" style="height:668px">
+      <div class="sidebar">
+        <div class="side-label">Recent</div>
+        <button class="sess active"><span class="stitle">Support tone rewrite</span><span class="smodel"><span class="sdot"></span>compare · A/B</span></button>
+        <button class="sess"><span class="stitle">Undo a git rebase</span><span class="smodel"><span class="sdot"></span>terse-v2</span></button>
+      </div>
+      <div class="main">
+        <div class="tabs">
+          <button class="tab active">Chat</button>
+          <button class="tab">Modelfile</button>
+        </div>
+        <div class="chathead">
+          <span class="ct">Support tone rewrite</span>
+          <span class="spacer"></span>
+          <button class="cmpbtn">⇄ Compare · on</button>
+        </div>
+        <div class="chatarea">
+          <div class="umsg"><span class="bub">A customer says their order is three weeks late and they want it cancelled. Reply to them.</span></div>
+          <div class="sharedtag">one prompt · both lanes</div>
+          <div class="lanes">
+
+            <div class="lane a">
+              <div class="lanehead">
+                <span class="lanetag">A</span>
+                <span class="cfgchip">terse-v2 · <span class="ov">3 overrides</span></span>
+                <span class="spacer"></span>
+                <button class="iconbtn">▾</button>
+              </div>
+              <div class="lanebody">I've cancelled order #40192 and refunded £58.40 to your original payment method — it should land within three working days.<br><br>The delay was on our side and three weeks is not acceptable.<br><br>Nothing further is needed from you.</div>
+              <div class="stats">
+                <span class="stat win">gen <b>68.4 tok/s</b></span>
+                <span class="stat">prompt <b>412 tok/s</b></span>
+                <span class="stat win">total <b>1.4 s</b></span>
+                <span class="stat">out <b>61 tok</b></span>
+              </div>
+              <div class="lanefoot"><button class="btn xs primary">Keep this side</button><button class="btn xs ghost">Copy</button></div>
+            </div>
+
+            <div class="lane b">
+              <div class="lanehead">
+                <span class="lanetag">B</span>
+                <span class="cfgchip">terse-v2 · <span class="ov">temp 0.9</span></span>
+                <span class="spacer"></span>
+                <button class="iconbtn">▾</button>
+              </div>
+              <div class="lanebody">I'm really sorry to hear about this — three weeks is a long time to wait, and I completely understand the frustration.<br><br>I've gone ahead and cancelled order #40192 for you, and the full £58.40<span class="caret"></span></div>
+              <div class="stats">
+                <span class="stat">gen <b>64.1 tok/s</b></span>
+                <span class="stat win">prompt <b>489 tok/s</b></span>
+                <span class="stat">total <b>2.1 s</b></span>
+                <span class="stat">out <b>94 tok</b></span>
+              </div>
+              <div class="lanefoot"><button class="btn xs">Keep this side</button><button class="btn xs ghost">Copy</button></div>
+            </div>
+
+          </div>
+          <div style="height:14px"></div>
+        </div>
+        <div class="cmpbar">
+          <span class="pin">seed 4417 · pinned for this run</span>
+          <span class="pin calm">same model · no swap</span>
+          <span class="spacer" style="flex:1"></span>
+          <button class="btn xs ghost">Cancel run</button>
+        </div>
+        <div class="composer">
+          <div class="cbox"><span class="ph">Message both lanes…</span><button class="send">↑</button></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption"><b>Seed is pinned for the pair, or the comparison is noise.</b> When neither lane
+     sets <code>seed</code>, Remuda pins one shared random seed and says so on the bar. Comparing two
+     configs under two different seeds measures sampling noise and nothing else — shipping that quietly
+     would be worse than shipping no comparison at all.</p>
+  <p class="caption"><b>Sequential, deliberately.</b> Lane A runs to completion, then B — so SPEC §8's
+     <em>one streamed generation at a time</em> is preserved exactly. The reason is not convenience: two
+     concurrent generations contend for the same VRAM, and the tok/s under each lane would be measuring
+     the contention rather than the configuration. Lane B shows <code>queued</code>, then <code>warming</code>,
+     then tokens.</p>
+  <p class="caption"><b>The win markers are per-metric and there is no aggregate score.</b> Remuda marks
+     which lane was faster on each number and stops there. "Which is better" is a judgement the product
+     should not pretend to make — that's what the human is for, and it's why <b>Keep this side</b> is a
+     button rather than a computed recommendation.</p>
+  <p class="caption"><b>Different models cost a swap, and the bar says so before the run</b> — running
+     two models back to back unloads one and loads the other. Same model, different parameters is the
+     fast path and the common one.</p>
+</section>
+
+<!-- ═══════════════════ T3 ═══════════════════ -->
+<section class="sec" id="t3">
+  <div class="num">T3 · MEDIUM</div>
+  <h2>Tool-calling playground — is this model's function calling actually any good?</h2>
+  <p class="why">A question every developer evaluating a local model has, with no way to answer it in any
+     GUI — you write a script. Remuda already parses the <code>tools</code> capability off
+     <code>/api/show</code> and already gates UI on capabilities.</p>
+  <p class="why">The differentiator is the <b>validation verdict</b>, not the rendering. A chat window
+     that pretty-prints tool calls is a nicety. One that says <code>unit</code>: not in enum
+     <code>[celsius, fahrenheit]</code> in red is a test harness — a different product.</p>
+  <div class="api"><span class="k">Ollama</span><code>POST /api/chat</code><span class="k">new</span><code class="new">tools[]</code><code class="new">message.tool_calls[]</code><code class="new">role:"tool"</code><span class="k">gate</span><code>capabilities includes "tools"</code></div>
+
+  <p class="cap-line">A third tab that exists <b>only</b> when the loaded model positively reports
+     <code>tools</code> — SPEC §8's additive-control rule, exactly.</p>
+
+  <div class="win">
+    <div class="topnav">
+      <div class="traffic"><i></i><i></i><i></i></div>
+      <div class="brand"><span class="mark">R</span><b>Remuda</b></div>
+      <span class="divider"></span>
+      <button class="modelctl"><span class="mctl-t">qwen2.5:7b · Original</span><span class="car">▾</span></button>
+      <span class="rchip good"><span class="d"></span>all on GPU · 4.7 GB</span>
+      <span class="spacer"></span>
+      <span class="conn"><span class="dot"></span>connected</span>
+    </div>
+    <div class="shell" style="height:498px">
+      <div class="sidebar">
+        <div class="side-label">Recent</div>
+        <button class="sess active"><span class="stitle">Weather tool trial</span><span class="smodel"><span class="sdot"></span>qwen2.5:7b</span></button>
+      </div>
+      <div class="main">
+        <div class="tabs">
+          <button class="tab">Chat</button>
+          <button class="tab">Modelfile</button>
+          <button class="tab active"><span class="capdot"></span>Tools</button>
+        </div>
+        <div class="toolwrap" style="flex:1;min-height:0">
+          <div class="toolside">
+            <div class="toolside-h"><b>Tool schema</b><span class="spacer"></span><button class="btn xs ghost">+ Add</button></div>
+            <div class="jsonbox">[
+  {
+    <span class="jk">"type"</span>: <span class="jv">"function"</span>,
+    <span class="jk">"function"</span>: {
+      <span class="jk">"name"</span>: <span class="jv">"get_weather"</span>,
+      <span class="jk">"description"</span>: <span class="jv">"Current weather"</span>,
+      <span class="jk">"parameters"</span>: {
+        <span class="jk">"type"</span>: <span class="jv">"object"</span>,
+        <span class="jk">"properties"</span>: {
+          <span class="jk">"city"</span>: {
+            <span class="jk">"type"</span>: <span class="jv">"string"</span>
+          },
+          <span class="jk">"unit"</span>: {
+            <span class="jk">"type"</span>: <span class="jv">"string"</span>,
+            <span class="jk">"enum"</span>: [
+              <span class="jv">"celsius"</span>,
+              <span class="jv">"fahrenheit"</span>
+            ]
+          }
+        },
+        <span class="jk">"required"</span>: [<span class="jv">"city"</span>]
+      }
+    }
+  }
+]</div>
+          </div>
+          <div class="toolmain">
+            <div class="tally">
+              <span>this session</span>
+              <b>7 calls</b><span>·</span><span class="ok">5 valid</span><span>·</span><span class="bad">2 malformed</span>
+              <span class="spacer"></span>
+              <button class="btn xs ghost">Reset</button>
+            </div>
+            <div style="padding:14px;overflow:auto;flex:1">
+              <div class="umsg"><span class="bub">What's the weather in Wellington, in F?</span></div>
+
+              <div class="tcard">
+                <div class="tcard-h"><span class="fn">get_weather</span><span class="vb ok">matched</span><span class="spacer"></span><span class="vb bad">1 invalid</span></div>
+                <div class="args">
+                  <div class="argrow okrow"><span class="ak">"city"</span><span class="av">: "Wellington"</span><span class="note">ok</span></div>
+                  <div class="argrow"><span class="ak">"unit"</span><span class="av">: "F"</span><span class="note">not in enum [celsius, fahrenheit]</span></div>
+                  <div class="argrow"><span class="ak">"country"</span><span class="av">: "NZ"</span><span class="note">unknown key</span></div>
+                </div>
+                <div class="respond">
+                  <span class="rl">Respond as <code>get_weather</code></span>
+                  <span class="ri">{"temp_c": 13, "conditions": "windy"}</span>
+                  <button class="btn xs">Send</button>
+                </div>
+              </div>
+
+              <div class="tcard">
+                <div class="tcard-h"><span class="fn">get_wether</span><span class="vb bad">no such tool</span><span class="spacer"></span><span class="vb miss">1 missing</span></div>
+                <div class="args">
+                  <div class="argrow missrow"><span class="ak">"city"</span><span class="av">: —</span><span class="note">missing · required</span></div>
+                </div>
+              </div>
+
+              <div class="plainreply">
+                <span class="pl">answered without calling a tool</span><br>
+                It's currently around 13°C in Wellington with strong northerlies.
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption"><b>The tally is the answer.</b> <em>7 calls · 5 valid · 2 malformed</em> is what turns
+     a session into a finding you can act on — it's the difference between "the model called a tool" and
+     "this model gets function calling wrong 30% of the time on my schema."</p>
+  <p class="caption"><b>A plain reply to a tool-shaped prompt is a finding, not an error.</b> A model that
+     lists <code>tools</code> can still answer in prose. The transcript records it as such rather than
+     swallowing it.</p>
+  <p class="caption"><b>Wire detail that will bite.</b> Ollama returns
+     <code>tool_calls[].function.arguments</code> as an <b>object</b>, not a JSON string — unlike the
+     OpenAI format it borrows from. The parser must not "helpfully" <code>JSON.parse</code> it. The
+     validator is a hand-rolled subset — <code>type</code>, <code>enum</code>, <code>required</code>,
+     <code>properties</code> — and deliberately not a dependency.</p>
+</section>
+
+<!-- ═══════════════════ T4 ═══════════════════ -->
+<section class="sec" id="t4">
+  <div class="num">T4 · MEDIUM</div>
+  <h2>Fit predictor — where does this model stop fitting?</h2>
+  <p class="why">Remuda already shows the amber spill chip <b>after</b> a model has spilled into system
+     RAM, when the only remedy is to unload and try again. The useful moment is the one before, and the
+     parameter the user would actually change is <code>num_ctx</code> — which is exactly the one that
+     drives the KV cache.</p>
+  <div class="api"><span class="k">Ollama</span><code>POST /api/show → model_info</code><span class="k">Rust</span><code class="new">sysctl hw.memsize</code><span class="k">surface</span><code>load pane, above Load</code></div>
+
+  <div class="panerow">
+    <div class="mpane">
+      <div class="mpane-h"><b>Load a model</b><span class="spacer"></span><span class="hsub">12 installed</span></div>
+      <div class="mpane-b">
+        <div class="pfield">
+          <label>Model</label>
+          <button class="pmodel active"><span class="pg">L3</span><span><span class="pn">llama3.1:8b</span><span class="ps">4.9 GB · Q4_K_M · 128K trained</span></span></button>
+        </div>
+        <div class="pfield">
+          <div class="ctxhead"><label>Context</label><span class="cv">16,384</span></div>
+          <div class="track">
+            <div class="fit" style="width:62%"></div>
+            <div class="over" style="left:62%;right:0"></div>
+            <div class="tick" style="left:62%"><span>fits to 21K</span></div>
+            <div class="knob" style="left:48%"></div>
+          </div>
+          <div class="fitread ok">
+            <span class="r1">✓ Fits entirely on GPU</span>
+            <span class="r2">≈ 6.2 of 10.9 GB usable · 4.9 weights + 1.3 KV</span>
+            <span class="r3"><b>Calibrated</b> from your last load of this model · f16 KV cache</span>
+          </div>
+        </div>
+        <button class="btn primary wide">Load llama3.1:8b</button>
+      </div>
+    </div>
+
+    <div class="mpane">
+      <div class="mpane-h"><b>Load a model</b><span class="spacer"></span><span class="hsub">12 installed</span></div>
+      <div class="mpane-b">
+        <div class="pfield">
+          <label>Model</label>
+          <button class="pmodel active"><span class="pg">L3</span><span><span class="pn">llama3.1:8b</span><span class="ps">4.9 GB · Q4_K_M · 128K trained</span></span></button>
+        </div>
+        <div class="pfield">
+          <div class="ctxhead"><label>Context</label><span class="cv">65,536</span></div>
+          <div class="track">
+            <div class="fit" style="width:62%"></div>
+            <div class="over" style="left:62%;right:0"></div>
+            <div class="tick" style="left:62%"><span>fits to 21K</span></div>
+            <div class="knob" style="left:88%"></div>
+          </div>
+          <div class="fitread spill">
+            <span class="r1">⚠ Spills 4.4 GB to system RAM</span>
+            <span class="r2">≈ 15.3 of 10.9 GB usable · 4.9 weights + 10.4 KV</span>
+            <span class="r3"><b>Estimated</b> · assumes an f16 KV cache · load once to calibrate</span>
+          </div>
+        </div>
+        <button class="btn primary wide">Load anyway</button>
+      </div>
+    </div>
+
+    <div class="mpane" style="align-self:flex-start">
+      <div class="mpane-h"><b>Load a model</b><span class="spacer"></span><span class="hsub">12 installed</span></div>
+      <div class="mpane-b">
+        <div class="pfield">
+          <label>Model</label>
+          <button class="pmodel active"><span class="pg">EX</span><span><span class="pn">exotic-arch:4b</span><span class="ps">2.4 GB · Q4_0</span></span></button>
+        </div>
+        <div class="pfield">
+          <div class="ctxhead"><label>Context</label><span class="cv">8,192</span></div>
+          <div class="track"><div class="knob" style="left:30%"></div></div>
+          <div class="fitread none">
+            <span class="r1">No prediction available</span>
+            <span class="r2">model_info didn't report block_count</span>
+            <span class="r3">The server didn't say enough to predict. Load it and Remuda will measure.</span>
+          </div>
+        </div>
+        <button class="btn primary wide">Load exotic-arch:4b</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption"><b>It is an estimate and it says so, in the same line as the number.</b>
+     <code>bytes_per_element</code> assumes an f16 KV cache; a user running
+     <code>OLLAMA_KV_CACHE_TYPE=q8_0</code> halves it and no endpoint reports which is in force. So every
+     figure is prefixed <code>≈</code> and the third line names its own provenance —
+     <b>estimated</b> versus <b>calibrated from your last load</b>.</p>
+  <p class="caption"><b>The estimate self-corrects.</b> After a real load, <code>/api/ps</code> reports
+     actual <code>size_vram</code>. Remuda stores <code>actual / predicted</code> per model and folds it
+     into the next prediction — the second time you touch a model, the number is measured rather than
+     modelled.</p>
+  <p class="caption"><b>An architecture that doesn't report gets no guess</b> (third pane). No fit track,
+     no fabricated number, and a sentence saying what was missing. A wrong prediction here costs the user
+     a five-minute load.</p>
+  <p class="caption">Green and amber are the same semantics as the top-bar spill chip, so the prediction
+     and the readout read as one idea at two points in time.</p>
+</section>
+
+<style>
+/* ---------- T5 bench ---------- */
+.benchhead{display:flex;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--border)}
+.benchhead .bt{font-size:13.5px;font-weight:700}
+.benchhead .bsub{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.benchhead .spacer{flex:1}
+.runstrip{display:flex;align-items:center;gap:9px;padding:8px 14px;background:var(--surface-2);border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11px;color:var(--muted);flex-wrap:wrap}
+.runstrip b{color:var(--ink)}
+.runstrip .sn{color:var(--ember-ink)}
+.brow{border-bottom:1px solid var(--border)}
+.brow-h{display:flex;align-items:center;gap:10px;padding:10px 14px}
+.brow-h .idx{width:20px;font-family:var(--mono);font-size:11px;color:var(--faint);flex:0 0 auto}
+.brow-h .pr{flex:1;min-width:0;font-size:12.5px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chg{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;flex:0 0 auto}
+.chg.same{background:var(--surface-2);color:var(--faint)}
+.chg.diff{background:var(--ember-tint);color:var(--ember-ink)}
+.chg.fail{background:var(--crit-tint);color:var(--crit)}
+.bcols{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:0 14px 12px 44px}
+.bcol{border:1px solid var(--border);border-radius:10px;background:var(--bg);overflow:hidden}
+.bcol-h{padding:6px 10px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--faint);background:var(--surface-2)}
+.bcol-b{padding:9px 10px;font-size:12px;line-height:1.6;color:var(--ink-2)}
+.bcol.now{border-color:var(--border-strong)}
+.bcol.now .bcol-h{color:var(--ember-ink)}
+mark{background:color-mix(in srgb,var(--good) 22%,transparent);color:var(--good);border-radius:3px;padding:0 2px}
+del{background:color-mix(in srgb,var(--crit) 18%,transparent);color:var(--crit);border-radius:3px;padding:0 2px;text-decoration:none}
+
+/* ---------- T6 smalls ---------- */
+.smallgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:16px;margin-top:6px}
+.smallcard{border:1px solid var(--border);border-radius:12px;background:var(--surface);overflow:hidden}
+.smallcard > h4{padding:11px 13px 0;font-size:12.5px}
+.smallcard > p{margin:5px 13px 0;font-size:12px;color:var(--muted)}
+.smallcard .demo{margin:12px;padding:12px;border:1px solid var(--border);border-radius:10px;background:var(--bg)}
+.menu{width:236px;border:1px solid var(--border-strong);border-radius:10px;background:var(--surface-2);box-shadow:var(--shadow-lg);padding:5px;margin:0 auto}
+.mi{display:flex;align-items:center;gap:9px;padding:7px 9px;border-radius:7px;font-size:12.5px;color:var(--ink-2)}
+.mi:hover{background:var(--raised);color:var(--ink)}
+.mi .ic{width:15px;text-align:center;color:var(--faint);font-size:12px}
+.mi .kbd{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--faint)}
+.msep{height:1px;background:var(--border);margin:4px 6px}
+.codeblock{font-family:var(--mono);font-size:10.5px;line-height:1.7;color:var(--ink-2);white-space:pre-wrap;word-break:break-all}
+.banner{display:flex;align-items:center;gap:11px;padding:10px 12px;border-radius:10px;background:var(--warn-tint);border:1px solid color-mix(in srgb,var(--warn) 34%,transparent)}
+.banner .bi{color:var(--warn);flex:0 0 auto;font-size:15px}
+.banner .bt{flex:1;font-size:12px;color:var(--ink);min-width:0}
+.banner .btn{white-space:nowrap;flex:0 0 auto}
+
+/* ---------- T7 runtime ---------- */
+.barcompare{display:flex;flex-direction:column;gap:12px}
+.barrow{border:1px solid var(--border);border-radius:11px;overflow:hidden;background:var(--bg)}
+.barrow .bl{padding:6px 12px;font-size:10.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);background:var(--surface-2);border-bottom:1px solid var(--border);display:flex;gap:9px;align-items:center}
+.barrow .bl .tagx{color:var(--crit);font-weight:600;letter-spacing:0;text-transform:none;font-size:11px}
+.barrow .bl .tagv{color:var(--good);font-weight:600;letter-spacing:0;text-transform:none;font-size:11px}
+.faketop{display:flex;align-items:center;gap:9px;padding:11px 12px;flex-wrap:wrap}
+.rpop{width:352px;border:1px solid var(--border-strong);border-radius:13px;background:var(--surface-2);box-shadow:var(--shadow-lg);overflow:hidden}
+.rpop-h{display:flex;align-items:center;gap:8px;padding:11px 13px;border-bottom:1px solid var(--border)}
+.rpop-h b{font-size:12.5px}
+.rpop-h .spacer{flex:1}
+.rpop-h .hs{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.rsec{padding:11px 13px;border-bottom:1px solid var(--border)}
+.rsec:last-child{border-bottom:0}
+.rlab{display:flex;align-items:baseline;gap:8px;font-size:11px;color:var(--muted);margin-bottom:7px}
+.rlab .rv{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--ink);font-weight:600}
+.rlab .rv.warn{color:var(--warn)}
+.segbar{display:flex;height:9px;border-radius:999px;overflow:hidden;background:var(--border)}
+.segbar i{display:block;height:100%}
+.legend{display:flex;gap:12px;margin-top:7px;flex-wrap:wrap}
+.legend span{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;color:var(--faint)}
+.legend i{width:8px;height:8px;border-radius:2px;display:block}
+.spark{display:flex;align-items:flex-end;gap:2px;height:26px;margin-top:2px}
+.spark i{flex:1;background:var(--ember);border-radius:1px;opacity:.85;display:block}
+.rnote{margin-top:7px;font-size:10.5px;color:var(--faint);line-height:1.5}
+.rnote b{color:var(--muted);font-weight:600}
+.absent{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px dashed var(--border-strong);border-radius:9px;font-size:11px;color:var(--faint)}
+.rfoot{display:flex;align-items:center;gap:9px;padding:10px 13px}
+.rfoot .spacer{flex:1}
+</style>
+
+<!-- ═══════════════════ T5 ═══════════════════ -->
+<section class="sec" id="t5">
+  <div class="num">T5 · LARGE · BUILD LAST</div>
+  <h2>Bench — the regression test for a Modelfile</h2>
+  <p class="why">A saved set of prompts, replayed on one click, each answer diffed against the last run.
+     It is <b>T1 and T2 composed</b> — snapshots to run against, a diffed comparison to render — which is
+     exactly why it comes last. Built first, it would force bad versions of both.</p>
+  <div class="api"><span class="k">Ollama</span><code>POST /api/chat</code><span class="k">new</span><code>none</code><span class="k">storage</span><code>remuda.benches.v1</code></div>
+
+  <p class="cap-line">A second group in the chats rail — which already persists across every surface, so
+     a bench is reachable from inside the Modelfile editor, exactly where you are when you want to run it.</p>
+
+  <div class="win">
+    <div class="topnav">
+      <div class="traffic"><i></i><i></i><i></i></div>
+      <div class="brand"><span class="mark">R</span><b>Remuda</b></div>
+      <span class="divider"></span>
+      <button class="modelctl"><span class="mctl-t">llama3.1:8b · terse-v2</span><span class="car">▾</span></button>
+      <span class="rchip good"><span class="d"></span>all on GPU · 5.6 GB</span>
+      <span class="spacer"></span>
+      <span class="conn"><span class="dot"></span>connected</span>
+    </div>
+    <div class="shell" style="height:520px">
+      <div class="sidebar">
+        <div class="side-label">Benches<span class="cnt">2</span></div>
+        <button class="sess active"><span class="stitle">Support tone</span><span class="smodel"><span class="sdot bench"></span>5 prompts</span></button>
+        <button class="sess"><span class="stitle">Refusal probes</span><span class="smodel"><span class="sdot bench"></span>9 prompts</span></button>
+        <div class="side-label" style="margin-top:8px">Recent</div>
+        <button class="sess"><span class="stitle">Support tone rewrite</span><span class="smodel"><span class="sdot"></span>terse-v2</span></button>
+        <button class="sess"><span class="stitle">Undo a git rebase</span><span class="smodel"><span class="sdot"></span>terse-v2</span></button>
+      </div>
+      <div class="main">
+        <div class="benchhead">
+          <div>
+            <div class="bt">Support tone</div>
+            <div class="bsub">5 prompts · llama3.1:8b · terse-v2</div>
+          </div>
+          <span class="spacer"></span>
+          <button class="btn sm ghost">Edit prompts</button>
+          <button class="btn sm primary">Run all</button>
+        </div>
+        <div class="runstrip">
+          <span>run <b>7</b></span><span>·</span>
+          <span>against <span class="sn">terse-v2 @ 14:22</span></span><span>·</span>
+          <span>seed <b>4417</b></span><span>·</span>
+          <span><b>3</b> changed / <b>2</b> same</span>
+          <span class="spacer" style="flex:1"></span>
+          <span>vs run 6 · 13:54</span>
+        </div>
+        <div style="overflow:auto;flex:1">
+
+          <div class="brow">
+            <div class="brow-h">
+              <span class="idx">1</span>
+              <span class="pr">Customer says their order is three weeks late and wants it cancelled.</span>
+              <span class="chg diff">changed</span>
+            </div>
+            <div class="bcols">
+              <div class="bcol"><div class="bcol-h">run 6 · 13:54</div><div class="bcol-b"><del>I'm really sorry to hear about this — that's a long time to wait.</del> I've cancelled order #40192 and refunded £58.40.</div></div>
+              <div class="bcol now"><div class="bcol-h">run 7 · 14:22 · current</div><div class="bcol-b">I've cancelled order #40192 and refunded £58.40. <mark>The delay was on our side. Nothing further is needed from you.</mark></div></div>
+            </div>
+          </div>
+
+          <div class="brow">
+            <div class="brow-h">
+              <span class="idx">2</span>
+              <span class="pr">Ask for a refund on a product used for six months.</span>
+              <span class="chg diff">changed</span>
+            </div>
+            <div class="bcols">
+              <div class="bcol"><div class="bcol-h">run 6 · 13:54</div><div class="bcol-b">Unfortunately our returns window is 30 days, <del>so I'm afraid I can't help with this one — I'm sorry!</del></div></div>
+              <div class="bcol now"><div class="bcol-h">run 7 · 14:22 · current</div><div class="bcol-b">Unfortunately our returns window is 30 days, <mark>so this is outside it.</mark></div></div>
+            </div>
+          </div>
+
+          <div class="brow">
+            <div class="brow-h">
+              <span class="idx">3</span>
+              <span class="pr">Explain the delivery delay without blaming the courier.</span>
+              <span class="chg same">same</span>
+            </div>
+          </div>
+
+          <div class="brow">
+            <div class="brow-h">
+              <span class="idx">4</span>
+              <span class="pr">Customer is abusive. De-escalate.</span>
+              <span class="chg same">same</span>
+            </div>
+          </div>
+
+          <div class="brow">
+            <div class="brow-h">
+              <span class="idx">5</span>
+              <span class="pr">Summarise the order history in one line.</span>
+              <span class="chg diff">changed</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption"><b>Same/changed is a diff, not a verdict.</b> Remuda does not score answers and does
+     not call one better. An LLM judge would make this a different and much less trustworthy product —
+     and it is the line that keeps this from becoming the eval harness SPEC §1 rules out.</p>
+  <p class="caption"><b>The run strip ties the results to T1.</b> <em>against terse-v2 @ 14:22</em> names
+     the Modelfile snapshot the run was made against, which is what makes the history and the results one
+     artifact instead of two. Unchanged rows collapse — the changed ones are the whole point.</p>
+  <p class="caption"><b>Capture is one icon on any user message in chat: add to bench.</b> A bench that
+     costs a form to populate does not get populated.</p>
+</section>
+
+<!-- ═══════════════════ T6 ═══════════════════ -->
+<section class="sec" id="t6">
+  <div class="num">T6 · TRIVIAL EACH</div>
+  <h2>Four small ones that flatter the audience</h2>
+  <p class="why">Each is under a day. None of them needs a new surface.</p>
+
+  <div class="smallgrid">
+    <div class="smallcard">
+      <h4>1 · Copy as <code>curl</code> / <code>ollama run</code></h4>
+      <p>The exact request that produced this reply — model, options, messages, <code>think</code>.</p>
+      <div class="demo">
+        <div class="codeblock">curl http://127.0.0.1:11434/api/chat -d '{
+  "model": "terse-v2",
+  "options": {"temperature":0.4,"seed":4417},
+  "messages": [{"role":"user","content":"…"}]
+}'</div>
+      </div>
+      <p style="margin:0 13px 13px;font-size:11.5px;color:var(--faint)">It makes Remuda a place you
+        <b style="color:var(--muted)">leave</b> with something — a strange thing to want from a GUI, and
+        precisely why developers trust the ones that do it.</p>
+    </div>
+
+    <div class="smallcard">
+      <h4>2 · Promote to <code>SYSTEM</code> &nbsp;·&nbsp; 3 · Re-roll</h4>
+      <p>The reply overflow menu. Both live here; neither needs new chrome.</p>
+      <div class="demo">
+        <div class="menu">
+          <div class="mi"><span class="ic">⤴</span>Promote to SYSTEM</div>
+          <div class="mi"><span class="ic">＋</span>Add to bench</div>
+          <div class="msep"></div>
+          <div class="mi"><span class="ic">↻</span>Regenerate<span class="kbd">new seed</span></div>
+          <div class="mi"><span class="ic">↻</span>Regenerate<span class="kbd">seed 4417</span></div>
+          <div class="msep"></div>
+          <div class="mi"><span class="ic">⧉</span>Copy as curl</div>
+          <div class="mi"><span class="ic">⧉</span>Copy as ollama run</div>
+        </div>
+      </div>
+      <p style="margin:0 13px 13px;font-size:11.5px;color:var(--faint)">Two Regenerate items, not one.
+        Holding the seed constant re-rolls <b style="color:var(--muted)">the config</b>; changing it
+        re-rolls <b style="color:var(--muted)">the sampling</b> — and that distinction is the entire point.</p>
+    </div>
+
+    <div class="smallcard">
+      <h4>4 · Start Ollama</h4>
+      <p>The disconnected banner already offers the button. Wire it to a Rust-side spawn.</p>
+      <div class="demo">
+        <div class="banner">
+          <span class="bi">▲</span>
+          <span class="bt">Ollama isn't running.</span>
+          <button class="btn xs">Retry</button>
+          <button class="btn xs primary">Start Ollama</button>
+        </div>
+      </div>
+      <p style="margin:0 13px 13px;font-size:11.5px;color:var(--faint)">A Rust side and
+        <code>reqwest</code> already exist for the registry probe. Failures surface verbatim rather than
+        as "couldn't start".</p>
+    </div>
+  </div>
+</section>
+
+<!-- ═══════════════════ T7 ═══════════════════ -->
+<section class="sec" id="t7">
+  <div class="num">T7 · SMALL–MEDIUM</div>
+  <h2>Runtime telemetry — what the machine is doing, not just what the model weighs</h2>
+  <p class="why">Host RAM used against total, the Ollama process's CPU load, GPU utilisation where it can
+     be read honestly, and the share of the context window this chat has actually spent. T4 predicts fit
+     before a load; this reports it during the run. Same idea, two points in time.</p>
+  <div class="api"><span class="k">Ollama</span><code>/api/ps</code><code class="new">prompt_eval_count + eval_count</code><span class="k">Rust</span><code class="new">hw.memsize</code><code class="new">vm_statistics64</code><code class="new">libproc</code></div>
+
+  <div class="subhead">First, a naming collision to fix</div>
+  <p class="why" style="margin-bottom:14px">The existing <code>100% GPU</code> chip is a
+     <b>placement</b> figure — <code>size_vram / size</code>, meaning <em>all the weights sit on the
+     GPU</em>. It is <b>not</b> GPU utilisation. Adding a real utilisation percentage beside it puts two
+     chips reading "GPU" and a number next to each other, meaning entirely different things, in the same
+     40 pixels.</p>
+
+  <div class="barcompare">
+    <div class="barrow">
+      <div class="bl">Today <span class="tagx">— four chips, and "100% GPU" doesn't mean what it looks like</span></div>
+      <div class="faketop">
+        <span class="mark">R</span>
+        <button class="modelctl"><span class="mctl-t">llama3.1:8b-support</span><span class="car">▾</span></button>
+        <span class="rchip good"><span class="d"></span>100% GPU</span>
+        <span class="rchip">5.6 GB VRAM · 0 B RAM</span>
+        <span class="rchip">ctx 8,192</span>
+        <span class="rchip">keep_alive 4:52</span>
+      </div>
+    </div>
+    <div class="barrow">
+      <div class="bl">Proposed <span class="tagv">— three chips, each opens the same Runtime popover</span></div>
+      <div class="faketop">
+        <span class="mark">R</span>
+        <button class="modelctl"><span class="mctl-t">llama3.1:8b-support</span><span class="car">▾</span></button>
+        <span class="rchip good"><span class="d"></span>all on GPU · 5.6 GB</span>
+        <span class="rchip">ctx 3,104<span class="sub">/8,192</span></span>
+        <span class="rchip">4:52</span>
+      </div>
+    </div>
+    <div class="barrow">
+      <div class="bl">Proposed · spilled <span class="tagv">— the split replaces the percentage, in amber</span></div>
+      <div class="faketop">
+        <span class="mark">R</span>
+        <button class="modelctl"><span class="mctl-t">llama3.1:70b</span><span class="car">▾</span></button>
+        <span class="rchip warn"><span class="d"></span>28.4 GB GPU + 9.1 GB RAM</span>
+        <span class="rchip warn">ctx 7,740<span class="sub">/8,192</span></span>
+        <span class="rchip">1:12</span>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption"><b>Three chips, not seven.</b> The bar already carries the model control plus four
+     chips; adding RAM, CPU and GPU makes an unreadable strip. All three are buttons and all three open
+     the same popover — the pattern the app already uses twice, so it costs the user no new concept.</p>
+
+  <div class="subhead">The Runtime popover</div>
+
+  <div class="panerow">
+    <div class="rpop">
+      <div class="rpop-h"><b>Runtime</b><span class="spacer"></span><span class="hs">llama3.1:8b-support</span></div>
+
+      <div class="rsec">
+        <div class="rlab">Host memory<span class="rv">18.4 / 32 GB</span></div>
+        <div class="segbar">
+          <i style="width:17.5%;background:var(--ember)"></i>
+          <i style="width:40%;background:var(--border-strong)"></i>
+          <i style="flex:1;background:var(--border)"></i>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--ember)"></i>this model 5.6 GB</span>
+          <span><i style="background:var(--border-strong)"></i>other 12.8 GB</span>
+          <span><i style="background:var(--border)"></i>free 13.6 GB</span>
+        </div>
+        <div class="rnote">The model's share <b>of the whole machine</b> is what answers "can I open
+          anything else?" — a bare "5.6 GB VRAM" does not.</div>
+      </div>
+
+      <div class="rsec">
+        <div class="rlab">Model placement<span class="rv" style="color:var(--good)">5.6 GB GPU · 0 B RAM</span></div>
+        <div class="segbar"><i style="width:100%;background:var(--good)"></i></div>
+      </div>
+
+      <div class="rsec">
+        <div class="rlab">Ollama CPU<span class="rv">4%</span></div>
+        <div class="spark">
+          <i style="height:14%"></i><i style="height:9%"></i><i style="height:11%"></i><i style="height:74%"></i>
+          <i style="height:91%"></i><i style="height:88%"></i><i style="height:62%"></i><i style="height:21%"></i>
+          <i style="height:12%"></i><i style="height:8%"></i><i style="height:10%"></i><i style="height:7%"></i>
+          <i style="height:9%"></i><i style="height:13%"></i><i style="height:8%"></i><i style="height:11%"></i>
+          <i style="height:7%"></i><i style="height:9%"></i><i style="height:12%"></i><i style="height:8%"></i>
+        </div>
+        <div class="rnote">The <b>Ollama process</b>, not the machine — it spikes exactly when a model has
+          spilled and is grinding on the CPU.</div>
+      </div>
+
+      <div class="rsec">
+        <div class="rlab">GPU utilisation<span class="rv">47%</span></div>
+        <div class="meter good"><i style="width:47%"></i></div>
+        <div class="rnote"><b>Only if the spike lands</b> — see below.</div>
+      </div>
+
+      <div class="rsec">
+        <div class="rlab">Context used<span class="rv">3,104 / 8,192 · 38%</span></div>
+        <div class="meter good"><i style="width:38%"></i></div>
+        <div class="rnote">Measured from <b>prompt_eval_count + eval_count</b> on the last reply. No
+          tokeniser, no estimate — and a number <code>ollama ps</code> cannot give you, because it belongs
+          to the conversation rather than the runner.</div>
+      </div>
+
+      <div class="rfoot">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">keep_alive 4:52</span>
+        <span class="spacer"></span>
+        <button class="btn xs">Eject</button>
+      </div>
+    </div>
+
+    <div class="rpop" style="align-self:flex-start">
+      <div class="rpop-h"><b>Runtime</b><span class="spacer"></span><span class="hs">llama3.1:70b</span></div>
+
+      <div class="rsec">
+        <div class="rlab">Host memory<span class="rv warn">39.6 / 48 GB</span></div>
+        <div class="segbar">
+          <i style="width:78%;background:var(--warn)"></i>
+          <i style="width:4%;background:var(--border-strong)"></i>
+          <i style="flex:1;background:var(--border)"></i>
+        </div>
+        <div class="legend">
+          <span><i style="background:var(--warn)"></i>this model 37.5 GB</span>
+          <span><i style="background:var(--border-strong)"></i>other 2.1 GB</span>
+          <span><i style="background:var(--border)"></i>free 8.4 GB</span>
+        </div>
+      </div>
+
+      <div class="rsec">
+        <div class="rlab">Model placement<span class="rv warn">28.4 GB GPU · 9.1 GB RAM</span></div>
+        <div class="segbar"><i style="width:76%;background:var(--good)"></i><i style="flex:1;background:var(--warn)"></i></div>
+        <div class="rnote">Spilled. Lower <code>num_ctx</code> or pick a smaller quant — T4 predicts
+          where the ceiling is.</div>
+      </div>
+
+      <div class="rsec">
+        <div class="rlab">Ollama CPU<span class="rv warn">312%</span></div>
+        <div class="spark">
+          <i style="height:64%;background:var(--warn)"></i><i style="height:78%;background:var(--warn)"></i>
+          <i style="height:71%;background:var(--warn)"></i><i style="height:88%;background:var(--warn)"></i>
+          <i style="height:92%;background:var(--warn)"></i><i style="height:84%;background:var(--warn)"></i>
+          <i style="height:90%;background:var(--warn)"></i><i style="height:96%;background:var(--warn)"></i>
+          <i style="height:81%;background:var(--warn)"></i><i style="height:87%;background:var(--warn)"></i>
+          <i style="height:93%;background:var(--warn)"></i><i style="height:79%;background:var(--warn)"></i>
+          <i style="height:85%;background:var(--warn)"></i><i style="height:91%;background:var(--warn)"></i>
+          <i style="height:76%;background:var(--warn)"></i><i style="height:89%;background:var(--warn)"></i>
+          <i style="height:94%;background:var(--warn)"></i><i style="height:82%;background:var(--warn)"></i>
+          <i style="height:88%;background:var(--warn)"></i><i style="height:95%;background:var(--warn)"></i>
+        </div>
+      </div>
+
+      <div class="rsec">
+        <div class="absent">GPU utilisation unavailable on this machine</div>
+        <div class="rnote">Absent, <b>never zero</b>. A utilisation meter pinned at 0% is a lie a user
+          will act on.</div>
+      </div>
+
+      <div class="rsec">
+        <div class="rlab">Context used<span class="rv warn">7,740 / 8,192 · 94%</span></div>
+        <div class="meter warn"><i style="width:94%"></i></div>
+        <div class="rnote" style="color:var(--warn)">Older turns will start dropping.</div>
+      </div>
+
+      <div class="rfoot">
+        <span style="font-family:var(--mono);font-size:11px;color:var(--muted)">keep_alive 1:12</span>
+        <span class="spacer"></span>
+        <button class="btn xs">Eject</button>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption"><b>Context used is the most valuable thing on this list and it is free.</b>
+     <code>ctx 8,192</code> names the window; it never changes and so carries almost no information after
+     the first read. What the user needs is how much has been <em>spent</em> — because the consequence of
+     running out is silent eviction of the oldest turns, which is invisible and is the single most common
+     cause of "why did it forget?". Both counts are already in every <code>/api/chat</code> response.</p>
+  <p class="caption"><b>GPU utilisation is a spike, not a commitment.</b> On Apple Silicon there is no
+     supported API. <code>powermetrics</code> reports it and needs <b>root</b> — out of the question for
+     a cask that doesn't even sign itself. The non-root paths (IOKit <code>AGXAccelerator
+     PerformanceStatistics</code>, or the private <code>IOReport</code> framework that <code>macmon</code>
+     uses) are undocumented and have moved between macOS releases. Time-box it before the UI promises
+     anything; the popover is designed to render correctly without it.</p>
+  <p class="caption"><b>Every unavailable figure is absent, never zero</b> — a missing
+     <code>hw.memsize</code>, a server that omits <code>context_length</code>, an Ollama process that
+     can't be found. Same one-sided-gate rule as SPEC §8: the cost of a wrong number in a diagnostic
+     panel is that the user debugs the wrong thing.</p>
+  <p class="caption"><b>Polling stays on the existing 5s <code>/api/ps</code> tick</b>, and host stats
+     ride along. CPU and GPU poll <em>only while the popover is open</em>. A telemetry panel that polls
+     faster than its data changes is a battery drain in a menu-bar app's clothing.</p>
+</section>
+
+<!-- ═══════════════════ closing ═══════════════════ -->
+<section class="sec">
+  <div class="num">SCOPE</div>
+  <h2>What this deliberately does not add</h2>
+  <p class="why">No RAG, no prompt library, no personas, no cloud sync, no LLM-as-judge scoring, no
+     multi-user. Each is a chat-window feature, each competes directly with products that have years of
+     head start, and each pulls Remuda off the one axis where it is currently alone.</p>
+  <p class="why">Build order: <b>T1</b>, then <b>T2</b>. T1 de-risks the loop everything else runs inside,
+     and T5 is T1 and T2 composed — building it before them would mean building both badly. T7's context
+     meter is free and can ride along with anything. T7's GPU percentage is the only item here that needs
+     a spike before it is promised.</p>
+  <div class="meta" style="margin-top:20px;font-family:var(--mono);font-size:12px;color:var(--faint)">
+    Spec: SPEC-tuning.md · Tokens: docs/mockup.html · Parent spec: SPEC.md
+  </div>
+</section>
+
+</div>
+</body>
+</html>
