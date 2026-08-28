@@ -6,9 +6,13 @@
     <a href="https://github.com/magna-nz/remuda/actions/workflows/ci.yml"><img src="https://github.com/magna-nz/remuda/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
     <a href="https://github.com/magna-nz/remuda/releases/latest"><img src="https://img.shields.io/github/v/release/magna-nz/remuda?sort=semver&label=release" alt="Latest release" /></a>
     <a href="https://github.com/magna-nz/remuda/releases"><img src="https://img.shields.io/github/downloads/magna-nz/remuda/total?label=downloads" alt="Total downloads" /></a>
-    <img src="https://img.shields.io/badge/platform-macOS-lightgrey" alt="macOS" />
-    <!-- PLACEHOLDER: swap for a real license badge once a LICENSE is chosen -->
-    <img src="https://img.shields.io/badge/license-TBD-lightgrey" alt="License TBD" />
+    <a href="#install"><img src="https://img.shields.io/badge/Homebrew-cask-FBB040?logo=homebrew&logoColor=white" alt="Install with Homebrew" /></a>
+  </p>
+  <p>
+    <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-runs%20local-000000?logo=ollama&logoColor=white" alt="Talks to a local Ollama" /></a>
+    <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Built with Tauri 2" /></a>
+    <img src="https://img.shields.io/badge/macOS-12%2B%20Apple%20Silicon-000000?logo=apple&logoColor=white" alt="macOS 12+ on Apple Silicon" />
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   </p>
   <p>
     <a href="#install">Install</a> ·
@@ -145,5 +149,4 @@ version in any of `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, `package.json` 
 
 ## License
 
-<!-- PLACEHOLDER: choose a license (currently all rights reserved by default) -->
-TBD. No license chosen yet, so all rights reserved until one is added.
+[MIT](LICENSE).
