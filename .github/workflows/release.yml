@@ -7,7 +7,7 @@ name: Release
 # the tarball a Homebrew cask points `url` at; it does not build or upload a
 # .dmg. The cask is rendered from packaging/homebrew/remuda.rb with this
 # release's version and SHA-256 filled in, attached to the release, and — if
-# a TAP_GITHUB_TOKEN secret is configured — pushed to the tap repo.
+# a HOMEBREW_TAP_TOKEN secret is configured — pushed to the tap repo.
 on:
   push:
     tags:
@@ -23,7 +23,7 @@ jobs:
     env:
       # Read via env rather than the `secrets` context directly so the tap
       # step can be skipped with a plain `if:` when the secret isn't set.
-      TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,6 +31,12 @@ jobs:
       # versions baked into the artifact. tauri.conf.json's version is what
       # stamps the .app's Info.plist, so a mismatch here ships a release
       # named v0.2.0 containing an app that reports 0.1.0.
+      #
+      # The two lockfiles are checked alongside the three manifests because
+      # a bump that skips them is easy to make by hand and fails later and
+      # less legibly — `npm ci` refuses a package-lock.json that disagrees
+      # with package.json, and a stale Cargo.lock quietly rewrites itself
+      # mid-build so the tag's commit no longer reproduces the artifact.
       - name: Verify tag matches the versions in the repo
         id: version
         run: |
@@ -40,17 +46,28 @@ jobs:
 
           tauri=$(jq -r '.version' src-tauri/tauri.conf.json)
           npm_pkg=$(jq -r '.version' app/package.json)
+          npm_lock=$(jq -r '.version' app/package-lock.json)
+          npm_lock_root=$(jq -r '.packages."".version' app/package-lock.json)
           cargo=$(grep -m1 '^version = ' src-tauri/Cargo.toml | sed 's/^version = "\(.*\)"$/\1/')
+          # The `remuda` package's own entry in the lockfile, not one of the
+          # ~500 dependency stanzas that share the `version = ` shape.
+          cargo_lock=$(awk '/^name = "remuda"$/{getline; print; exit}' src-tauri/Cargo.lock \
+            | sed 's/^version = "\(.*\)"$/\1/')
 
-          echo "tag                    ${tag} -> ${version}"
+          echo "tag                        ${tag} -> ${version}"
           echo "src-tauri/tauri.conf.json  ${tauri}"
           echo "src-tauri/Cargo.toml       ${cargo}"
+          echo "src-tauri/Cargo.lock       ${cargo_lock}"
           echo "app/package.json           ${npm_pkg}"
+          echo "app/package-lock.json      ${npm_lock} / ${npm_lock_root}"
 
           fail=0
           for pair in "src-tauri/tauri.conf.json:${tauri}" \
                       "src-tauri/Cargo.toml:${cargo}" \
-                      "app/package.json:${npm_pkg}"; do
+                      "src-tauri/Cargo.lock:${cargo_lock}" \
+                      "app/package.json:${npm_pkg}" \
+                      "app/package-lock.json:${npm_lock}" \
+                      "app/package-lock.json:${npm_lock_root}"; do
             file="${pair%%:*}"
             found="${pair#*:}"
             if [ "$found" != "$version" ]; then
@@ -118,11 +135,10 @@ jobs:
       # TODO: code signing & notarization.
       #
       # This build is UNSIGNED. Without a signing identity, Gatekeeper
-      # will refuse to open the .app on another Mac ("Remuda.app is
-      # damaged and can't be opened" / "unidentified developer"), which is
-      # why packaging/homebrew/remuda.rb's `caveats` block currently tells
-      # installers to run:
-      #   xattr -dr com.apple.quarantine /Applications/Remuda.app
+      # quarantines the .app on any other Mac and macOS refuses to launch
+      # it ("Remuda.app is damaged and can't be opened"), which is why
+      # packaging/homebrew/remuda.rb carries a `postflight` block that
+      # clears the quarantine attribute on install.
       #
       # To sign and notarize once a Developer ID is available, this step
       # would need, roughly:
@@ -136,8 +152,9 @@ jobs:
       #   3. After `tauri build` produces the signed .app, notarize it:
       #      `xcrun notarytool submit <bundle>.zip --apple-id ... --team-id ...
       #      --password ... --wait`, then `xcrun stapler staple Remuda.app`.
-      #   4. Only once that's in place should the cask's `caveats` note about
-      #      quarantine be removed.
+      #   4. Only once that's in place should the cask's `postflight`
+      #      quarantine strip — and the `caveats` note about it — be
+      #      removed. A signed, notarized build has no flag to clear.
       # --------------------------------------------------------------
 
       - name: Package the .app as a tarball
@@ -195,7 +212,7 @@ jobs:
 
             The `remuda.rb` asset on this release is the Homebrew cask with
             this version and checksum already filled in. It is pushed to
-            magna-nz/homebrew-tap automatically when the TAP_GITHUB_TOKEN
+            magna-nz/homebrew-tap automatically when the HOMEBREW_TAP_TOKEN
             secret is set; otherwise copy it to `Casks/remuda.rb` in the tap
             repo by hand. See packaging/homebrew/README.md.
 
@@ -204,7 +221,7 @@ jobs:
       # send `brew install` at a URL that 404s.
       #
       # Needs a PAT with write access to magna-nz/homebrew-tap in the
-      # TAP_GITHUB_TOKEN secret — the built-in GITHUB_TOKEN is scoped to this
+      # HOMEBREW_TAP_TOKEN secret — the built-in GITHUB_TOKEN is scoped to this
       # repo and cannot push to another one. Without the secret this step is
       # skipped and the tap is updated by hand from the release asset.
       - name: Push the cask to the tap repo
@@ -233,4 +250,4 @@ jobs:
       - name: Note when the tap was not updated
         if: env.TAP_TOKEN == ''
         run: |
-          echo "::notice::TAP_GITHUB_TOKEN is not set, so magna-nz/homebrew-tap was not updated. Copy the remuda.rb asset from this release into the tap's Casks/ directory."
+          echo "::notice::HOMEBREW_TAP_TOKEN is not set, so magna-nz/homebrew-tap was not updated. Copy the remuda.rb asset from this release into the tap's Casks/ directory."
