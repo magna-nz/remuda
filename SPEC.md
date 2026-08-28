@@ -146,9 +146,14 @@ with `keep_alive: 0`.
 
 ## 5.2 Chats (left)
 
-- Each row: the conversation **title**, and **underneath it the model tag**
-  it ran on, with a status dot — **green** if that model is loaded now,
-  **hollow amber + "unloaded"** if not.
+- Each row is **one line**: a status dot — **green** if the model that chat
+  ran on is loaded now, **hollow amber** if not — then the conversation
+  **title**, then a relative time. Density wins over restating the tag on
+  every row.
+- The **model tag** spells itself out **only under the open chat**. Every
+  other row carries it in the row's tooltip (`gemma-4-31b-coding-q5 —
+  not loaded`) and in screen-reader-only text, so the dot's colour is never
+  the sole carrier of the state.
 - **＋ New chat** opens an empty session on the **currently loaded** model +
   Modelfile.
 - Sessions persist and are sorted most-recent first.
