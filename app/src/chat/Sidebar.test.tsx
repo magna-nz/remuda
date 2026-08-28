@@ -54,7 +54,7 @@ beforeEach(() => {
 });
 
 describe("Sidebar session list", () => {
-  it("shows title, model tag, status dot, and relative time per row (SPEC §5.2)", async () => {
+  it("shows title, status dot, and relative time on one line per row (SPEC §5.2)", async () => {
     seedSessions(fixtureSessions());
     renderSidebar(fixtureClient());
     // Wait for /api/ps knowledge so the dots can be judged (New chat enables
@@ -62,21 +62,40 @@ describe("Sidebar session list", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: "New chat" })).toBeEnabled());
 
     const loadedRow = rowFor("Undo a git commit");
-    expect(within(loadedRow).getByText("llama3.1:8b")).toBeInTheDocument();
     expect(loadedRow.querySelector(".sdot")).not.toHaveClass("off");
-    expect(within(loadedRow).queryByText("· unloaded")).not.toBeInTheDocument();
     expect(within(loadedRow).getByText("now")).toBeInTheDocument();
+    // A closed row is one line — the tag rides the tooltip and the
+    // screen-reader line, so the dot is never the only carrier of the state.
+    expect(loadedRow.querySelector(".smodel")).toBeNull();
+    expect(loadedRow.querySelector(".sess-open")).toHaveAttribute("title", "llama3.1:8b — loaded");
+    expect(within(loadedRow).getByText("llama3.1:8b, loaded")).toHaveClass("sr-only");
 
     const unloadedRow = rowFor("Explain this regex");
-    // ":latest" is dropped in the narrow row, like the mockup.
-    expect(within(unloadedRow).getByText("regex-helper")).toBeInTheDocument();
     expect(unloadedRow.querySelector(".sdot")).toHaveClass("off");
-    expect(within(unloadedRow).getByText("· unloaded")).toBeInTheDocument();
     expect(within(unloadedRow).getByText("2d")).toBeInTheDocument();
+    // ":latest" is dropped in the narrow row, like the mockup.
+    expect(unloadedRow.querySelector(".sess-open")).toHaveAttribute("title", "regex-helper — not loaded");
+    expect(within(unloadedRow).getByText("regex-helper, not loaded")).toHaveClass("sr-only");
 
     // Most-recent first.
     const titles = Array.from(document.querySelectorAll(".stitle")).map((el) => el.textContent);
     expect(titles).toEqual(["Undo a git commit", "Explain this regex"]);
+  });
+
+  it("spells the model tag out on the open chat only (SPEC §5.2)", async () => {
+    seedSessions(fixtureSessions());
+    renderSidebar(fixtureClient());
+    await screen.findByText("Explain this regex");
+
+    // Nothing open yet, so no row spends a second line on its tag.
+    expect(document.querySelector(".smodel")).toBeNull();
+
+    fireEvent.click(screen.getByText("Explain this regex"));
+
+    const opened = rowFor("Explain this regex");
+    expect(opened).toHaveClass("active");
+    expect(within(opened).getByText("regex-helper")).toHaveClass("smodel-tag", "off");
+    expect(document.querySelectorAll(".smodel")).toHaveLength(1);
   });
 
   it("filters by title substring", async () => {

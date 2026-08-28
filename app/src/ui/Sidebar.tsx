@@ -1,10 +1,13 @@
 /**
  * Chats rail (SPEC.md §5, §5.2; docs/mockup.html session rows).
  *
- * The saved-session list: each row shows the title, the model tag it ran on
- * with a status dot (green = loaded now, hollow amber + "unloaded" = not),
- * and a relative time. "+ New chat" binds a session to the active resident
- * model, so it needs one loaded. Search filters by title substring.
+ * The saved-session list. A row is one line — status dot (green = the model
+ * is loaded now, hollow amber = not), title, relative time — so the rail
+ * shows as much history as it can. The model tag itself only spells itself
+ * out on the open chat; elsewhere it lives in the row's tooltip, and in
+ * screen-reader text so the dot is never the only carrier of the state.
+ * "+ New chat" binds a session to the active resident model, so it needs one
+ * loaded. Search filters by title substring.
  */
 import { useState } from "react";
 import "./Sidebar.css";
@@ -15,6 +18,9 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
   const { models, openSession, deleteSession } = useRemuda();
   const isLoaded = models.some((m) => m.tag === session.model && m.isLoaded);
 
+  const tag = shortTag(session.model);
+  const state = isLoaded ? "loaded" : "not loaded";
+
   return (
     <div className={active ? "sess active" : "sess"}>
       <button
@@ -22,14 +28,21 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
         className="sess-open"
         onClick={() => openSession(session.id)}
         aria-current={active || undefined}
+        title={`${tag} — ${state}`}
       >
-        <div className="stitle">{session.title}</div>
-        <div className="smodel">
+        <div className="strow">
           <span className={isLoaded ? "sdot" : "sdot off"} aria-hidden="true" />
-          {shortTag(session.model)}
-          {!isLoaded && <span className="stag">· unloaded</span>}
+          <span className="stitle">{session.title}</span>
           <span className="stime">{relativeTime(session.updatedAt)}</span>
         </div>
+        {/* The tag is spelled out on the open chat only — every other row
+            carries it in the tooltip and the screen-reader line below. */}
+        {active && (
+          <div className="smodel" aria-hidden="true">
+            <span className={isLoaded ? "smodel-tag" : "smodel-tag off"}>{tag}</span>
+          </div>
+        )}
+        <span className="sr-only">{`${tag}, ${state}`}</span>
       </button>
       <button
         type="button"
