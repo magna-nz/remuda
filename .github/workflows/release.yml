@@ -32,55 +32,12 @@ jobs:
       # stamps the .app's Info.plist, so a mismatch here ships a release
       # named v0.2.0 containing an app that reports 0.1.0.
       #
-      # The two lockfiles are checked alongside the three manifests because
-      # a bump that skips them is easy to make by hand and fails later and
-      # less legibly — `npm ci` refuses a package-lock.json that disagrees
-      # with package.json, and a stale Cargo.lock quietly rewrites itself
-      # mid-build so the tag's commit no longer reproduces the artifact.
+      # The check lives in scripts/version.sh rather than inline, so the gate
+      # and the bumper that satisfies it read the same six fields the same
+      # way. `version=` lands in $GITHUB_OUTPUT for the steps below.
       - name: Verify tag matches the versions in the repo
         id: version
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#v}"
-
-          tauri=$(jq -r '.version' src-tauri/tauri.conf.json)
-          npm_pkg=$(jq -r '.version' app/package.json)
-          npm_lock=$(jq -r '.version' app/package-lock.json)
-          npm_lock_root=$(jq -r '.packages."".version' app/package-lock.json)
-          cargo=$(grep -m1 '^version = ' src-tauri/Cargo.toml | sed 's/^version = "\(.*\)"$/\1/')
-          # The `remuda` package's own entry in the lockfile, not one of the
-          # ~500 dependency stanzas that share the `version = ` shape.
-          cargo_lock=$(awk '/^name = "remuda"$/{getline; print; exit}' src-tauri/Cargo.lock \
-            | sed 's/^version = "\(.*\)"$/\1/')
-
-          echo "tag                        ${tag} -> ${version}"
-          echo "src-tauri/tauri.conf.json  ${tauri}"
-          echo "src-tauri/Cargo.toml       ${cargo}"
-          echo "src-tauri/Cargo.lock       ${cargo_lock}"
-          echo "app/package.json           ${npm_pkg}"
-          echo "app/package-lock.json      ${npm_lock} / ${npm_lock_root}"
-
-          fail=0
-          for pair in "src-tauri/tauri.conf.json:${tauri}" \
-                      "src-tauri/Cargo.toml:${cargo}" \
-                      "src-tauri/Cargo.lock:${cargo_lock}" \
-                      "app/package.json:${npm_pkg}" \
-                      "app/package-lock.json:${npm_lock}" \
-                      "app/package-lock.json:${npm_lock_root}"; do
-            file="${pair%%:*}"
-            found="${pair#*:}"
-            if [ "$found" != "$version" ]; then
-              echo "::error file=${file}::version is ${found}, but the tag says ${version}"
-              fail=1
-            fi
-          done
-          if [ "$fail" -ne 0 ]; then
-            echo "Bump every version to ${version}, commit, and re-tag." >&2
-            exit 1
-          fi
-
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+        run: ./scripts/version.sh --check "${GITHUB_REF_NAME}"
 
       - uses: actions/setup-node@v4
         with:
