@@ -73,11 +73,22 @@ ollama serve
 brew install --cask magna-nz/tap/remuda
 ```
 
-Apple Silicon, macOS 12+. The build is unsigned (no Apple Developer program), so macOS would
-normally quarantine it — the cask clears that flag on install, and the app opens straight away.
+That pulls in [magna-nz/homebrew-tap](https://github.com/magna-nz/homebrew-tap) on the way through,
+so there's no separate `brew tap` step.
 
-<sub>If macOS still balks, run <code>xattr -dr com.apple.quarantine /Applications/Remuda.app</code>.
-See <a href="packaging/homebrew/README.md">packaging/homebrew</a> for release and tap mechanics.</sub>
+The build is unsigned — no Apple Developer program — so macOS would normally quarantine it and
+refuse to open it. The cask clears that flag as part of the install, so the app just launches.
+
+Afterwards:
+
+```sh
+brew upgrade --cask remuda     # move to the latest release
+brew uninstall --cask remuda   # remove it
+```
+
+<sub>If macOS ever balks anyway, run
+<code>xattr -dr com.apple.quarantine /Applications/Remuda.app</code>. See
+<a href="packaging/homebrew/README.md">packaging/homebrew</a> for release and tap mechanics.</sub>
 
 Or from source:
 
@@ -124,9 +135,13 @@ npm run build       # tsc && vite build
 For the desktop shell, run `cargo check` or `cargo tauri dev` from `src-tauri/`.
 
 CI runs both sets of gates on every pull request and on pushes to `main`, plus `cargo fmt
---check` and `cargo clippy -D warnings`. The release workflow builds the macOS app on a `v*` tag
-and refuses to build if the tag disagrees with the versions in `tauri.conf.json`, `Cargo.toml`
-and `package.json`.
+--check` and `cargo clippy -D warnings`.
+
+The release workflow builds the macOS app on a `v*` tag, publishes it as a GitHub release, and
+pushes the rendered Homebrew cask to the tap. It refuses to build if the tag disagrees with the
+version in any of `tauri.conf.json`, `Cargo.toml`, `Cargo.lock`, `package.json` or
+`package-lock.json` — bump all five in one commit before tagging. See
+[`packaging/homebrew/`](packaging/homebrew/README.md) for the full release flow.
 
 ## License
 
