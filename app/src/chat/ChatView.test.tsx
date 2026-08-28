@@ -245,7 +245,7 @@ describe("ChatView", () => {
 
     const banner = screen.getByRole("status");
     expect(banner).toHaveTextContent(
-      "mistral:7b isn’t loaded — currently loaded: llama3.1:8b. Load it to continue this chat.",
+      "mistral:7b isn’t loaded — in memory: llama3.1:8b. Load it to continue this chat.",
     );
 
     fireEvent.click(within(banner).getByRole("button", { name: "Load now" }));
@@ -264,7 +264,7 @@ describe("ChatView", () => {
     renderChat(client);
     await screen.findByText("Explain this regex");
     fireEvent.click(screen.getByText("Explain this regex"));
-    expect(screen.getByRole("status")).toHaveTextContent("currently loaded: nothing");
+    expect(screen.getByRole("status")).toHaveTextContent("in memory: nothing");
   });
 
   it("sending while unloaded is allowed; the banner clears once the model registers as loaded", async () => {

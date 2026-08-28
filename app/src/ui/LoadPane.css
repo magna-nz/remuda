@@ -121,6 +121,18 @@
   margin-bottom: 8px;
 }
 
+/* The tray's label carries the total resident size on its right — the one
+   number that decides whether another model will fit. */
+.pfield > label .rhs {
+  float: right;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 500;
+  font-family: var(--mono);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
 .pfield > label .qual {
   font-weight: 500;
   letter-spacing: 0.02em;
@@ -304,34 +316,6 @@
   color: var(--muted);
 }
 
-/* ---- runtime strip (SPEC §5.1, mockup-proposals.html §01) ---- */
-.rt {
-  border: 1px solid var(--border);
-  background: var(--surface);
-  border-radius: 11px;
-  padding: 11px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 9px;
-}
-
-.rt-top {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.rt-top .rt-tag {
-  font-family: var(--mono);
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ink);
-}
-
-.rt-top .rt-badge {
-  margin-left: auto;
-}
-
 /* The chip riding along in the top-bar model control (TopNav.css) shares
    this class; duplicated here rather than shared across files, matching how
    .iconbtn is already declared independently in both TopNav.css and this
@@ -376,67 +360,6 @@
 
 .rt-bar .cpu {
   background: var(--warn);
-}
-
-.rt-legend {
-  display: flex;
-  gap: 14px;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-.rt-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-}
-
-.rt-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 2px;
-  display: block;
-}
-
-.rt-dot.gpu {
-  background: var(--good);
-}
-
-.rt-dot.cpu {
-  background: var(--warn);
-}
-
-.rt-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 9px;
-  border-top: 1px solid var(--border);
-  padding-top: 9px;
-}
-
-.rt-cell .k {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--faint);
-}
-
-.rt-cell .v {
-  font-family: var(--mono);
-  font-size: 12.5px;
-  font-weight: 600;
-  color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  margin-top: 2px;
-}
-
-.rt-cell .v small {
-  font-weight: 400;
-  color: var(--faint);
-  font-size: 11px;
 }
 
 .rt-warn {
@@ -647,28 +570,47 @@
 .meter i {
   display: block;
   height: 100%;
+  width: 100%;
   background: var(--ember);
   border-radius: 999px;
   transition: width 0.12s linear;
 }
 
+/* Indeterminate: a short segment sweeping the track. translateX is a share
+   of the segment's own width, so -100% parks it just off the left edge and
+   165% carries its trailing edge past the right. */
 .meter i.indeterminate {
-  animation: pane-load-pulse 1.1s ease-in-out infinite;
+  width: 38%;
+  transition: none;
+  animation: pane-load-sweep 1.25s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
 
-@keyframes pane-load-pulse {
-  0%,
-  100% {
-    opacity: 0.6;
+@keyframes pane-load-sweep {
+  from {
+    transform: translateX(-100%);
   }
-  50% {
-    opacity: 1;
+  to {
+    transform: translateX(165%);
   }
 }
 
+/* No sweep when motion is unwelcome: the bar fills the track and breathes
+   instead, which still reads as "working" without travelling. */
 @media (prefers-reduced-motion: reduce) {
   .meter i.indeterminate {
-    animation: none;
+    width: 100%;
+    transform: none;
+    animation: pane-load-pulse 1.6s ease-in-out infinite;
+  }
+
+  @keyframes pane-load-pulse {
+    0%,
+    100% {
+      opacity: 0.55;
+    }
+    50% {
+      opacity: 1;
+    }
   }
 }
 
@@ -684,18 +626,180 @@
   overflow-wrap: anywhere;
 }
 
-/* Load sits beside Eject: Load takes the room, Eject stays at its own width. */
+/* Load stands alone now — ejecting is per-row, up in the memory tray. */
 .pactions {
   display: flex;
   align-items: stretch;
   gap: 8px;
 }
 
-.pactions .btn.eject {
+/* ---- memory tray (SPEC §5.1, docs/mockup-memory.html §02) ----------------
+ *
+ * Everything resident, one row each, at the pane's root. This is machine
+ * state: it belongs above the installed list rather than inside any single
+ * model's detail step, because more than one model can be in memory and no
+ * one of them is "the" model.
+ */
+.tray {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.slot {
+  position: relative;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 11px;
+  padding: 10px 12px 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: hidden;
+}
+
+/* Spill is the one runtime fact that changes what you should do next, so it
+   gets a rail rather than a fourth chip — it reads before any text does, and
+   survives the row being scanned instead of read. */
+.slot::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--good);
+}
+
+.slot.spill::before {
+  background: var(--warn);
+}
+
+.slot.active {
+  border-color: color-mix(in srgb, var(--ember) 42%, transparent);
+  background: color-mix(in srgb, var(--ember-tint) 40%, var(--surface));
+}
+
+.slot-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.slot-tag {
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.slot-grow {
+  flex: 1;
+}
+
+/* Which resident model the open chat actually talks to. Replaces the old
+   global "loaded" idea: residency is a set, but a session has exactly one. */
+.inuse {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--ember);
+  color: #fff;
   flex: 0 0 auto;
+}
+
+.slot-sub {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.slot-sub .sep {
+  color: var(--border-strong);
+}
+
+.slot-sub .warnish {
+  color: var(--warn);
+}
+
+.slot-sub .keptnote {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.slot-acts {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.slot-acts .btn.eject {
   color: var(--muted);
 }
 
-.pactions .btn.eject:hover:not(:disabled) {
-  color: var(--ink);
+.slot-acts .btn.eject:hover:not(:disabled) {
+  color: var(--warn);
+}
+
+.trayfoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+  padding: 0 2px;
+}
+
+/* The detail step's remaining claim on runtime: one line, not a card
+   (docs/mockup-memory.html §03). */
+.minirt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  border-radius: 10px;
+  padding: 8px 11px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.minirt:hover {
+  background: var(--raised);
+  border-color: var(--border-strong);
+}
+
+.minirt svg {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+}
+
+.minirt .lead {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.slot-sub small {
+  color: var(--faint);
 }

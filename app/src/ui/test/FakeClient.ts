@@ -181,7 +181,13 @@ export class FakeClient implements OllamaClient {
   }
 
   private runningNow(): RunningModel[] {
-    if (this.running !== undefined) return this.running;
+    // A scripted readout supplies the numbers, but residency still comes from
+    // the model list — otherwise an ejected model keeps reporting itself as
+    // resident and the tray never empties.
+    if (this.running !== undefined) {
+      const resident = new Set(this.models.filter((m) => m.isLoaded).map((m) => m.tag));
+      return this.running.filter((r) => resident.has(r.tag));
+    }
     return this.models
       .filter((m) => m.isLoaded)
       .map((m) => ({
@@ -250,7 +256,9 @@ export class FakeClient implements OllamaClient {
       throw new Error(this.failLoad);
     }
     this.loadCalls.push({ tag, keepAlive });
-    this.models = this.models.map((m) => ({ ...m, isLoaded: m.tag === tag }));
+    // Additive, like Ollama: loading a model doesn't evict the others until
+    // OLLAMA_MAX_LOADED_MODELS forces it.
+    this.models = this.models.map((m) => (m.tag === tag ? { ...m, isLoaded: true } : m));
   }
 
   async unload(tag: string): Promise<void> {

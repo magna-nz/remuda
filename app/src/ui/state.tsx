@@ -152,7 +152,17 @@ export interface RemudaContextValue {
    * reads /api/ps for `isLoaded`; no extra request, no second timer.
    */
   running: RunningModel[];
-  loaded: LoadedSelection | null;
+  /**
+   * Every model resident in Ollama right now, in model-list order. Empty
+   * when nothing is loaded — there is no singular "the loaded model" any
+   * more, only what memory happens to be holding.
+   */
+  loaded: LoadedSelection[];
+  /**
+   * Which resident model an action gets when the user hasn't named one
+   * (New chat, the Modelfile tab). Null when nothing is loaded.
+   */
+  activeModel: LoadedSelection | null;
   keepAlive: KeepAlive;
   setKeepAlive: (keepAlive: KeepAlive) => void;
   /** "Confirm before deleting a model" (SPEC §5.6): persisted, default on. */
@@ -167,8 +177,16 @@ export interface RemudaContextValue {
   refreshModels: () => Promise<void>;
   /** Load a model with the configured keep_alive, then refresh the model list. */
   load: (tag: string) => Promise<void>;
-  /** Free the loaded model's weights (keep_alive: 0), then refresh the list. */
-  unload: () => Promise<void>;
+  /** Free one model's weights (keep_alive: 0), then refresh the list. */
+  unload: (tag: string) => Promise<void>;
+  /** Free every resident model, then refresh the list once. */
+  unloadAll: () => Promise<void>;
+  /**
+   * Pin a resident model against its keep_alive expiry, or hand it back to
+   * the configured one. Re-sends the load — Ollama has no other way to
+   * restate keep_alive for weights already in memory.
+   */
+  setKept: (tag: string, kept: boolean) => Promise<void>;
   /** Re-run the health check immediately (e.g. Retry on the offline banner). */
   checkHealth: () => Promise<void>;
 
@@ -298,12 +316,32 @@ function toMs(ns: number | undefined): number | null {
   return typeof ns === "number" ? Math.round(ns / 1e6) : null;
 }
 
-function deriveLoaded(models: Model[]): LoadedSelection | null {
-  const loadedModel = models.find((m) => m.isLoaded);
-  if (!loadedModel) return null;
-  return loadedModel.isVariant && loadedModel.base
-    ? { base: loadedModel.base, variant: loadedModel.tag }
-    : { base: loadedModel.tag, variant: loadedModel.tag };
+/**
+ * Every model Ollama currently holds in memory, not just the first.
+ *
+ * Ollama keeps up to OLLAMA_MAX_LOADED_MODELS resident at once and /api/ps
+ * reports all of them; taking `.find()` here was the single line that made
+ * the rest of the app believe in one. Order follows the grouped model list
+ * rather than /api/ps, which reshuffles as models come and go — a tray that
+ * reorders itself under the cursor is worse than one that doesn't.
+ */
+function deriveLoaded(models: Model[]): LoadedSelection[] {
+  return models
+    .filter((m) => m.isLoaded)
+    .map((m) => (m.isVariant && m.base ? { base: m.base, variant: m.tag } : { base: m.tag, variant: m.tag }));
+}
+
+/**
+ * The resident model an app-wide action should act on when the user hasn't
+ * pointed at one: New chat, the Modelfile tab, the reload half of Save.
+ *
+ * The active chat's own model wins when it's resident — that is the model
+ * the user is demonstrably working with. Otherwise the first resident one,
+ * which is what the whole app used to mean by "loaded".
+ */
+function deriveActiveModel(loaded: LoadedSelection[], sessionModel: string | undefined): LoadedSelection | null {
+  const bound = sessionModel !== undefined ? loaded.find((l) => l.variant === sessionModel) : undefined;
+  return bound ?? loaded[0] ?? null;
 }
 
 export interface RemudaProviderProps {
@@ -325,6 +363,10 @@ export function RemudaProvider({
   const [groups, setGroups] = useState<ModelGroup[]>([]);
   const [running, setRunning] = useState<RunningModel[]>([]);
   const [keepAlive, setKeepAlive] = useState<KeepAlive>("5m");
+  // Read at call time by setKept, which must not re-identify whenever the
+  // Settings keep-alive changes.
+  const keepAliveRef = useRef<KeepAlive>(keepAlive);
+  keepAliveRef.current = keepAlive;
   const [confirmDeleteModel, setConfirmDeleteModelState] = useState<boolean>(
     () => loadSettings().confirmDeleteModel,
   );
@@ -512,20 +554,64 @@ export function RemudaProvider({
     [groups],
   );
   const loaded = useMemo(() => deriveLoaded(models), [models]);
+  const activeSessionModel = sessions.find((s) => s.id === activeSessionId)?.model;
+  const activeModel = useMemo(
+    () => deriveActiveModel(loaded, activeSessionModel),
+    [loaded, activeSessionModel],
+  );
+  // Same reason as viewRef above: these change on every poll tick and on
+  // every session switch, and the callbacks below would otherwise hand every
+  // consumer a fresh identity twice a minute for a value they only read at
+  // call time.
+  const loadedRef = useRef<LoadedSelection[]>(loaded);
+  loadedRef.current = loaded;
+  const activeModelRef = useRef<LoadedSelection | null>(activeModel);
+  activeModelRef.current = activeModel;
 
   /**
-   * Eject whatever is loaded (SPEC §7: `/api/generate` with `keep_alive: 0`).
+   * Eject one model (SPEC §7: `/api/generate` with `keep_alive: 0`).
    *
    * Not a mode — Ollama re-loads on demand, so this only hands the weights'
    * memory back; the next chat or Load warms them again. Rejections
    * propagate to the caller, which owns the error surface (LoadPane).
    */
-  const unload = useCallback(async () => {
-    const tag = loaded?.variant;
-    if (tag === undefined) return;
-    await client.unload(tag);
-    await refreshModels();
-  }, [client, loaded, refreshModels]);
+  const unload = useCallback(
+    async (tag: string) => {
+      await client.unload(tag);
+      await refreshModels();
+    },
+    [client, refreshModels],
+  );
+
+  /**
+   * Eject everything. The unloads go out together — they're independent
+   * calls against one server — but the list is refreshed once, at the end,
+   * so the tray empties in a single step instead of shedding rows.
+   */
+  const unloadAll = useCallback(async () => {
+    const tags = loadedRef.current.map((l) => l.variant);
+    if (tags.length === 0) return;
+    try {
+      await Promise.all(tags.map((tag) => client.unload(tag)));
+    } finally {
+      await refreshModels();
+    }
+  }, [client, refreshModels]);
+
+  /**
+   * Pin a model in memory, or let it expire again.
+   *
+   * `keep_alive: -1` is Ollama's "never unload", and the only way to restate
+   * it for resident weights is to re-send the load — which is cheap when the
+   * model is already there, since nothing is re-read from disk.
+   */
+  const setKept = useCallback(
+    async (tag: string, kept: boolean) => {
+      await client.load(tag, kept ? -1 : keepAliveRef.current);
+      await refreshModels();
+    },
+    [client, refreshModels],
+  );
 
   /** Apply fn to one session and keep the list sorted most-recent first. */
   const updateSession = useCallback((id: string, fn: (s: ChatSession) => ChatSession) => {
@@ -533,19 +619,20 @@ export function RemudaProvider({
   }, []);
 
   const newChat = useCallback(() => {
-    // §5.2: New chat opens on the *currently loaded* model — nothing loaded,
-    // nothing to bind the session to.
-    if (!loaded) return;
+    // §5.2: New chat opens on a *resident* model — nothing loaded, nothing
+    // to bind the session to. With several resident it takes activeModel,
+    // which prefers the model the current chat already talks to.
+    if (!activeModel) return;
     // The sidebar stays visible while the Modelfile editor is open, so this
     // is a navigation away from it — same unsaved-changes gate as setView
     // (SPEC §8), not a silent discard.
     if (viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
-    const session = createSession(loaded.variant);
+    const session = createSession(activeModel.variant);
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(session.id);
     setStreamError(null);
     setViewState("chat");
-  }, [loaded, confirmUnsavedChanges]);
+  }, [activeModel, confirmUnsavedChanges]);
 
   const openSession = useCallback((id: string) => {
     if (viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
@@ -804,7 +891,7 @@ export function RemudaProvider({
 
       setSaving(true);
       setSaveError(null);
-      const oldTag = loaded?.variant ?? null;
+      const oldTag = activeModelRef.current?.variant ?? null;
       try {
         const request = toCreateRequest(draft.doc);
         // Structured-create only; the client refuses to fall back to the
@@ -844,7 +931,7 @@ export function RemudaProvider({
         setSaving(false);
       }
     },
-    [client, loaded, keepAlive, refreshModels, confirmDeleteModel],
+    [client, keepAlive, refreshModels, confirmDeleteModel],
   );
 
   // Memoized: chat streaming updates `sessions` once per token, and an
@@ -860,6 +947,7 @@ export function RemudaProvider({
     groups,
     running,
     loaded,
+    activeModel,
     keepAlive,
     setKeepAlive,
     confirmDeleteModel,
@@ -872,6 +960,8 @@ export function RemudaProvider({
     refreshModels,
     load,
     unload,
+    unloadAll,
+    setKept,
     checkHealth,
     sessions,
     activeSessionId,
@@ -898,9 +988,10 @@ export function RemudaProvider({
     reloadToast,
     saveDraft,
   }), [
-    client, status, checked, models, groups, running, loaded, keepAlive,
+    client, status, checked, models, groups, running, loaded, activeModel, keepAlive,
     confirmDeleteModel, setConfirmDeleteModel, view, setView, loadPaneOpen,
-    openLoadPane, closeLoadPane, refreshModels, load, unload, checkHealth, sessions,
+    openLoadPane, closeLoadPane, refreshModels, load, unload, unloadAll, setKept,
+    checkHealth, sessions,
     activeSessionId, streamingSessionId, streamError, lastStats, newChat,
     openSession, deleteSession, sendMessage, setSessionOptions, setSessionThink,
     bakeOptionsIntoEditor, cancelGeneration, editorDraft,

@@ -307,7 +307,7 @@ describe("chat: thinking, options and images", () => {
   /** A provider with one loaded model and an open session on it. */
   async function withSession(client: FakeClient) {
     const seen = renderContext(client, 1_000_000);
-    await waitFor(() => expect(ctx(seen).loaded?.variant).toBe("llama3.1:8b"));
+    await waitFor(() => expect(ctx(seen).activeModel?.variant).toBe("llama3.1:8b"));
     act(() => ctx(seen).newChat());
     await waitFor(() => expect(ctx(seen).activeSessionId).not.toBeNull());
     return seen;

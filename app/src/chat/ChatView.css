@@ -39,11 +39,6 @@
   flex-direction: row-reverse;
 }
 
-.msg.user .av {
-  background: var(--ink);
-  color: var(--surface);
-}
-
 .msg.bot .av {
   background: var(--ember-tint);
   color: var(--ember-ink);
