@@ -88,25 +88,56 @@
 }
 
 /*
- * The answer-at-a-glance runtime chip riding along in the model control
- * (SPEC §5.1, mockup-proposals.html §01 `.rt-inline`) — green while the
- * loaded model fits in VRAM, amber the moment any of it spills to CPU.
+ * The runtime group (SPEC-tuning T7): the three chips beside the model
+ * control — placement, context used, keep_alive — and the popover they all
+ * open. Positioned relatively so the popover anchors under the chips rather
+ * than the whole titlebar.
  */
-.rt-inline {
+.runtime-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * One runtime chip (SPEC §5.1, mockup-tuning.html §t7 `.rchip`) — neutral by
+ * default, green (`.good`) while placement/context read comfortably, amber
+ * (`.warn`) the moment either one needs attention.
+ */
+.rchip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 8px;
+  padding: 5px 9px;
   border-radius: 7px;
-  background: var(--good-tint);
-  color: var(--good);
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--ink-2);
   font-family: var(--mono);
   font-size: 11px;
   font-weight: 600;
-  border: 1px solid color-mix(in srgb, var(--good) 26%, transparent);
 }
 
-.rt-inline.spill {
+.rchip:hover {
+  background: var(--raised);
+}
+
+.rchip .d {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.rchip.good {
+  background: var(--good-tint);
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 26%, transparent);
+}
+
+.rchip.warn {
   background: var(--warn-tint);
   color: var(--warn);
   border-color: color-mix(in srgb, var(--warn) 32%, transparent);

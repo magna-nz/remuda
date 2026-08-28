@@ -90,6 +90,33 @@ export interface ModelDetail {
   contextLength: number | null;
   /** See Model.capabilities. `[]` when the server doesn't report any. */
   capabilities: string[];
+  /** Architecture-derived sizing from /api/show's `model_info`, for the
+   * memory-estimate math. `null` unless every one of the four numbers was
+   * present and numeric — a partial reading is worse than none, because a
+   * wrong figure costs the user a five-minute model load. */
+  archParams: ArchParams | null;
+}
+
+/** Architecture parameters read from POST /api/show's `model_info`
+ * (`general.architecture` plus that architecture's block_count /
+ * attention.head_count / attention.head_count_kv / embedding_length). */
+export interface ArchParams {
+  architecture: string;
+  /**
+   * Explicit per-head key/value dimensions (`{arch}.attention.key_length` /
+   * `.value_length`), when the server reports them.
+   *
+   * These are NOT always `embeddingLength / headCount`. Qwen3, for one,
+   * declares key_length 256 with embedding_length 5120 and head_count 24 —
+   * deriving would give a *fractional* 213.33 and a KV estimate 17% low.
+   * Absent on architectures that don't declare them, where deriving is right.
+   */
+  keyLength?: number;
+  valueLength?: number;
+  blockCount: number;
+  headCount: number;
+  headCountKv: number;
+  embeddingLength: number;
 }
 
 /**
@@ -98,8 +125,24 @@ export interface ModelDetail {
 export type ThinkLevel = "off" | "low" | "medium" | "high";
 
 export interface ChatMessage {
-  role: "system" | "user" | "assistant";
+  /**
+   * `"tool"` carries a tool's result back to the model (T3). It is a real
+   * wire role, not a UI-only one — Ollama expects the result of a call to
+   * come back under it.
+   */
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /**
+   * Tool calls the assistant emitted. Echoed back on the outbound history so
+   * the model sees its own call alongside the result it is being handed —
+   * without it the server receives a `tool` message answering nothing.
+   */
+  toolCalls?: ToolCall[];
+  /**
+   * The tool a `role: "tool"` message is answering. Newer Ollama accepts it;
+   * older servers ignore unknown keys, so it is always safe to send.
+   */
+  toolName?: string;
   /**
    * Accumulated reasoning on an assistant message (Ollama's
    * `message.thinking`). Kept out of `content` so the UI can fold it away —
@@ -140,6 +183,17 @@ export interface ChatChunk {
     loadDurationNs?: number;
     totalDurationNs?: number;
   };
+  /** Tool calls the model made this turn, from `message.tool_calls`. Present
+   * only when the array is non-empty. */
+  toolCalls?: ToolCall[];
+}
+
+/** One tool call from `message.tool_calls[].function`. Ollama returns
+ * `arguments` as an already-parsed JSON object — unlike the OpenAI wire
+ * format it borrows from — so this layer never calls `JSON.parse` on it. */
+export interface ToolCall {
+  name: string;
+  arguments: Record<string, unknown>;
 }
 
 /**
@@ -244,7 +298,17 @@ export interface OllamaClient {
    * Load a model into memory: warm POST /api/generate with empty prompt
    * and the configured keep_alive. Resolves when the model is loaded.
    */
-  load(tag: string, keepAlive: KeepAlive, signal?: AbortSignal): Promise<void>;
+  /**
+   * `numCtx` is a load-time parameter, not a sampling one: it sizes the KV
+   * cache the runner allocates, so it can only be set as the model is loaded
+   * (SPEC §8). Omitted ⇒ Ollama's own default for the model.
+   */
+  load(
+    tag: string,
+    keepAlive: KeepAlive,
+    signal?: AbortSignal,
+    numCtx?: number,
+  ): Promise<void>;
   /** Unload: POST /api/generate with keep_alive: 0. */
   unload(tag: string): Promise<void>;
   /**
@@ -261,6 +325,9 @@ export interface OllamaClient {
       think?: ThinkLevel;
       /** Sampling overrides; unset keys are omitted, not sent as null. */
       options?: RunOptions;
+      /** Raw tool definitions, passed through verbatim; omitted from the
+       * request body entirely when empty/unset rather than sent as `[]`. */
+      tools?: unknown[];
     },
   ): AsyncIterable<ChatChunk>;
   /** POST /api/create with stream: true — structured body first, legacy

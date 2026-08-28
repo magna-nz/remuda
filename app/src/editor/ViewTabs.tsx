@@ -1,15 +1,21 @@
 /**
  * Section tabs under the top nav (SPEC.md §5, docs/mockup.html `.tabs`):
- * Chat · Modelfile. The pull and settings views aren't tabs — they're
+ * Chat · Modelfile, plus Tools when the loaded model reports the capability
+ * (docs/SPEC-tuning.md T3). The pull and settings views aren't tabs — they're
  * reached from the sidebar footer's "Get Models" button and gear
  * (Sidebar.tsx).
  */
 import "./ViewTabs.css";
+import { toolCapableModel } from "../tools/gate";
 import { useRemuda } from "../ui/state";
 import type { View } from "../ui/state";
 
 export function ViewTabs() {
-  const { view, setView, editorDraft, activeModel, openEditor } = useRemuda();
+  const { view, setView, editorDraft, activeModel, openEditor, models } = useRemuda();
+  // SPEC-tuning T3: the Tools tab is an *additive* control, so SPEC §8 wants
+  // positive evidence — the loaded model's capabilities have to list `tools`.
+  // An empty list means the server didn't say, and the tab does not appear.
+  const toolCapable = toolCapableModel(models, activeModel) !== null;
 
   const tab = (target: View, label: string, opts?: { disabled?: boolean; title?: string; onClick?: () => void }) => (
     <button
@@ -45,6 +51,7 @@ export function ViewTabs() {
         title: !editorDraft && !activeModel ? "Load a model first" : undefined,
         onClick: openModelfileTab,
       })}
+      {toolCapable && tab("tools", "Tools")}
     </div>
   );
 }

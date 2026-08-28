@@ -10,12 +10,14 @@ import { Settings } from "./ui/Settings";
 import { Sidebar } from "./ui/Sidebar";
 import { TopNav } from "./ui/TopNav";
 import { PullView } from "./pull/PullView";
+import { ToolsView } from "./tools/ToolsView";
 
 function MainPanel() {
   const { view } = useRemuda();
   if (view === "settings") return <Settings />;
   if (view === "pull") return <PullView />;
   if (view === "modelfile") return <EditorView />;
+  if (view === "tools") return <ToolsView />;
   return <ChatView />;
 }
 

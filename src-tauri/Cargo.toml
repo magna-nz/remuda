@@ -16,6 +16,18 @@ serde_json = "1"
 # Registry probe only (SPEC §5.5). rustls so we don't bind to system OpenSSL;
 # default features off keeps native-tls and the blocking client out of the tree.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+# Host telemetry (memory + the ollama process's CPU). Safe and portable, so we
+# don't hand-roll mach/libproc FFI. `system` alone; the disk, network, component
+# and user probes are dead weight here. Pinned below 0.37 by our own
+# `rust-version = "1.77"`: 0.38 needs 1.88 and 0.39 needs 1.95, so the
+# MSRV-aware resolver picks 0.36 — raise `rust-version` first if you bump this.
+sysinfo = { version = "0.36.1", default-features = false, features = ["system"] }
+# Opens documentation links in the system browser. Its `api-iife.js` is injected
+# by `withGlobalTauri`, so no `@tauri-apps/*` npm package is needed; the
+# frontend invokes `plugin:opener|open_url` by name. Scoped to http/https in
+# `capabilities/default.json` — a bare open on an arbitrary scheme would be an
+# arbitrary-execution hazard.
+tauri-plugin-opener = "2.5.4"
 
 [profile.release]
 panic = "abort"

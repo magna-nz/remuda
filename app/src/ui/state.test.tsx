@@ -484,3 +484,330 @@ describe("chat: thinking, options and images", () => {
     expect(stats?.totalMs).toBeNull();
   });
 });
+
+/**
+ * The send path's seam (SPEC-tuning T2, wave 3a).
+ *
+ * Nothing here is user-visible yet: `sendMessage` still creates one reply
+ * and the §8 one-at-a-time guard still refuses a second send. What changed
+ * is that a reply is now addressed by message id rather than by "last in the
+ * array", and that more than one run can be tracked at once — so these
+ * exercise the seam directly, which is the only way to reach it today.
+ */
+describe("runGeneration — routing a reply to a named message", () => {
+  function loadedClient(options: ConstructorParameters<typeof FakeClient>[0] = {}) {
+    return new FakeClient({
+      connected: true,
+      models: [makeModel({ tag: "llama3.1:8b", isLoaded: true })],
+      ...options,
+    });
+  }
+
+  async function withSession(client: FakeClient) {
+    const seen = renderContext(client, 1_000_000);
+    await waitFor(() => expect(ctx(seen).activeModel?.variant).toBe("llama3.1:8b"));
+    act(() => ctx(seen).newChat());
+    await waitFor(() => expect(ctx(seen).activeSessionId).not.toBeNull());
+    return seen;
+  }
+
+  /** Two completed exchanges: [user, assistant, user, assistant]. */
+  async function withTwoExchanges(client: FakeClient) {
+    const seen = await withSession(client);
+    await act(async () => {
+      await ctx(seen).sendMessage("first");
+    });
+    await act(async () => {
+      await ctx(seen).sendMessage("second");
+    });
+    return seen;
+  }
+
+  it("appends to the message with the matching id, not to the last one", async () => {
+    // The regression this refactor exists to prevent. The target sits at
+    // index 1 with two messages after it; index-from-the-end would have put
+    // every token in the wrong bubble.
+    const client = loadedClient({ chatChunks: [{ content: "", done: true }] });
+    const seen = await withTwoExchanges(client);
+
+    const before = ctx(seen).sessions[0];
+    expect(before.messages).toHaveLength(4);
+    const targetMessageId = before.messages[1].id as string;
+    const lastId = before.messages[3].id as string;
+    expect(targetMessageId).toBeDefined();
+    expect(targetMessageId).not.toBe(lastId);
+
+    client.chatChunks = [
+      { content: "re", thinking: "why ", done: false },
+      { content: "run", thinking: "not", done: true },
+    ];
+    await act(async () => {
+      await ctx(seen).runGeneration({
+        sessionId: before.id,
+        targetMessageId,
+        model: before.model,
+        messages: [{ role: "user", content: "first" }],
+        signal: new AbortController().signal,
+      });
+    });
+
+    const after = ctx(seen).sessions[0];
+    expect(after.messages).toHaveLength(4);
+    expect(after.messages[1].content).toBe("rerun");
+    expect(after.messages[1].thinking).toBe("why not");
+    // The last message — the one the old code would have written into — is
+    // untouched, ids and all.
+    expect(after.messages[3].content).toBe("");
+    expect(after.messages[3].thinking).toBeUndefined();
+    expect(after.messages[3].id).toBe(lastId);
+  });
+
+  it("takes model, options and think from its arguments, never from the session", async () => {
+    const client = loadedClient({ chatChunks: [{ content: "ok", done: true }] });
+    const seen = await withSession(client);
+    const sessionId = ctx(seen).activeSessionId as string;
+    act(() => {
+      ctx(seen).setSessionThink(sessionId, "low");
+      ctx(seen).setSessionOptions(sessionId, { temperature: 0.1 });
+    });
+    await act(async () => {
+      await ctx(seen).sendMessage("hi");
+    });
+    const targetMessageId = ctx(seen).sessions[0].messages[1].id as string;
+
+    await act(async () => {
+      await ctx(seen).runGeneration({
+        sessionId,
+        targetMessageId,
+        model: "some-other:tag",
+        messages: [{ role: "user", content: "hi" }],
+        options: { temperature: 0.9, seed: 4417 },
+        think: "high",
+        signal: new AbortController().signal,
+      });
+    });
+
+    const call = client.chatCalls[client.chatCalls.length - 1];
+    expect(call.tag).toBe("some-other:tag");
+    expect(call.options).toEqual({ temperature: 0.9, seed: 4417 });
+    expect(call.think).toBe("high");
+    // The session's own settings are unchanged by a run that ignored them.
+    expect(ctx(seen).sessions[0].options).toEqual({ temperature: 0.1 });
+    expect(ctx(seen).sessions[0].think).toBe("low");
+  });
+
+  it("records the target message id alongside the session on lastStats", async () => {
+    const client = loadedClient({
+      chatChunks: [
+        { content: "ok", done: true, stats: { evalCount: 10, evalDurationNs: 1_000_000_000 } },
+      ],
+    });
+    const seen = await withSession(client);
+    await act(async () => {
+      await ctx(seen).sendMessage("hi");
+    });
+    const stats = ctx(seen).lastStats;
+    // The existing contract is untouched — StatsStrip reads these two.
+    expect(stats?.sessionId).toBe(ctx(seen).sessions[0].id);
+    expect(stats?.tokPerSec).toBe(10);
+    // …and the reply is now named, so two lanes could tell theirs apart.
+    expect(stats?.messageId).toBe(ctx(seen).sessions[0].messages[1].id);
+  });
+
+  it("is a no-op for a target id that isn't in the session, and never falls back to the last message", async () => {
+    const client = loadedClient({ chatChunks: [{ content: "", done: true }] });
+    const seen = await withTwoExchanges(client);
+    const before = ctx(seen).sessions[0];
+    const snapshot = JSON.parse(JSON.stringify(before.messages)) as unknown;
+
+    client.chatChunks = [{ content: "orphan tokens", done: true }];
+    await act(async () => {
+      await ctx(seen).runGeneration({
+        sessionId: before.id,
+        targetMessageId: "m-does-not-exist",
+        model: before.model,
+        messages: [{ role: "user", content: "first" }],
+        signal: new AbortController().signal,
+      });
+    });
+
+    const after = ctx(seen).sessions[0];
+    expect(after.messages).toEqual(snapshot);
+    expect(after.messages.some((m) => m.content.includes("orphan"))).toBe(false);
+    // Not an error either — a stale target is a dropped update, not a failure.
+    expect(ctx(seen).streamError).toBeNull();
+    expect(ctx(seen).streamingSessionId).toBeNull();
+  });
+
+  it("runs two targets in one session without either landing in the other", async () => {
+    // What A/B will do: one session, two replies, two option bags. Both run
+    // at once here specifically so a shared append target would show up as
+    // one doubled bubble and one empty one.
+    const client = loadedClient({ chatChunks: [{ content: "", done: true }] });
+    const seen = await withTwoExchanges(client);
+    const session = ctx(seen).sessions[0];
+    const laneA = session.messages[1].id as string;
+    const laneB = session.messages[3].id as string;
+
+    client.chatChunks = [
+      { content: "x", done: false },
+      { content: "y", done: true },
+    ];
+    await act(async () => {
+      await Promise.all([
+        ctx(seen).runGeneration({
+          sessionId: session.id,
+          targetMessageId: laneA,
+          model: session.model,
+          messages: [{ role: "user", content: "same prompt" }],
+          options: { temperature: 0 },
+          signal: new AbortController().signal,
+        }),
+        ctx(seen).runGeneration({
+          sessionId: session.id,
+          targetMessageId: laneB,
+          model: session.model,
+          messages: [{ role: "user", content: "same prompt" }],
+          options: { temperature: 1 },
+          signal: new AbortController().signal,
+        }),
+      ]);
+    });
+
+    const after = ctx(seen).sessions[0];
+    expect(after.messages[1].content).toBe("xy");
+    expect(after.messages[3].content).toBe("xy");
+    // Two option sets out of one session — the thing session.options could
+    // not express.
+    const [a, b] = client.chatCalls.slice(-2);
+    expect([a.options, b.options]).toEqual(
+      expect.arrayContaining([{ temperature: 0 }, { temperature: 1 }]),
+    );
+    expect(ctx(seen).streamingSessionId).toBeNull();
+  });
+});
+
+describe("the stream map — cancel, delete and the §8 guard", () => {
+  function loadedClient(models = [makeModel({ tag: "llama3.1:8b", isLoaded: true })]) {
+    return new FakeClient({ connected: true, models });
+  }
+
+  async function withSession(client: FakeClient) {
+    const seen = renderContext(client, 1_000_000);
+    await waitFor(() => expect(ctx(seen).activeModel?.variant).toBe("llama3.1:8b"));
+    act(() => ctx(seen).newChat());
+    await waitFor(() => expect(ctx(seen).activeSessionId).not.toBeNull());
+    return seen;
+  }
+
+  it("cancelGeneration aborts the in-flight run, keeps the partial reply and empties the map", async () => {
+    const client = loadedClient();
+    const seen = await withSession(client);
+    let pending!: Promise<void>;
+    await act(async () => {
+      pending = ctx(seen).sendMessage("tell me a story");
+      await Promise.resolve();
+    });
+    const sessionId = ctx(seen).sessions[0].id;
+    expect(ctx(seen).streamingSessionId).toBe(sessionId);
+
+    await act(async () => {
+      client.emitChat({ content: "Once upon", done: false });
+      await Promise.resolve();
+    });
+
+    act(() => ctx(seen).cancelGeneration());
+    await act(async () => {
+      await pending;
+    });
+
+    expect(ctx(seen).streamingSessionId).toBeNull();
+    expect(ctx(seen).sessions[0].messages[1].content).toBe("Once upon");
+    expect(ctx(seen).streamError).toBeNull();
+
+    // The map is empty, not merely "the slot was nulled": the §8 guard reads
+    // its size, so a send that goes through is the proof.
+    client.chatChunks = [{ content: " again", done: true }];
+    await act(async () => {
+      await ctx(seen).sendMessage("more");
+    });
+    expect(client.chatCalls).toHaveLength(2);
+  });
+
+  it("deleteSession aborts only its own session's run and leaves another's alone", async () => {
+    const client = loadedClient();
+    const seen = await withSession(client);
+    const sessionA = ctx(seen).activeSessionId as string;
+    act(() => ctx(seen).newChat());
+    await waitFor(() => expect(ctx(seen).sessions).toHaveLength(2));
+    const sessionB = ctx(seen).activeSessionId as string;
+    expect(sessionB).not.toBe(sessionA);
+
+    // Two runs in flight at once — reachable only through the seam today,
+    // which is the point: deleteSession has to pick one out of the map.
+    const runA = new AbortController();
+    const runB = new AbortController();
+    let pendingA!: Promise<void>;
+    let pendingB!: Promise<void>;
+    await act(async () => {
+      pendingA = ctx(seen).runGeneration({
+        sessionId: sessionA,
+        targetMessageId: "m-a",
+        model: "llama3.1:8b",
+        messages: [{ role: "user", content: "a" }],
+        signal: runA.signal,
+      });
+      pendingB = ctx(seen).runGeneration({
+        sessionId: sessionB,
+        targetMessageId: "m-b",
+        model: "llama3.1:8b",
+        messages: [{ role: "user", content: "b" }],
+        signal: runB.signal,
+      });
+      await Promise.resolve();
+    });
+    expect(ctx(seen).streamingSessionId).toBe(sessionA);
+
+    await act(async () => {
+      ctx(seen).deleteSession(sessionA);
+      await pendingA;
+    });
+
+    // A is gone and its run has ended; B's is still open, which is what the
+    // readout now says instead of "idle".
+    expect(ctx(seen).sessions.map((s) => s.id)).toEqual([sessionB]);
+    expect(ctx(seen).streamingSessionId).toBe(sessionB);
+    expect(runB.signal.aborted).toBe(false);
+
+    await act(async () => {
+      ctx(seen).cancelGeneration();
+      await pendingB;
+    });
+    expect(ctx(seen).streamingSessionId).toBeNull();
+    expect(ctx(seen).streamError).toBeNull();
+  });
+
+  it("still refuses a second send while anything is in flight (SPEC §8 is unchanged)", async () => {
+    const client = loadedClient();
+    const seen = await withSession(client);
+    let pending!: Promise<void>;
+    await act(async () => {
+      pending = ctx(seen).sendMessage("first");
+      await Promise.resolve();
+    });
+    expect(client.chatCalls).toHaveLength(1);
+
+    await act(async () => {
+      await ctx(seen).sendMessage("second");
+    });
+    // No second request, and no second pair of messages appended.
+    expect(client.chatCalls).toHaveLength(1);
+    expect(ctx(seen).sessions[0].messages).toHaveLength(2);
+
+    await act(async () => {
+      client.emitChat({ content: "done", done: true });
+      await pending;
+    });
+    expect(ctx(seen).streamingSessionId).toBeNull();
+  });
+});

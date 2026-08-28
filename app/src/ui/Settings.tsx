@@ -3,12 +3,21 @@
  * delete-confirmation toggle is real, persisted state (state.tsx) — it also
  * gates Save-over-existing (SPEC §8). The model/Modelfile directory rows are
  * still static placeholders (no filesystem access yet).
+ *
+ * The Documentation section (T8) opens the published docs site in the system
+ * browser via `openExternal`, never a bare `<a href>` — an anchor would
+ * navigate the webview itself and trap the user with no way back. Outside
+ * the desktop shell (a plain browser tab, or a test run) `openExternal`
+ * rejects rather than resolving silently (`/desktop app/` in the message),
+ * so every click handler here catches and surfaces the failure inline
+ * instead of doing nothing.
  */
 import { useState } from "react";
 import "./Settings.css";
 import { useRemuda } from "./state";
 import { createClient } from "../api/client";
 import { DEFAULT_BASE_URL, type KeepAlive } from "../api/types";
+import { openExternal } from "../api/host";
 
 type TestResult = "idle" | "testing" | "healthy" | "unreachable";
 
@@ -17,10 +26,29 @@ function parseKeepAlive(value: string): KeepAlive {
   return value as KeepAlive;
 }
 
+/** Base URL of the published documentation site (T8). One place, not scattered through the JSX. */
+export const DOCS_BASE_URL = "https://magna-nz.github.io/remuda/";
+
+const REPO_URL = "https://github.com/magna-nz/remuda";
+
+interface DocLink {
+  label: string;
+  href: string;
+}
+
+/** A few deep links that earn their place, plus the repository — not one undifferentiated "Docs" link. */
+const DOC_LINKS: DocLink[] = [
+  { label: "Getting started", href: `${DOCS_BASE_URL}getting-started.html` },
+  { label: "The Modelfile editor", href: `${DOCS_BASE_URL}modelfile-editor.html` },
+  { label: "Troubleshooting", href: `${DOCS_BASE_URL}troubleshooting.html` },
+  { label: "Repository", href: REPO_URL },
+];
+
 export function Settings() {
   const { status, models, keepAlive, setKeepAlive, confirmDeleteModel, setConfirmDeleteModel } = useRemuda();
   const [serverUrl, setServerUrl] = useState(DEFAULT_BASE_URL);
   const [testResult, setTestResult] = useState<TestResult>("idle");
+  const [docsError, setDocsError] = useState<string | null>(null);
 
   async function handleTest() {
     setTestResult("testing");
@@ -30,6 +58,13 @@ export function Settings() {
     } catch {
       setTestResult("unreachable");
     }
+  }
+
+  function handleOpenDoc(url: string) {
+    setDocsError(null);
+    openExternal(url).catch((err: unknown) => {
+      setDocsError(err instanceof Error ? err.message : String(err));
+    });
   }
 
   const diskUsedGb = models.reduce((sum, m) => sum + m.sizeBytes, 0) / 1_000_000_000;
@@ -125,6 +160,29 @@ export function Settings() {
             onClick={() => setConfirmDeleteModel(!confirmDeleteModel)}
           />
         </div>
+        <div className="setrow docs-row">
+          <div className="st">
+            <b>Documentation</b>
+            <div>Opens in your browser, not this window.</div>
+          </div>
+          <div className="docs-links">
+            {DOC_LINKS.map((link) => (
+              <button
+                key={link.href}
+                type="button"
+                className="btn sm"
+                onClick={() => handleOpenDoc(link.href)}
+              >
+                {link.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {docsError !== null && (
+          <div className="setrow docs-error" role="alert">
+            <div className="st">{docsError}</div>
+          </div>
+        )}
       </div>
     </section>
   );

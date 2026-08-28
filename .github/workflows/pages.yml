@@ -1,0 +1,50 @@
+name: Pages
+
+# Publishes site/ — the public documentation site — to GitHub Pages on every
+# push to main. Static HTML/CSS, no build toolchain: the artifact is site/
+# itself.
+#
+# Requires GitHub Pages to be enabled once, by a repo owner, at
+# Settings → Pages → Source: GitHub Actions. This workflow cannot turn that
+# on for itself.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deploy at a time. Queued runs may be superseded, but a deployment
+# already in flight is allowed to finish — cancelling one registers as a
+# failed production deploy rather than a superseded one, which is GitHub's
+# own documented guidance for Pages workflows.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload site/ as the Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -87,19 +87,48 @@ const FALLBACKS = {
 
 const DEFAULT_CTX_MAX = 131_072;
 
+/**
+ * Names one mounted instance apart from another (SPEC-tuning T2).
+ *
+ * Two popovers open at once — one per A/B lane — collide on both halves of
+ * an addressable control: `id="run-temperature"` is duplicated in the DOM,
+ * and so is the accessible name "Temperature", which leaves
+ * `getByLabelText("Temperature")` ambiguous and a `<label htmlFor>` click
+ * landing on whichever input the browser resolves first.
+ *
+ * `scope` fixes both, and only when it is given: an unscoped instance emits
+ * byte-for-byte what it always did, so the single-lane surface and its tests
+ * are untouched. The *visible* label stays "Temperature" either way — the
+ * lane is already named an inch away by the popover's own header, and
+ * repeating it on every knob would be noise.
+ */
+function scopedId(scope: string | undefined, optionKey: keyof RunOptions): string {
+  if (scope === undefined) return `run-${optionKey}`;
+  return `run-${scope.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${optionKey}`;
+}
+
+/** The accessible name for a control inside a scoped instance; undefined
+ *  outside one, where the visible label is already the name. */
+function scopedName(scope: string | undefined, label: string): string | undefined {
+  return scope === undefined ? undefined : `${scope} ${label}`;
+}
+
 function KnobHeader({
   label,
+  ariaLabel,
   id,
   overridden,
   inheritedNote,
   onReset,
 }: {
   label: string;
+  ariaLabel: string | undefined;
   id: string;
   overridden: boolean;
   inheritedNote: string;
   onReset: () => void;
 }) {
+  const name = ariaLabel ?? label;
   return (
     <div className="kh">
       <label htmlFor={id}>{label}</label>
@@ -107,8 +136,8 @@ function KnobHeader({
         <button
           type="button"
           className="src over"
-          aria-label={`Reset ${label}`}
-          title={`Reset ${label} to the inherited value`}
+          aria-label={`Reset ${name}`}
+          title={`Reset ${name} to the inherited value`}
           onClick={onReset}
         >
           overridden · reset
@@ -122,6 +151,7 @@ function KnobHeader({
 
 function SliderKnob(props: {
   optionKey: keyof RunOptions;
+  scope: string | undefined;
   min: number;
   max: number;
   step: number;
@@ -133,11 +163,13 @@ function SliderKnob(props: {
   onReset: () => void;
   children?: ReactNode;
 }) {
-  const id = `run-${props.optionKey}`;
+  const id = scopedId(props.scope, props.optionKey);
+  const ariaLabel = scopedName(props.scope, LABELS[props.optionKey]);
   return (
     <div className="knob">
       <KnobHeader
         label={LABELS[props.optionKey]}
+        ariaLabel={ariaLabel}
         id={id}
         overridden={props.overridden}
         inheritedNote={props.inheritedNote}
@@ -146,6 +178,7 @@ function SliderKnob(props: {
       <div className="row">
         <input
           id={id}
+          aria-label={ariaLabel}
           type="range"
           min={props.min}
           max={props.max}
@@ -162,6 +195,7 @@ function SliderKnob(props: {
 
 function NumberKnob(props: {
   optionKey: keyof RunOptions;
+  scope: string | undefined;
   value: number | undefined;
   placeholder: string;
   overridden: boolean;
@@ -170,11 +204,13 @@ function NumberKnob(props: {
   onSet: (value: number | undefined) => void;
   onReset: () => void;
 }) {
-  const id = `run-${props.optionKey}`;
+  const id = scopedId(props.scope, props.optionKey);
+  const ariaLabel = scopedName(props.scope, LABELS[props.optionKey]);
   return (
     <div className="knob">
       <KnobHeader
         label={LABELS[props.optionKey]}
+        ariaLabel={ariaLabel}
         id={id}
         overridden={props.overridden}
         inheritedNote={props.inheritedNote}
@@ -182,6 +218,7 @@ function NumberKnob(props: {
       />
       <input
         id={id}
+        aria-label={ariaLabel}
         className="input"
         type="number"
         value={props.value === undefined ? "" : props.value}
@@ -220,6 +257,13 @@ export interface RunControlsProps {
   onClose: () => void;
   /** Hand the winning values to the Modelfile editor. */
   onBake: () => void;
+  /**
+   * Names this instance when more than one is mounted — "Lane A" / "Lane B"
+   * for an A/B run (SPEC-tuning T2). Absent is the single-lane popover, which
+   * renders exactly as it always has; see `scopedId` above for why both the
+   * DOM ids and the accessible names have to move together.
+   */
+  scope?: string;
 }
 
 export function RunControls({
@@ -229,6 +273,7 @@ export function RunControls({
   onChange,
   onClose,
   onBake,
+  scope,
 }: RunControlsProps) {
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
@@ -261,16 +306,19 @@ export function RunControls({
   const ctxMax = Math.max(inheritedCtx ?? 0, ctxValue, DEFAULT_CTX_MAX);
 
   const overrideCount = countOverrides(options);
+  const dialogName = scope === undefined ? "Run controls" : `Run controls · ${scope}`;
 
   return (
-    <div className="runpop" role="dialog" aria-label="Run controls">
+    <div className={`runpop${scope === undefined ? "" : " scoped"}`} role="dialog" aria-label={dialogName}>
       <div className="runpop-h">
         <b>Run controls</b>
-        <span className="scope">this chat only</span>
+        <span className="scope">{scope === undefined ? "this chat only" : `${scope} only`}</span>
         <button
           type="button"
           className="btn ghost sm x"
-          aria-label="Close run controls"
+          aria-label={
+            scope === undefined ? "Close run controls" : `Close run controls · ${scope}`
+          }
           onClick={onClose}
         >
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" aria-hidden="true">
@@ -282,6 +330,7 @@ export function RunControls({
       <div className="runpop-b">
         <SliderKnob
           optionKey="temperature"
+          scope={scope}
           min={0}
           max={2}
           step={0.05}
@@ -294,6 +343,7 @@ export function RunControls({
         />
         <SliderKnob
           optionKey="topP"
+          scope={scope}
           min={0}
           max={1}
           step={0.01}
@@ -306,6 +356,7 @@ export function RunControls({
         />
         <SliderKnob
           optionKey="topK"
+          scope={scope}
           min={1}
           max={200}
           step={1}
@@ -318,6 +369,7 @@ export function RunControls({
         />
         <SliderKnob
           optionKey="repeatPenalty"
+          scope={scope}
           min={0.5}
           max={2}
           step={0.01}
@@ -330,6 +382,7 @@ export function RunControls({
         />
         <NumberKnob
           optionKey="seed"
+          scope={scope}
           value={options.seed}
           placeholder="inherited"
           overridden={options.seed !== undefined}
@@ -340,6 +393,7 @@ export function RunControls({
         />
         <NumberKnob
           optionKey="numPredict"
+          scope={scope}
           value={options.numPredict}
           placeholder="inherited"
           overridden={options.numPredict !== undefined}
@@ -350,6 +404,7 @@ export function RunControls({
         />
         <SliderKnob
           optionKey="numCtx"
+          scope={scope}
           min={512}
           max={ctxMax}
           step={512}
@@ -381,13 +436,19 @@ export function RunControls({
         <button
           type="button"
           className="btn ghost sm"
+          aria-label={scopedName(scope, "Reset to Modelfile")}
           disabled={overrideCount === 0}
           onClick={() => onChange({})}
         >
           Reset to Modelfile
         </button>
         <span className="spacer" />
-        <button type="button" className="btn sm primary" onClick={onBake}>
+        <button
+          type="button"
+          className="btn sm primary"
+          aria-label={scopedName(scope, "Bake into Modelfile…")}
+          onClick={onBake}
+        >
           Bake into Modelfile…
         </button>
       </div>

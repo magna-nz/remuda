@@ -803,3 +803,173 @@
 .slot-sub small {
   color: var(--faint);
 }
+
+/* ---- Context / fit predictor (SPEC-tuning.md T4, docs/mockup-tuning.html#t4) ---- */
+.ctxhead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+
+.ctxhead label {
+  margin: 0;
+}
+
+.ctxhead .cv {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+.track {
+  position: relative;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--border);
+  margin: 22px 0 14px;
+}
+
+.track .fit {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--good);
+  border-radius: 999px 0 0 999px;
+  pointer-events: none;
+}
+
+.track .over {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: var(--warn);
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.track .tick {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 1px;
+  background: var(--border-strong);
+  pointer-events: none;
+}
+
+.track .tick span {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: var(--mono);
+  font-size: 9.5px;
+  color: var(--faint);
+  white-space: nowrap;
+}
+
+/* The trained-context tick sits below the track, since the fit-ceiling tick
+   (when present) already claims the space above it. */
+.track .tick.trained span {
+  top: auto;
+  bottom: -18px;
+}
+
+/* An actual <input type=range> laid over the decorative track, rather than a
+   hand-rolled drag handler — it keeps keyboard control, and the native thumb
+   doubles as the mockup's knob once the track behind it is transparent. */
+.track .ctxrange {
+  position: absolute;
+  inset: -6px 0;
+  width: 100%;
+  height: 20px;
+  margin: 0;
+  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.track .ctxrange::-webkit-slider-runnable-track {
+  background: transparent;
+}
+
+.track .ctxrange::-moz-range-track {
+  background: transparent;
+}
+
+.track .ctxrange::-webkit-slider-thumb {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.track .ctxrange::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid var(--surface-2);
+  box-shadow: var(--shadow);
+}
+
+.fitread {
+  border-radius: 10px;
+  padding: 10px 11px;
+  font-size: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.fitread.ok {
+  background: var(--good-tint);
+  border: 1px solid color-mix(in srgb, var(--good) 26%, transparent);
+}
+
+.fitread.spill {
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 30%, transparent);
+}
+
+.fitread.none {
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.fitread .r1 {
+  font-weight: 600;
+}
+
+.fitread.ok .r1 {
+  color: var(--good);
+}
+
+.fitread.spill .r1 {
+  color: var(--warn);
+}
+
+.fitread.none .r1 {
+  color: var(--muted);
+}
+
+.fitread .r2 {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+
+.fitread .r3 {
+  font-size: 10.5px;
+  color: var(--faint);
+}

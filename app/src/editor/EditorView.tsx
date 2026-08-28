@@ -13,7 +13,9 @@
 import { useEffect, useState } from "react";
 import "./EditorView.css";
 import { useRemuda } from "../ui/state";
+import type { EditorPane } from "../ui/state";
 import { SaveAsDialog } from "./SaveAsDialog";
+import { HistoryView } from "./HistoryView";
 import { passthroughKinds } from "./passthrough";
 import {
   from,
@@ -57,6 +59,8 @@ export function EditorView() {
     saveDraft,
     saving,
     saveError,
+    editorPane,
+    setEditorPane,
   } = useRemuda();
 
   const [rawText, setRawText] = useState("");
@@ -76,9 +80,13 @@ export function EditorView() {
   // Modelfile while `dirty` was true, so the pending change was invisible.
   // The dependency stays `savedDoc` so this fires when a *new* draft loads or
   // a save lands, never on every keystroke (which would clobber typing).
+  // `externalEdit` is the second resync trigger: Restore (SPEC-tuning T1)
+  // and "promote to system prompt" replace `doc` from outside these panes
+  // and deliberately leave `savedDoc` alone (Revert must still go back to
+  // the last *saved* text), so they bump that counter instead.
   useEffect(() => {
     if (editorDraft) setRawText(serializeModelfile(editorDraft.doc));
-  }, [editorDraft?.savedDoc]);
+  }, [editorDraft?.savedDoc, editorDraft?.externalEdit]);
 
   if (editorLoading) {
     return (
@@ -165,9 +173,35 @@ export function EditorView() {
     applyDocUpdate((d) => setStops(d, stops.filter((_, i) => i !== index)));
   }
 
+  const segment = (pane: EditorPane, label: string) => (
+    <button
+      type="button"
+      className={editorPane === pane ? "on" : undefined}
+      aria-pressed={editorPane === pane}
+      onClick={() => setEditorPane(pane)}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="editorview">
-      <div className="split">
+      <div className="mfhead">
+        <span className="mft">{(editorDraft.targetTag ?? "new") + ".Modelfile"}</span>
+        <span className="spacer" />
+        {/* Form · Raw · History (SPEC-tuning T1). History replaces the two
+            columns; Form and Raw give one of them the room — and, when the
+            window is too narrow for SPEC §5.4's two columns, decide which
+            one is on screen. */}
+        <div className="seg" role="group" aria-label="Editor view">
+          {segment("form", "Form")}
+          {segment("raw", "Raw")}
+          {segment("history", "History")}
+        </div>
+      </div>
+      {editorPane === "history" && <HistoryView rawText={rawText} />}
+      {editorPane !== "history" && (
+      <div className={`split pane-${editorPane}`}>
         <div className="col form">
           <div className="col-h">
             <span className="eyebrow">Settings</span>
@@ -320,6 +354,7 @@ export function EditorView() {
           </div>
         </div>
       </div>
+      )}
       <div className="savebar">
         <div className="saveline">
           <span className="note">
