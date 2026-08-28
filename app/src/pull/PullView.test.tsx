@@ -43,11 +43,11 @@ function submitPull(tag: string) {
 }
 
 /**
- * A catalog row by its model name — scoped to `.regrow .rt b`, since the
+ * A catalog row by its model name — scoped to `.regrow-meta b`, since the
  * name also appears (as an example) in the note-strip's `<code>`.
  */
 function catalogRow(name: string): HTMLElement {
-  const heading = screen.getAllByText(name, { selector: ".regrow .rt b" })[0];
+  const heading = screen.getAllByText(name, { selector: ".regrow-meta b" })[0];
   return heading.closest(".regrow") as HTMLElement;
 }
 
