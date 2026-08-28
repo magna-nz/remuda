@@ -215,29 +215,38 @@
   border-bottom: 0;
 }
 
-.regrow .rt {
+/*
+ * The name/description/chips column of a catalog row (docs/mockup.html
+ * `.regrow .rt`). It was called `.rt` until this rename, which collided with
+ * the load pane's runtime-strip card — also `.rt`, from
+ * docs/mockup-proposals.html, declared unscoped in ui/LoadPane.css. Every
+ * stylesheet here is a global side-effect import, so these rows were drawing
+ * that card's border, background, radius and column layout despite belonging
+ * to a different view. This is a plain block, per the mockup: the `margin-top`
+ * rules below are what space the lines apart.
+ */
+.regrow-meta {
   min-width: 0;
   flex: 1;
 }
 
-.regrow .rt b {
+.regrow-meta b {
   font-family: var(--mono);
   font-size: 13px;
   font-weight: 600;
 }
 
 /*
- * Needs `.rt` in the selector: `.regrow .rt div` below is more specific than
- * the shared `.caps` rule in ui/Capabilities.css, and would otherwise win the
- * margin and flatten the chips against the description line. This override
- * survived the extraction of the chips into the shared component; the bare
- * `.caps { margin-top }` alone does not beat it.
+ * Still needed after the rename: `.regrow-meta div` below matches the `.caps`
+ * wrapper too, and out-specifies the shared `.caps` rule in
+ * ui/Capabilities.css, which would otherwise flatten the chips against the
+ * description line. The bare `.caps { margin-top }` alone does not beat it.
  */
-.regrow .rt .caps {
+.regrow-meta .caps {
   margin-top: 5px;
 }
 
-.regrow .rt div {
+.regrow-meta div {
   font-size: 12px;
   color: var(--muted);
   margin-top: 1px;

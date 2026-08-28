@@ -91,7 +91,7 @@ function CatalogRow({ model, models, disabled, onPull }: CatalogRowProps) {
   const latestInstalled = isInstalled(models, model.name);
   return (
     <div className="regrow">
-      <div className="rt">
+      <div className="regrow-meta">
         <b>{model.name}</b>
         <div>{model.description}</div>
         <Capabilities capabilities={model.capabilities} />
