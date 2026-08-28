@@ -2,6 +2,7 @@
 name = "remuda"
 version = "0.1.1"
 description = "A chat-first desktop UI for Ollama"
+license = "MIT"
 edition = "2021"
 rust-version = "1.77"
 
