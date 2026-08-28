@@ -17,7 +17,7 @@
       <rect x="4" y="4" width="96" height="96" rx="22" fill="url(#brand)"/>
     </g>
     <rect x="4" y="4" width="96" height="96" rx="22" fill="none" stroke="#ffffff" stroke-opacity="0.14" stroke-width="1.5"/>
-    <path d="M52 24l26 14v22c0 15-11 22.5-26 30-15-7.5-26-15-26-30V38z"
+    <path d="M52 19l26 14v22c0 15-11 22.5-26 30-15-7.5-26-15-26-30V33z"
           fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/>
   </g>
 </svg>
