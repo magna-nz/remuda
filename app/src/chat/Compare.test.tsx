@@ -408,7 +408,7 @@ describe("reply overflow menu (T6 1–3)", () => {
   }
 
   it("copies the same request body the reply actually ran on", async () => {
-    const writeText = vi.fn(async () => {});
+    const writeText = vi.fn(async (_text: string) => {});
     Object.defineProperty(navigator, "clipboard", {
       value: { writeText },
       configurable: true,
@@ -421,7 +421,7 @@ describe("reply overflow menu (T6 1–3)", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy as curl" }));
     await waitFor(() => expect(writeText).toHaveBeenCalled());
 
-    const command = writeText.mock.calls[0][0] as unknown as string;
+    const command = writeText.mock.calls[0]![0];
     const body = JSON.parse(command.slice(command.indexOf("{"), command.lastIndexOf("}") + 1));
     const request = client.chatCalls[0];
     // Same model, same messages, same options as the request that produced it
@@ -435,7 +435,7 @@ describe("reply overflow menu (T6 1–3)", () => {
     fireEvent.click(screen.getByRole("button", { name: "Reply actions for message 2" }));
     fireEvent.click(screen.getByRole("menuitem", { name: "Copy as ollama run" }));
     await waitFor(() => expect(writeText).toHaveBeenCalledTimes(2));
-    expect(writeText.mock.calls[1][0]).toContain("/set parameter seed 4417");
+    expect(writeText.mock.calls[1]![0]).toContain("/set parameter seed 4417");
   });
 
   it("regenerates on the same seed, and on a new one", async () => {
