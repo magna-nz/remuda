@@ -15,6 +15,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The six version fields only get compared against a tag once Release runs,
+  # which is after the tag is already pushed — too late to fix without moving
+  # it. Checking they agree with *each other* on every PR catches a partial
+  # bump while it's still just a commit.
+  version:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/version.sh --check
+
   web:
     name: Web (app/)
     runs-on: ubuntu-latest
