@@ -34,6 +34,11 @@
     "active": true,
     "targets": ["app"],
     "category": "DeveloperTool",
+    "shortDescription": "Desktop app for tuning and testing local Ollama models",
+    "longDescription": "Remuda pairs a chat pane with the loaded model's Modelfile editor, so testing a model and tuning it happen in one window. Editing the system prompt or a parameter rebuilds and reloads the model, and the next message uses the change. Includes A/B compare on a pinned seed, Modelfile history with diffs, and a tool-calling playground. Remuda is a client for a local Ollama install; it does not bundle or run inference itself.",
+    "publisher": "magna-nz",
+    "homepage": "https://github.com/magna-nz/remuda",
+    "license": "MIT",
     "icon": [
       "icons/32x32.png",
       "icons/64x64.png",
