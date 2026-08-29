@@ -9,6 +9,7 @@
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-runs%20local-000000?logo=ollama&logoColor=white" alt="Talks to a local Ollama" /></a>
     <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Built with Tauri 2" /></a>
     <img src="https://img.shields.io/badge/macOS-12%2B%20Apple%20Silicon-000000?logo=apple&logoColor=white" alt="macOS 12+ on Apple Silicon" />
+    <img src="https://img.shields.io/badge/Linux-deb%20%7C%20AppImage-FCC624?logo=linux&logoColor=black" alt="Linux .deb and AppImage" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   </p>
   <p>
@@ -66,9 +67,14 @@ The [docs site](https://magna-nz.github.io/remuda/) covers all of it in detail.
 
 ## 📋 Requirements
 
-[Ollama](https://ollama.com) running locally, and macOS 12+ on Apple Silicon. Remuda is a client —
-it doesn't bundle models or run inference itself.
-<!-- PLACEHOLDER: Intel/universal + Linux/Windows builds are planned -->
+[Ollama](https://ollama.com) running locally, plus either macOS 12+ on Apple Silicon or a
+glibc-based x86-64 Linux with GTK 3 and WebKitGTK 4.1 (Ubuntu 22.04 and newer, and equivalents).
+Remuda is a client — it doesn't bundle models or run inference itself.
+<!-- PLACEHOLDER: Intel/universal macOS and Windows builds are planned -->
+
+On Linux the fit predictor stays quiet: it sizes a model against unified memory, and there is no
+supported way to read a discrete card's VRAM, so Remuda reports no prediction rather than a
+confident wrong one. Everything else works the same.
 
 ```sh
 brew install ollama
@@ -76,6 +82,8 @@ ollama serve
 ```
 
 ## 📦 Install
+
+### macOS
 
 ```sh
 brew install --cask magna-nz/tap/remuda
@@ -88,6 +96,27 @@ remuda` do what you'd expect.
 
 <sub>If macOS balks anyway, run
 <code>xattr -dr com.apple.quarantine /Applications/Remuda.app</code>.</sub>
+
+### Linux
+
+x86-64, glibc 2.35+ (Ubuntu 22.04 and newer, Debian 12, Fedora 36+, and equivalents). Grab the
+`.deb` or the AppImage from the [latest release](https://github.com/magna-nz/remuda/releases/latest):
+
+```sh
+sudo apt install ./Remuda_*_amd64.deb
+```
+
+Or, for anything not Debian-based, the AppImage runs as-is:
+
+```sh
+chmod +x Remuda_*_amd64.AppImage && ./Remuda_*_amd64.AppImage
+```
+
+Ollama on Linux usually runs as a systemd service. If Remuda says it isn't running:
+
+```sh
+sudo systemctl start ollama
+```
 
 Or from source:
 

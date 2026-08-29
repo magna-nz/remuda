@@ -196,7 +196,13 @@ describe("TopNav", () => {
   it("never polls host telemetry while the Runtime popover is closed, and does once it opens", async () => {
     const invoke = stubTauriBridge(async (cmd) => {
       if (cmd === "host_stats") {
-        return { memTotalBytes: 32_000_000_000, memUsedBytes: 18_400_000_000, ollamaCpuPercent: 4, gpuPercent: null };
+        return {
+          memTotalBytes: 32_000_000_000,
+          memUsedBytes: 18_400_000_000,
+          ollamaCpuPercent: 4,
+          memIsUnified: true,
+          gpuPercent: null,
+        };
       }
       throw new Error(`unexpected command ${cmd}`);
     });

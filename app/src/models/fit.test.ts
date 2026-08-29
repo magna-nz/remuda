@@ -159,11 +159,30 @@ describe("fitCeiling", () => {
 describe("usableVramFromHostMemory", () => {
   it("applies the named Apple Silicon fraction", () => {
     expect(APPLE_SILICON_VRAM_FRACTION).toBe(0.75);
-    expect(usableVramFromHostMemory(32_000_000_000)).toBe(24_000_000_000);
+    expect(usableVramFromHostMemory(32_000_000_000, true)).toBe(24_000_000_000);
   });
 
   it("never goes negative", () => {
-    expect(usableVramFromHostMemory(0)).toBe(0);
+    expect(usableVramFromHostMemory(0, true)).toBe(0);
+  });
+
+  // The Linux case. Host memory says nothing about a discrete card's VRAM,
+  // so there is no honest number to return — and a wrong one here costs the
+  // user a five-minute model load.
+  it("returns null when memory is not unified, however much RAM there is", () => {
+    expect(usableVramFromHostMemory(64_000_000_000, false)).toBeNull();
+    expect(usableVramFromHostMemory(0, false)).toBeNull();
+  });
+
+  it("feeds the no-prediction path rather than a fabricated fit", () => {
+    const usableVramBytes = usableVramFromHostMemory(64_000_000_000, false);
+    const fit = predictFit({
+      archParams: LLAMA_8B,
+      weightsBytes: WEIGHTS_BYTES,
+      usableVramBytes,
+      ctx: 8192,
+    });
+    expect(fit.ok).toBe(false);
   });
 });
 
