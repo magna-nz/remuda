@@ -194,8 +194,8 @@ export function Settings() {
           <div className="st">
             <b>Guided tour</b>
             <div>
-              A five-step walk through the model control, the Modelfile editor, Bench, Format
-              and Prompt.
+              A five-step walk through the model control, the Modelfile editor, Benchmarks,
+              Format and Prompt.
             </div>
           </div>
           {/* R6: the tour's permanent home. It puts the app back where it

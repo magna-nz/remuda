@@ -37,8 +37,18 @@ A calm, local-first desktop app that lets a person:
 6. **Point at an Ollama server** and manage app settings.
 
 **Non-goals (v1):** training/fine-tuning weights, multi-user/remote hosting,
-prompt libraries or eval harnesses, cloud sync, GGUF import UI (deferred —
-§12). Remuda is a *management + tinkering* surface, not an IDE.
+eval harnesses, cloud sync, GGUF import UI (deferred — §12). Remuda is a
+*management + tinkering* surface, not an IDE.
+
+"Prompt libraries" used to sit in that list and no longer honestly can.
+**Benchmark** (`docs/SPEC-round-two.md` R7) keeps a saved set of prompts and
+replays them across several configurations, which is a small prompt library
+by any fair reading. It stops short of the next line deliberately: a
+benchmark **never scores an answer**. It puts the lanes side by side, marks
+where they differ, and leaves the judgement to the person reading. Adding a
+grader, a rubric, or an LLM-as-judge is what would make it an eval harness,
+and that remains a non-goal — it would turn a tool you can trust into one
+whose verdicts you would have to audit.
 
 ## 2. Who it's for
 

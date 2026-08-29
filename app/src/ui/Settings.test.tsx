@@ -164,6 +164,22 @@ describe("Help section (R5)", () => {
     stopTour();
   });
 
+  // R7 renamed Bench to Benchmark, and this row summarises the five steps.
+  // The tour's own step 3 says "Benchmarks"; a summary still saying "Bench"
+  // names a feature the app no longer has.
+  it("summarises the tour with the names the tour itself uses", () => {
+    const client = new FakeClient({ connected: true });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    const summary = screen.getByText(/A five-step walk through/);
+    expect(summary.textContent).toContain("Benchmarks");
+    expect(summary.textContent).not.toMatch(/\bBench\b/);
+  });
+
   it("'Reopen all' restores a pane dismissed elsewhere", () => {
     setPaneHelpOpen("format", false);
     expect(isPaneHelpOpen("format")).toBe(false);

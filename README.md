@@ -51,6 +51,9 @@ Nothing leaves your machine — Remuda is a client for the Ollama you already ru
   than rebuilding behind your back; outside edits show up as drift.
 * 🔀 **Compare (A/B)** — one prompt, two configurations, run sequentially on a pinned seed so you're
   reading the change and not sampling noise.
+* 🏁 **Benchmark** — keep a set of prompts and run them against several configurations at once: two
+  models against each other, or one model under two Modelfiles. One row per prompt, one column per
+  lane, every answer on the same pinned seed. It shows you what differs and never scores a lane.
 * 🧰 **Tool playground** — for models that claim `tools`: write schemas and see every `tool_call`
   validated field by field.
 * 🎛️ **Per-chat parameters** — temperature, seed and the rest for the current chat only, with **Bake
