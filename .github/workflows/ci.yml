@@ -153,7 +153,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
-            build-essential
+            build-essential \
+            xvfb
 
       - uses: actions/setup-node@v4
         with:
@@ -220,6 +221,20 @@ jobs:
           dpkg-deb --info "$deb"
           echo "--- dpkg-deb --contents (desktop entry and binary) ---"
           dpkg-deb --contents "$deb" | grep -E '\.desktop|/bin/|\.png' || true
+
+      # Installing the .deb rather than running the binary straight out of
+      # target/ tests two more things for free: that apt is satisfied by the
+      # dependency list the bundler generated, and that the binary works from
+      # its installed location.
+      - name: Install the .deb
+        run: sudo apt-get install -y ./src-tauri/target/release/bundle/deb/*.deb
+
+      # The first thing in this repo's history to actually *launch* Remuda on
+      # Linux. Everything above proves it compiles and packages; this proves
+      # it runs, renders, and executes its own JavaScript. See the module
+      # docstring in scripts/smoke-linux.py for what the assertion covers.
+      - name: Smoke test (headless launch)
+        run: ./scripts/smoke-linux.py /usr/bin/remuda
 
       - name: Upload bundles
         uses: actions/upload-artifact@v4

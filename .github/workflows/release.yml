@@ -45,7 +45,8 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev \
             patchelf \
-            build-essential
+            build-essential \
+            xvfb
 
       - uses: actions/setup-node@v4
         with:
@@ -71,6 +72,16 @@ jobs:
         env:
           APPIMAGE_EXTRACT_AND_RUN: 1
         run: tauri build
+
+      # A Linux artifact that does not launch is the worst thing this
+      # workflow could publish, so the same headless launch test CI runs
+      # gates the release too. Installing the .deb first also proves apt is
+      # satisfied by the generated dependency list.
+      - name: Install the .deb
+        run: sudo apt-get install -y ./src-tauri/target/release/bundle/deb/*.deb
+
+      - name: Smoke test (headless launch)
+        run: ./scripts/smoke-linux.py /usr/bin/remuda
 
       - name: Collect and checksum
         id: package
