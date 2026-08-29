@@ -5,7 +5,6 @@
   <p>
     <a href="https://github.com/magna-nz/remuda/actions/workflows/ci.yml"><img src="https://github.com/magna-nz/remuda/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
     <a href="https://github.com/magna-nz/remuda/releases/latest"><img src="https://img.shields.io/github/v/release/magna-nz/remuda?sort=semver&label=release" alt="Latest release" /></a>
-    <a href="https://github.com/magna-nz/remuda/releases"><img src="https://img.shields.io/github/downloads/magna-nz/remuda/total?label=downloads" alt="Total downloads" /></a>
     <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-runs%20local-000000?logo=ollama&logoColor=white" alt="Talks to a local Ollama" /></a>
     <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Built with Tauri 2" /></a>
     <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="Runs on macOS and Linux" />
@@ -183,13 +182,6 @@ npm run typecheck && npm test && npm run build
 
 For the desktop shell, `cargo check` or `cargo tauri dev` from `src-tauri/`. CI runs both sets of
 gates plus `cargo fmt --check` and `cargo clippy -D warnings`.
-
-Releases build on a `v*` tag and refuse to proceed if the tag disagrees with any of the six
-version fields across the manifests, so bump with the script rather than by hand:
-
-```sh
-./scripts/version.sh --set 0.3.0
-```
 
 ## ⚖️ License
 
