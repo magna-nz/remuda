@@ -33,15 +33,17 @@ A calm, local-first desktop app that lets a person:
    **Save as…** asks for a name and a directory and creates a new tuned
    variant. Either way Remuda **stops the model and reloads it** through
    Ollama so your chats immediately use the new Modelfile.
-5. **Pull new models** from the registry with visible progress.
-6. **Point at an Ollama server** and manage app settings.
+5. **Benchmark a set of prompts** across several configurations at once and
+   read the answers side by side (§5.7).
+6. **Pull new models** from the registry with visible progress.
+7. **Point at an Ollama server** and manage app settings.
 
 **Non-goals (v1):** training/fine-tuning weights, multi-user/remote hosting,
 eval harnesses, cloud sync, GGUF import UI (deferred — §12). Remuda is a
 *management + tinkering* surface, not an IDE.
 
 "Prompt libraries" used to sit in that list and no longer honestly can.
-**Benchmark** (`docs/SPEC-round-two.md` R7) keeps a saved set of prompts and
+**Benchmark** (§5.7) keeps a saved set of prompts and
 replays them across several configurations, which is a small prompt library
 by any fair reading. It stops short of the next line deliberately: a
 benchmark **never scores an answer**. It puts the lanes side by side, marks
@@ -92,8 +94,10 @@ reach the server, it is mostly inert and says so plainly (§9).
 │ Chats        │ Chat · Modelfile                          │  ← section tabs
 │              │                                            │
 │ + New chat   │  (Chat, the in-context Modelfile editor,   │
-│ ─ Recent     │   Pull, or Settings — the Chats list stays │
-│  Undo a…  ●  │   visible for all of them)                 │
+│ ─ BENCHMARKS │   a benchmark, Pull, or Settings — the      │
+│  my prompts  │   Chats list stays visible for all of them) │
+│ ─ Recent     │                                            │
+│  Undo a…  ●  │                                            │
 │  Explain… ○  │                                            │
 │  …           │                                            │
 │ Get Models·⚙ │                                            │
@@ -105,7 +109,8 @@ reach the server, it is mostly inert and says so plainly (§9).
   connection status.
 - **Chats (left):** the saved-session list; a persistent rail that stays
   visible on every surface — Pull and Settings open in the main area beside
-  it, not over the whole window.
+  it, not over the whole window. A **BENCHMARKS** group sits above Recent and
+  opens a benchmark into that same main area (§5.7).
 - **Section tabs:** Chat · Modelfile. Pull and Settings are *not*
   tabs — they open from the Chats footer's **Get Models** button and gear.
 
@@ -153,6 +158,15 @@ Source: `GET /api/tags` for the list, `GET /api/ps` for what's loaded.
 Loading = a warm request (`POST /api/generate` with an empty `prompt`, or
 `/api/chat`) with the configured `keep_alive`. Ejecting = the same request
 with `keep_alive: 0`.
+
+**Layer offload (`num_gpu`).** When the fit predictor says a model at this
+context will spill into system RAM, the load pane offers a cap on how many
+transformer layers go to the GPU, sent as `options.num_gpu` on the load. Like
+`num_ctx` it sizes what the runner allocates, so it is load-time only and has
+no place in the per-chat run controls. Unset, it is **omitted from the request
+entirely** rather than sent as `0`, which means "no layers on the GPU" and is
+a real and different instruction. The control hides when the model's layer
+count is unknown, because there is then no honest ceiling to offer.
 
 ## 5.2 Chats (left)
 
@@ -218,6 +232,19 @@ Source: `POST /api/chat` with
 `done: true` carries `eval_count`/`eval_duration` for tok/s, plus
 `prompt_eval_*`, `load_duration` and `total_duration` for the rest of the
 readout. Cancel = abort the request.
+
+**Constrained output (`format`).** A per-chat JSON Schema sent as `format` on
+`/api/chat`, so a reply that does not fit the schema is unreachable rather
+than merely unlikely. Three states: a schema, `json` (valid JSON, no shape),
+and `off` — which omits `format` from the body rather than sending `""`. Each
+reply gets a conformance card under it, recomputed on render and never stored.
+A schema that does not parse is a local error and the send is **refused**,
+rather than made without the constraint that was asked for. Truncation is
+reported as truncation: under `format` a model cannot emit invalid JSON, but
+it can still be cut off when `num_predict` runs out, and naming that cause is
+the difference between a fixable setting and an apparent parse error. It is
+per-chat and never baked: there is no `PARAMETER format`, so there is nothing
+a Modelfile could hold.
 
 ## 5.4 Modelfile editor (in-context) — the core surface
 
@@ -285,6 +312,18 @@ body, whichever the server version accepts; derived from the same raw
 Modelfile). It streams status (`reading model metadata`, `creating new
 layer`, `writing manifest`, `success`).
 
+**The rendered prompt.** A fourth editor segment — `Form · Raw · Prompt ·
+History` — showing the model's `TEMPLATE` beside that template rendered with
+the current chat's content substituted, so the exact string the model receives
+is visible. Without it there is no way to tell "the model ignored the system
+prompt" from "the system prompt never arrived", which is what happens when a
+template does not reference `.System`. The template comes from the `/api/show`
+data already held, so this costs no new request. The renderer is a
+**documented subset** of Go's `text/template` — `if`, `range`, `.System`,
+`.Prompt`, `.Messages`, `.Role`, `.Content`, `.Tools` — and anything outside
+it renders as *"unsupported template action, showing the raw template"*
+rather than a guess, because a wrong render is worse than an absent one.
+
 ## 5.5 Pull (global)
 
 - Name field (`llama3.2`, `gemma2:9b`, or a full registry URL) + **Pull**.
@@ -334,6 +373,78 @@ Source: `POST /api/pull` `{ model, stream: true }`; aggregate
 - **Confirm before deleting a model** — toggle.
 
 ---
+
+**Help.** Three layers, all dismissible and all local. Every pane carries a
+**?** that opens a short explainer *above* the pane body rather than over it,
+and closing one is remembered; Settings can reopen them all. Jargon is defined
+in place: a dotted-underlined term shows its definition on hover or keyboard
+focus, and the same definitions are listed as a glossary in Settings. Help
+copy names things the way a user would, not the way the code does, and it
+carries no em dashes — full stops or commas instead.
+
+**Guided tour.** A five-step walk through the model control, the Modelfile
+editor, Benchmarks, Format and Prompt, offered once on first run and
+re-runnable from Settings. Each step spotlights the real control it describes
+rather than a picture of it, and Skip is available at every step.
+
+## 5.7 Benchmark (in-context)
+
+A **benchmark** is a saved set of prompts run against several configurations
+at once. A/B Compare (§5.3) answers *"which of these is better for this
+prompt"*; a benchmark asks the same question of a whole prompt set, so the
+answer stops depending on the one example that happened to be on screen.
+
+- A **lane** is one configuration under test: a model plus a Modelfile. Two
+  lanes on two models compare the models; two lanes on the **same** model with
+  different Modelfiles is just as normal, and is how a Modelfile change is
+  read across more than one example.
+- The **lane editor** picks the model and the Modelfile for each lane and adds
+  or removes lanes, up to four. Each lane is a full model load, which is the
+  ceiling's only reason.
+- The header carries the name, the prompt count and a **lane chip** per
+  configuration — `gemma-4-31b · Original`, `qwen3.8-27b · terse-v2`.
+- The table is **one row per prompt, one column per lane**. Expanding a row
+  word-diffs each lane against the first, which is marked as the reference.
+- Prompts are added from any chat message's ⋯ menu (**Add to benchmark**), on
+  the reply as well as the prompt, or from the **BENCHMARKS** rail group.
+
+**A lane is identified by the tag it loads.** A lane stores the model tag sent
+on the wire and, separately, the Modelfile name shown beside it. The tag is
+the truth: when the two disagree — as they do for a benchmark carried over
+from an earlier build, whose lane may hold a variant's own tag with no
+Modelfile name recorded — the lane is resolved against the installed models by
+its tag, and both the base model and the Modelfile shown are derived from
+whatever that resolves to. A chip that named the base model while the variant
+was the thing being run would credit every answer in the table to the wrong
+configuration, which for a feature whose whole value is knowing which
+configuration produced which answer is the one thing it must not do.
+
+### The run
+
+**Grouped by lane, not by prompt.** Lane 1's model is loaded, every prompt is
+answered against it, and only then is lane 2's model loaded. Interleaving
+would mean a full model load per prompt, which on a 20 GB model is the
+difference between two loads and twenty.
+
+- **One seed for the whole run**, across every lane *and* every prompt.
+  Comparing two lanes on two seeds measures sampling noise, which is the one
+  thing a benchmark must not do. The seed is shown beside the run.
+- **Sequential, and only ever one model resident.** §8's one-generation-at-a-
+  time rule is app-wide, and a benchmark run holds that slot.
+- **Loading is visible**, not hidden: *"Loading qwen3.8-27b (lane 2 of 2)"*
+  rather than a bar that looks hung for a minute. That wait is the honest
+  cost of the feature.
+- A **failed cell is a result**, kept in the table with its cause; the run
+  carries on.
+- **Cancel** keeps every finished cell and marks the run `partial`.
+
+### Different is a diff, never a verdict
+
+No lane is scored, no lane is called better, and the table is never ordered by
+anything but the order of the prompts. Remuda shows *where* the answers parted
+company and leaves the judgement to the reader. A grader, a rubric or an
+LLM-as-judge is what would make this an eval harness (§1) — and a tool whose
+verdicts you had to audit is worth less than one that never offers any.
 
 ## 6. Data model (client-side)
 
@@ -385,6 +496,34 @@ Message {
   images?: string[]       // raw base64 — IN MEMORY ONLY, see below
   imageThumbs?: string[]  // small data: URLs — the only image data persisted
 }
+
+Benchmark {               // §5.7
+  id, name: string
+  prompts: { id, text }[]
+  lanes: Lane[]           // 1..4 configurations, in the order shown and run
+  runs: BenchmarkRun[]    // newest first, capped at 6
+}
+
+Lane {
+  id: string
+  model: string           // the tag actually loaded and sent to — the truth
+  modelfile: string | null   // display only; null means the base model
+}
+
+BenchmarkRun {
+  id, ranAt: datetime
+  seed: number            // pinned across every lane AND every prompt
+  partial: boolean        // cancelled before every cell was filled
+  cells: Cell[]
+}
+
+Cell {                    // one lane's answer to one prompt
+  promptId, laneId: string
+  content: string
+  thinking?: string
+  stats?: { evalCount: number, tokPerSec: number | null, ms: number }
+  error?: string          // a failed cell is still a result; both may be set
+}
 ```
 
 **Sessions persist to `localStorage`**, which caps around 5 MB — small enough
@@ -393,6 +532,16 @@ break saving for every session, not just the one with the images. So
 `images` is dropped on the way to storage and only `imageThumbs` survives. A
 restored session therefore shows its thumbnails and says plainly that the
 full images are gone, rather than appearing intact and failing on re-send.
+
+**Benchmarks persist under `remuda.benchmarks.v1`.** Runs are the bulk of that
+payload — every lane's full answer to every prompt — so answers are trimmed
+before storage and the run cap is lower than the history cap elsewhere.
+Benchmarks written by the earlier single-configuration build are read once
+from `remuda.benches.v1` and converted, each becoming a benchmark with one
+lane, and that key is **left in place rather than deleted** so a downgrade
+still finds its data. The conversion is keyed on the old id, so it is
+idempotent and never duplicates or overwrites a benchmark the user has since
+edited.
 
 The storage key stays `remuda.sessions.v1` across this change: every field
 added here is optional, so sessions written by an earlier build load
@@ -408,10 +557,10 @@ field is dropped and the session survives; only a broken required field
 | List installed | `GET /api/tags` | no |
 | List loaded + runtime | `GET /api/ps` | no |
 | Model detail + capabilities | `POST /api/show` | no |
-| Load a model | `POST /api/generate` empty prompt (or `/api/chat`) + `keep_alive` | no |
+| Load a model | `POST /api/generate` empty prompt (or `/api/chat`) + `keep_alive` (+ `options.num_gpu`) | no |
 | Unload a model | `POST /api/generate` with `keep_alive: 0` | no |
 | Create / save model | `POST /api/create` (+ `quantize`) | yes (status) |
-| Chat / test | `POST /api/chat` (+ `think`, `options`, `images`) | yes (tokens) |
+| Chat / test | `POST /api/chat` (+ `think`, `options`, `images`, `format`) | yes (tokens) |
 | Pull | `POST /api/pull` | yes (progress) |
 | Delete | `DELETE /api/delete` | no |
 | Copy / duplicate | `POST /api/copy` | no |
@@ -493,7 +642,16 @@ build-time catalog scrape is not part of the shipped app.
   affected; the Modelfile stays the source of truth until the user
   deliberately bakes them in (§5.4).
 - **Concurrency:** one streamed generation at a time; pulls run in the
-  background.
+  background. A benchmark run (§5.7) holds that single slot for its whole
+  duration, and Run all says so rather than refusing silently when a chat or
+  a compare already has it.
+- **A benchmark run pins one seed** across every lane and every prompt, and
+  loads exactly one model per lane rather than one per prompt (§5.7).
+- **Different is a diff, never a verdict.** Nothing in Remuda scores a model's
+  answer or ranks one configuration above another (§5.7).
+- **A figure that cannot be read honestly is absent, never zero.** A missing
+  token rate, duration or memory split shows an em dash; it is never rendered
+  as `0`, which would read as a measurement.
 
 ## 9. Disconnected / error states
 

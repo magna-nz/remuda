@@ -44,8 +44,9 @@
   your very next message uses the change.</p>
   <p>Then it makes the loop worth running more than once. Every save is snapshotted and diffable. Two
   configurations can answer the same prompt side by side on a pinned seed, so you're reading the
-  change and not sampling noise. If a model claims tool support, you can find out whether it actually
-  emits well-formed calls.</p>
+  change and not sampling noise — and a benchmark does the same across a whole set of prompts, so
+  the verdict stops resting on the one example you happened to try. If a model claims tool support,
+  you can find out whether it actually emits well-formed calls.</p>
   <p>Nothing leaves your machine. Remuda is a client for the Ollama you already run on
   <code>127.0.0.1</code>.</p>
 
@@ -79,6 +80,10 @@ ollama serve</code></pre>
       which stays the source of truth. Save or Save as…, plus a history of every save and restore.</td></tr>
     <tr><th>Compare</th><td>Run two Modelfile configurations against the same prompt, side by side, on
       a pinned seed — sequentially, so each lane's tokens per second still means something.</td></tr>
+    <tr><th>Benchmark</th><td>One saved set of prompts, run against several configurations at once
+      — two models against each other, or one model under two Modelfiles. One row per prompt, one
+      column per lane, every answer on the same pinned seed. It shows what differs and never scores
+      a lane.</td></tr>
     <tr><th>Tool playground</th><td>For models that claim tool support: write schemas, chat against
       them, and see every tool call validated field by field — wrong type, not in enum, unknown key,
       missing. The verdict is the feature, not the pretty-printing.</td></tr>

@@ -144,8 +144,12 @@ cd ../src-tauri && cargo tauri dev
 4. Not the behaviour you wanted? Click the pencil, edit the system prompt, **Save**. The model
    reloads and your next message uses it.
 5. Happy with it? **Save as…** keeps it as a named variant, original left alone.
+6. Sure it's better? Put the variant and the original in a **benchmark** as two lanes and run your
+   prompts through both. One good answer is luck; a column of them is a reason.
 
 No models installed yet? The load pane offers **Pull your first model**.
+
+First run offers a five-step tour, and every pane has a **?** if you'd rather read one later.
 
 ## 📚 Documentation
 
@@ -153,6 +157,8 @@ No models installed yet? The load pane offers **Pull your first model**.
 * [`SPEC.md`](SPEC.md) — full product spec: every surface, the Ollama calls behind it, the
   Modelfile sync contract.
 * [`docs/SPEC-tuning.md`](docs/SPEC-tuning.md) — the tuning loop, with the build log at the end.
+* [`docs/SPEC-round-two.md`](docs/SPEC-round-two.md) — layer offload, constrained output, the
+  rendered prompt, the help layer and Benchmark, with that round's build log.
 * [`docs/mockup.html`](docs/mockup.html) — the design mockup the app is built to.
 * [`packaging/homebrew/`](packaging/homebrew/README.md) — release and tap mechanics.
 
