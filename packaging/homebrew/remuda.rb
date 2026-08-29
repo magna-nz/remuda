@@ -4,7 +4,7 @@ cask "remuda" do
 
   url "https://github.com/magna-nz/remuda/releases/download/v#{version}/Remuda-#{version}-aarch64.tar.gz"
   name "Remuda"
-  desc "Chat-first desktop UI for Ollama"
+  desc "Desktop app for tuning and testing local Ollama models"
   homepage "https://github.com/magna-nz/remuda"
 
   # The release build is aarch64-only (Apple Silicon) for now — see the
