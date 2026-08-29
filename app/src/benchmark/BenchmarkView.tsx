@@ -27,7 +27,8 @@ import { useMemo, useState } from "react";
 import "./BenchmarkView.css";
 import { BenchmarkEmpty } from "./BenchmarkEmpty";
 import { LaneEditor, laneChipLabel, type LaneChoice } from "./LaneEditor";
-import { runLabel } from "./benchmarks";
+import { isConfigured, runLabel } from "./benchmarks";
+import type { LaneVerdict } from "./preflight";
 import {
   CELL_BADGE,
   ROW_BADGE,
@@ -69,6 +70,14 @@ export interface BenchmarkViewProps {
   live: LiveBenchmarkRun | null;
   /** What the lane editor may offer. */
   choices: LaneChoice[];
+  /**
+   * The memory check's per-lane verdicts, shown passively on each lane row.
+   *
+   * Free to compute: `Model.archParams` rides the same POST /api/show sweep
+   * `listGroups` already makes, so this costs no extra request. The blocking
+   * form of the same check is the Run dialog (RunPreflight).
+   */
+  laneVerdicts?: LaneVerdict[];
   /** Something else is generating: SPEC §8 is one generation, app-wide. */
   elsewhereBusy?: boolean;
   onRunAll: () => void;
@@ -241,6 +250,7 @@ export function BenchmarkView({
   benchmark,
   live,
   choices,
+  laneVerdicts = [],
   elsewhereBusy = false,
   onRunAll,
   onCancel,
@@ -292,9 +302,13 @@ export function BenchmarkView({
       ? "Add a prompt first"
       : benchmark.lanes.length === 0
         ? "Add a lane first"
-        : elsewhereBusy
-          ? "Something else is generating. Remuda runs one at a time"
-          : null;
+        : // A lane with no model chosen has nothing to load or send to. The
+          // reason sits on the lane too; this keeps Run from looking live.
+          !isConfigured(benchmark)
+          ? "Choose a model for every lane first"
+          : elsewhereBusy
+            ? "Something else is generating. Remuda runs one at a time"
+            : null;
 
   return (
     <div className="benchmarkview">
@@ -400,6 +414,7 @@ export function BenchmarkView({
         disabled={live !== null}
         onChange={onLanesChange}
         makeLaneId={makeLaneId}
+        verdicts={laneVerdicts}
       />
 
       {benchmark.prompts.length === 0 ? (

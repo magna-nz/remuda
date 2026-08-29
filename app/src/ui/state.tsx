@@ -93,6 +93,8 @@ import {
   appendRun,
   createBenchmark as makeBenchmark,
   defaultBenchmarkName,
+  UNCONFIGURED_LANE,
+  isConfigured,
   loadBenchmarks,
   migrateBenches,
   removeLane as removeLaneFrom,
@@ -359,8 +361,30 @@ export interface RemudaContextValue {
    * a third generation into the pair.
    */
   compareRun: CompareRun | null;
-  /** New session on the currently loaded model; no-op when nothing is loaded. */
-  newChat: () => void;
+  /**
+   * New session bound to `model`, or to the active model when omitted.
+   *
+   * The explicit argument is what the "+ New ▸ New chat" model picker passes:
+   * with several models resident the user names one, and with none resident
+   * the picker loads one and then names it. Omitting it keeps the old
+   * behaviour — bind to `activeModel` — which is still the right answer when
+   * exactly one model is resident and there is nothing to ask.
+   *
+   * `confirmed` says the caller already ran the SPEC §8 gate for this
+   * navigation. The picker has to: it must ask before spending a multi-GB
+   * load, not after, or a cancelled prompt throws that load away. Without
+   * this the same "discard changes?" question would be asked twice for one
+   * action.
+   */
+  newChat: (model?: string, confirmed?: boolean) => void;
+  /**
+   * Run the SPEC §8 unsaved-Modelfile gate for a navigation about to happen.
+   *
+   * Exposed so a caller can ask *before* doing something expensive and hard
+   * to undo — the model picker loads weights, and a gate that only ran
+   * afterwards would discard them. True when there is nothing to discard.
+   */
+  confirmLeaveEditor: () => boolean;
   openSession: (id: string) => void;
   deleteSession: (id: string) => void;
   /**
@@ -523,9 +547,25 @@ export interface RemudaContextValue {
    * not.
    */
   benchmarkProgress: BenchmarkRunState | null;
-  /** Create a benchmark with one lane on the given model (default: active). */
-  createBenchmark: (name?: string, model?: string) => string | null;
+  /**
+   * Create a benchmark with one lane on the given model (default: active).
+   *
+   * Never returns null: a benchmark whose lane has no model yet is a valid,
+   * expected state — lane choices come from every installed model and the
+   * weights are Run's problem, so nothing here depends on residency.
+   */
+  createBenchmark: (name?: string, model?: string) => string;
   openBenchmark: (id: string) => void;
+  /**
+   * "+ New ▸ New benchmark", and the rail's `+`: gate, create, open.
+   *
+   * One action rather than `openBenchmark(createBenchmark())`, because that
+   * order commits the benchmark *before* the gate can refuse — cancelling
+   * the discard prompt left a stray "Untitled benchmark" in the rail and the
+   * user still in the editor. Returns null when the gate refused, and then
+   * nothing was created.
+   */
+  createAndOpenBenchmark: () => string | null;
   /** Under the existing §8 confirm toggle, like deleting a model. */
   deleteBenchmark: (id: string) => void;
   renameBenchmark: (id: string, name: string) => void;
@@ -1010,21 +1050,28 @@ export function RemudaProvider({
     setSessions((prev) => sortSessions(prev.map((s) => (s.id === id ? fn(s) : s))));
   }, []);
 
-  const newChat = useCallback(() => {
-    // §5.2: New chat opens on a *resident* model — nothing loaded, nothing
-    // to bind the session to. With several resident it takes activeModel,
-    // which prefers the model the current chat already talks to.
-    if (!activeModel) return;
+  const newChat = useCallback((model?: string, confirmed = false) => {
+    // §5.2: a session is bound to one model for its life, so there has to be
+    // one to bind to. `model` is the picker's answer when it asked; without
+    // it this falls back to activeModel, which prefers the model the current
+    // chat already talks to — the case where there was nothing to ask.
+    const tag = model ?? activeModel?.variant ?? null;
+    if (tag === null) return;
     // The sidebar stays visible while the Modelfile editor is open, so this
     // is a navigation away from it — same unsaved-changes gate as setView
     // (SPEC §8), not a silent discard.
-    if (viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
-    const session = createSession(activeModel.variant);
+    if (!confirmed && viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
+    const session = createSession(tag);
     setSessions((prev) => [session, ...prev]);
     setActiveSessionId(session.id);
     setStreamError(null);
     setViewState("chat");
   }, [activeModel, confirmUnsavedChanges]);
+
+  const confirmLeaveEditor = useCallback((): boolean => {
+    if (viewRef.current !== "modelfile") return true;
+    return confirmUnsavedChanges();
+  }, [confirmUnsavedChanges]);
 
   const openSession = useCallback((id: string) => {
     if (viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
@@ -1788,11 +1835,12 @@ export function RemudaProvider({
   /* ------------------------------------- Bench (SPEC-tuning T5 / R4) ---- */
 
   const createBenchmark = useCallback(
-    (name?: string, model?: string): string | null => {
-      const tag = model ?? activeModelRef.current?.variant ?? null;
-      // A benchmark with no lane has nothing to run against, so there is no
-      // honest empty state for one. Same rule as "+ New chat".
-      if (tag === null) return null;
+    (name?: string, model?: string): string => {
+      // No residency requirement. `laneChoices` is built from every installed
+      // model and never reads isLoaded, so the lane editor can resolve an
+      // unconfigured lane with nothing in memory — and Run is where weights
+      // are actually needed (docs/mockup-new-menu.html §04).
+      const tag = model ?? activeModelRef.current?.variant ?? UNCONFIGURED_LANE;
       const chosen = name?.trim() === "" || name === undefined ? defaultBenchmarkName(tag) : name;
       const benchmark = makeBenchmark(chosen, tag);
       commitBenchmarks([benchmark, ...benchmarksRef.current]);
@@ -1800,6 +1848,18 @@ export function RemudaProvider({
     },
     [commitBenchmarks],
   );
+
+  const createAndOpenBenchmark = useCallback((): string | null => {
+    // Gate first: nothing is committed unless the navigation is going to
+    // happen. `openBenchmark` gates too, so this deliberately does not call
+    // it — one action, one prompt.
+    if (!confirmLeaveEditor()) return null;
+    const id = createBenchmark();
+    setActiveBenchmarkId(id);
+    activeBenchmarkIdRef.current = id;
+    setViewState("benchmark");
+    return id;
+  }, [confirmLeaveEditor, createBenchmark]);
 
   const openBenchmark = useCallback(
     (id: string) => {
@@ -1922,6 +1982,11 @@ export function RemudaProvider({
       const benchmark = benchmarksRef.current.find((b) => b.id === benchmarkId);
       if (benchmark === undefined) return;
       if (benchmark.prompts.length === 0 || benchmark.lanes.length === 0) return;
+      // A lane with no model chosen has no tag to load. The Run button is
+      // disabled for this, but a disabled control is a courtesy and the
+      // store is the rule: without this, `load("")` reaches Ollama and the
+      // whole run is recorded as error cells against the run cap.
+      if (!isConfigured(benchmark)) return;
       // SPEC §8, one generation at a time, app-wide: chat, compare and
       // benchmark all queue behind each other rather than racing.
       if (
@@ -2082,6 +2147,7 @@ export function RemudaProvider({
     statsByMessage,
     compareRun,
     newChat,
+    confirmLeaveEditor,
     openSession,
     deleteSession,
     sendMessage,
@@ -2118,6 +2184,7 @@ export function RemudaProvider({
     activeBenchmarkId,
     benchmarkProgress,
     createBenchmark,
+    createAndOpenBenchmark,
     openBenchmark,
     deleteBenchmark,
     renameBenchmark,
@@ -2134,7 +2201,7 @@ export function RemudaProvider({
     openLoadPane, closeLoadPane, refreshModels, load, unload, unloadAll, setKept,
     checkHealth, sessions,
     activeSessionId, streamingSessionId, streamError, errorsByMessage, lastStats, statsByMessage,
-    compareRun, newChat,
+    compareRun, newChat, confirmLeaveEditor,
     openSession, deleteSession, sendMessage, runGeneration, setSessionOptions, setSessionThink,
     setSessionFormat,
     toggleCompare, setLaneConfig, setPinnedSeed, sendCompare, keepLane, regenerateReply,
@@ -2143,7 +2210,8 @@ export function RemudaProvider({
     revertEditor, saving, saveError, reloadToast, saveDraft,
     modelfileHistory, historyForTag, editorPane, setEditorPane, restoreSnapshot,
     promoteToSystem,
-    benchmarks, activeBenchmarkId, benchmarkProgress, createBenchmark, openBenchmark,
+    benchmarks, activeBenchmarkId, benchmarkProgress, createBenchmark,
+    createAndOpenBenchmark, openBenchmark,
     deleteBenchmark, renameBenchmark, addToBenchmark, removeBenchmarkPrompt,
     addLane, removeLane, updateLane, startBenchmarkRun, cancelBenchmarkRun,
   ]);

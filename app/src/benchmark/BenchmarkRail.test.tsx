@@ -50,20 +50,24 @@ describe("the group", () => {
     expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
-  it("blocks + with a reason when there is no model to put in a lane", () => {
+  // Creating a benchmark has no residency precondition: lane choices come
+  // from every installed model and the load is Run's problem, so the + that
+  // used to be disabled with nothing in memory now always works.
+  it("keeps + enabled with nothing resident", () => {
+    const onCreate = vi.fn();
     render(
       <BenchmarkRail
         benchmarks={[]}
         activeBenchmarkId={null}
-        canCreate={false}
         onOpen={() => {}}
-        onCreate={() => {}}
+        onCreate={onCreate}
         onDelete={() => {}}
       />,
     );
     const add = screen.getByRole("button", { name: "New benchmark" });
-    expect(add).toBeDisabled();
-    expect(add).toHaveAttribute("title", "Load a model first");
+    expect(add).toBeEnabled();
+    fireEvent.click(add);
+    expect(onCreate).toHaveBeenCalledTimes(1);
   });
 
   it("lists a benchmark with its prompt, lane and run counts, and opens it", () => {

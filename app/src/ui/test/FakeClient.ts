@@ -35,6 +35,7 @@ export function makeModel(overrides: Partial<Model> & { tag: string }): Model {
     isVariant: false,
     modifiedAt: "2026-01-01T00:00:00Z",
     capabilities: [],
+    archParams: null,
     ...overrides,
   };
 }

@@ -68,13 +68,36 @@ export function trimProse(text: string): string {
  * benchmark outright rather than opening a name dialog.
  */
 export function defaultBenchmarkName(model: string): string {
+  if (model === UNCONFIGURED_LANE) return UNTITLED_BENCHMARK;
   return `${model.replace(/:latest$/, "")} benchmark`;
+}
+
+/**
+ * A lane whose model hasn't been chosen yet.
+ *
+ * Creating a benchmark must not require a resident model: lane choices come
+ * from every *installed* model (BenchmarkPane.laneChoices), and the weights
+ * are only needed at Run. So a benchmark made before any model was picked
+ * carries one lane with this model, and the lane editor is where it gets
+ * resolved. Run refuses while any lane still holds it.
+ */
+export const UNCONFIGURED_LANE = "";
+
+/** The name a benchmark gets when it was created without a lane to name it after. */
+export const UNTITLED_BENCHMARK = "Untitled benchmark";
+
+/** True when every lane has a model chosen — the precondition for Run. */
+export function isConfigured(benchmark: Benchmark): boolean {
+  return benchmark.lanes.every((lane) => lane.model !== UNCONFIGURED_LANE);
 }
 
 /**
  * A new benchmark starts with exactly one lane. Zero lanes is not a state
  * the rest of the code has to consider: there would be no column to put an
  * answer in, and `removeLane` refuses to take the last one away.
+ *
+ * `model` may be `UNCONFIGURED_LANE`: the lane exists, its model doesn't yet.
+ * That is the ordinary state of a benchmark created with nothing resident.
  */
 export function createBenchmark(
   name: string,
@@ -512,6 +535,7 @@ export function migrateBenches(benchmarks: Benchmark[]): Benchmark[] {
 
 /** "gemma-4-31b · terse-v2" — the header's lane chip. */
 export function laneLabel(lane: Lane): string {
+  if (lane.model === UNCONFIGURED_LANE) return "Choose a model";
   const model = lane.model.replace(/:latest$/, "");
   return lane.modelfile === null ? `${model} · Original` : `${model} · ${lane.modelfile}`;
 }

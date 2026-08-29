@@ -1,4 +1,5 @@
 import "./test/localStorage";
+import { untilModelResident } from "../ui/test/newMenu";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { SESSIONS_STORAGE_KEY, type ChatSession } from "./sessions";
@@ -59,7 +60,7 @@ describe("Sidebar session list", () => {
     renderSidebar(fixtureClient());
     // Wait for /api/ps knowledge so the dots can be judged (New chat enables
     // only once a loaded model is known).
-    await waitFor(() => expect(screen.getByRole("button", { name: "New chat" })).toBeEnabled());
+    await untilModelResident();
 
     const loadedRow = rowFor("Undo a git commit");
     expect(loadedRow.querySelector(".sdot")).not.toHaveClass("off");

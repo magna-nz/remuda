@@ -156,8 +156,10 @@ describe("listModels", () => {
         base: null,
         isVariant: false,
         modifiedAt: "2026-08-01T10:00:00Z",
-        // /api/tags carries no capabilities; only the listGroups sweep can.
+        // /api/tags carries neither capabilities nor model_info; only the
+        // listGroups sweep can fill these in.
         capabilities: [],
+        archParams: null,
       },
       {
         tag: "gemma2:9b",
@@ -171,6 +173,7 @@ describe("listModels", () => {
         isVariant: false,
         modifiedAt: "2026-07-15T09:00:00Z",
         capabilities: [],
+        archParams: null,
       },
     ]);
   });

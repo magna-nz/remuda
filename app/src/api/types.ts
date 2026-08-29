@@ -32,6 +32,17 @@ export interface Model {
    * /api/tags-only path (listModels), which never asks /api/show.
    */
   capabilities: string[];
+  /**
+   * The architecture sizing the fit predictor needs (models/fit.ts), from the
+   * same POST /api/show sweep `capabilities` rides on — so it costs no extra
+   * request.
+   *
+   * `null` when the server's `model_info` didn't carry enough, and on the
+   * /api/tags-only path (listModels) which never asks /api/show. A null here
+   * means *no prediction*, which `predictFit` treats as a first-class result
+   * rather than a reason to guess.
+   */
+  archParams: ArchParams | null;
 }
 
 /**

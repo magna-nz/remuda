@@ -1,4 +1,5 @@
 import "../chat/test/localStorage";
+import { untilModelResident } from "../ui/test/newMenu";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ChatView } from "../chat/ChatView";
@@ -88,7 +89,7 @@ async function openSeeded(c: FakeClient) {
       </main>
     </RemudaProvider>,
   );
-  await waitFor(() => expect(screen.getByRole("button", { name: "New chat" })).toBeEnabled());
+  await untilModelResident();
   fireEvent.click(screen.getByText("Extracting release notes"));
 }
 

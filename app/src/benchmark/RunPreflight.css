@@ -1,0 +1,145 @@
+/* The Run-time memory question (docs/mockup-new-menu.html §05). */
+
+.rp-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(12, 11, 10, 0.62);
+  z-index: 90;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+
+.rp {
+  width: 100%;
+  max-width: 460px;
+  max-height: min(80vh, 620px);
+  display: flex;
+  flex-direction: column;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 14px;
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+
+.rp-h {
+  padding: 14px 16px 12px;
+  border-bottom: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.rp-h b {
+  font-size: 14px;
+  display: block;
+}
+
+.rp-h p {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.rp-b {
+  overflow-y: auto;
+  padding: 10px;
+  flex: 1;
+  min-height: 0;
+}
+
+.rp-chk {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  margin-bottom: 6px;
+}
+
+.rp-chk .st {
+  width: 17px;
+  height: 17px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  margin-top: 1px;
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.rp-chk.ok .st {
+  background: var(--good-tint);
+  color: var(--good);
+}
+
+.rp-chk.bad .st {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+.rp-chk.unk .st {
+  background: var(--raised);
+  color: var(--faint);
+}
+
+.rp-chk .col {
+  flex: 1;
+  min-width: 0;
+  display: block;
+}
+
+.rp-chk .ct {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rp-chk .cs {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.rp-chk .cs b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.rp-chk.bad .cs b {
+  color: var(--crit);
+}
+
+.rp-pin {
+  margin: 8px 2px 2px;
+  padding: 9px 11px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--warn);
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 28%, transparent);
+  border-radius: 9px;
+}
+
+.rp-f {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 11px 14px;
+  border-top: 1px solid var(--border);
+  flex: 0 0 auto;
+}
+
+.rp-f .spacer {
+  flex: 1;
+}
