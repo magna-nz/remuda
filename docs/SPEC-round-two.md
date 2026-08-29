@@ -221,6 +221,108 @@ each targeted component.
 
 ---
 
+## R7 — Benchmark (replaces Bench)
+
+> **Bench becomes Benchmark**, and the axis of comparison turns ninety
+> degrees: instead of comparing one configuration against *its own past*, a
+> benchmark compares **several configurations against each other** over the
+> same set of prompts.
+
+### Why this is the right shape, not just a bigger one
+
+R4's bench answered *"did my edit break something I wasn't looking at?"* by
+diffing run 7 against run 6. Useful, but it is the narrower question, and the
+word "bench" taught nobody anything.
+
+A benchmark answers *"which of these is better for my prompts?"* — and A/B
+Compare (`SPEC-tuning.md` T2) already answers exactly that for **one** prompt.
+A benchmark is Compare generalised to a prompt set. That is why this replaces
+Bench rather than sitting beside it: the old feature is a benchmark with one
+lane, so nothing is lost by folding it in.
+
+The rename is not cosmetic. Half of R5's help copy exists because "bench" is
+jargon; "benchmark" is a word people already have.
+
+### Data model
+
+```
+Benchmark {
+  id, name: string
+  prompts: { id, text }[]
+  lanes: Lane[]                       // 1..4 configurations
+  runs: BenchmarkRun[]                // capped at 6
+}
+
+Lane {
+  id: string
+  model: string                       // the tag actually loaded
+  modelfile: string | null            // variant; null means the base
+}
+
+BenchmarkRun {
+  id, ranAt: datetime
+  seed: number                        // pinned across every lane AND prompt
+  partial: boolean
+  cells: { promptId, laneId, content, thinking?, stats?, error? }[]
+}
+```
+
+Persisted under `remuda.benchmarks.v1`.
+
+### The run loop
+
+**Grouped by lane, not by prompt.** Load lane 1's model, run every prompt
+against it, then load lane 2's model and do the same. Interleaving would mean
+a full model load per prompt, which on a 20 GB model is the difference between
+two loads and twenty.
+
+- **One seed for the whole run**, across every lane and every prompt.
+  Comparing two models on two seeds measures sampling noise, which is the one
+  thing a benchmark must not do.
+- **Sequential, and only ever one model resident.** The lane's model is
+  loaded, used, and left for the next load to replace. `SPEC §8` still holds:
+  one generation at a time, app-wide.
+- **Loading is visible.** "Loading qwen3.8-27b (lane 2 of 2)" rather than a
+  UI that looks hung for a minute. This is the honest cost of the feature and
+  it should be shown, not hidden.
+- A **failed cell is a result**, kept with its cause; the run carries on.
+- **Cancel** keeps every finished cell and marks the run `partial`.
+
+### Surface
+
+- The rail group is **BENCHMARKS**.
+- The header carries the name, the prompt count, and a **lane chip per
+  configuration** — `gemma-4-31b · Original`, `qwen3.8-27b · terse-v2`.
+- A **lane editor** picks the model and the Modelfile for each lane, and adds
+  or removes lanes. The same model with two different Modelfiles is a normal
+  and expected setup, not a special case.
+- The table is **one row per prompt, one column per lane**. Cells hold the
+  answers.
+- With exactly two lanes, an expanded row word-diffs lane B against lane A,
+  reusing `bench/words.ts`. With more, each lane past the first is diffed
+  against the first.
+
+### Rules carried over from T5, unchanged
+
+- **Different is a diff, not a verdict.** No lane is scored, no lane is called
+  better, and the table is never ordered by anything but the prompts.
+- An errored cell stays visible with its cause.
+- Deleting a benchmark confirms, under the existing `SPEC §8` toggle.
+
+### Migration
+
+`remuda.benches.v1` is read once and converted: each bench becomes a
+benchmark with **one lane** (its model, no variant), its prompts intact, and
+each old run converted to a single-lane run. Nothing is dropped, and the old
+key is left in place rather than deleted, so a downgrade still finds its data.
+
+### Touches
+
+New `app/src/benchmark/`. `ui/Sidebar.tsx`, `chat/ReplyMenu.tsx`,
+`ui/state.tsx`, `App.tsx`, `tour/steps.ts`, `help/glossary.ts`. The old
+`app/src/bench/` is removed once `words.ts` and the diff helpers move across.
+
+
 ## Build log
 
 Updated at the end of each wave, per the working agreement.
