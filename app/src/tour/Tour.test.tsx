@@ -167,6 +167,36 @@ describe("a first launch with no Ollama", () => {
 });
 
 describe("a step whose target is missing", () => {
+  /**
+   * The case where only the LAST step is missing — found by running the
+   * packaged app, where a chat was open (so Format had a target) but no
+   * Modelfile draft was (so Prompt did not). Exactly one skip, and it is the
+   * final step: the tour used to end silently because the skip and the
+   * end-of-tour decision happened in the same effect, before any render
+   * recorded the skip.
+   */
+  it("still shows the closing card when only the final step is missing", async () => {
+    seedSession();
+    render(<App client={loadedClient()} />);
+    await untilLoaded();
+    fireEvent.click(screen.getByRole("button", { name: "Not now" }));
+    // A chat open (so Format has its pill) but no Modelfile draft.
+    fireEvent.click(screen.getByText("Tuning the coding system prompt"));
+
+    act(() => startTour());
+    clickNext();
+    clickNext();
+    clickNext();
+    // Step 4 (Format) has its pill, because a chat is open.
+    expect(cardTitle()).toBe(TOUR_STEPS[3]!.title);
+
+    // Step 5 (Prompt) has no draft to point at — the only skip, and the last.
+    clickNext();
+    expect(screen.getByText("That’s the tour")).toBeInTheDocument();
+    expect(screen.getByText("Saw 4 of 5")).toBeInTheDocument();
+    expect(screen.getByText(/needs a model loaded/)).toBeInTheDocument();
+  });
+
   it("is skipped, and the count stops claiming it", async () => {
     // A loaded model and an open draft, but no chat: Format's pill has
     // nowhere to live, while the Prompt segment does.

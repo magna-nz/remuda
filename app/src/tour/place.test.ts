@@ -54,3 +54,32 @@ describe("placeCard", () => {
     expect(top).toBe(12);
   });
 });
+
+/**
+ * The clipping bug, found by running the packaged app rather than jsdom: a
+ * step whose target sits low in a short window, with a card taller than the
+ * estimate, had its footer pushed past the bottom edge — Skip / Back / Next
+ * unreachable. The clamp is only as honest as the height it is given.
+ */
+describe("a tall card near the bottom edge", () => {
+  it("keeps the whole card inside the viewport", () => {
+    // The composer's Format pill, in the 1360x887 window this was seen in.
+    const target = { left: 520, top: 800, width: 120, height: 26 };
+    const viewport = { width: 1360, height: 887 };
+    const tall = 300;
+
+    const { top } = placeCard(target, viewport, tall);
+
+    expect(top).toBeGreaterThanOrEqual(0);
+    expect(top + tall).toBeLessThanOrEqual(viewport.height);
+  });
+
+  it("pins to the top edge rather than going negative when the card exceeds the viewport", () => {
+    const { top } = placeCard(
+      { left: 10, top: 500, width: 40, height: 20 },
+      { width: 800, height: 300 },
+      400,
+    );
+    expect(top).toBeGreaterThanOrEqual(0);
+  });
+});

@@ -20,7 +20,15 @@
  * mockup used `absolute` inside its fake window — the same geometry, minus
  * a positioned ancestor the real shell doesn't have.
  */
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import "./Tour.css";
 import { stopTour, useTourRunning } from "./controller";
 import { CARD_WIDTH, placeCard, type Box } from "./place";
@@ -110,6 +118,23 @@ function TourRun() {
    * apology.
    */
   const [closing, setClosing] = useState(false);
+  /**
+   * The card's measured height, for `placeCard`'s bottom clamp.
+   *
+   * Reading `cardRef.current.offsetHeight` during render gives the height of
+   * the card that is still on screen — the *previous* step's — so a step
+   * whose body is longer than the one before it was placed against a height
+   * too small, and a target near the bottom of the window pushed its footer
+   * (Skip / Back / Next) off the edge. Measured after layout instead, which
+   * costs one extra pass and makes the clamp true.
+   */
+  const [cardHeight, setCardHeight] = useState(CARD_HEIGHT_ESTIMATE);
+  useLayoutEffect(() => {
+    const measured = cardRef.current?.offsetHeight;
+    if (measured !== undefined && measured > 0 && measured !== cardHeight) {
+      setCardHeight(measured);
+    }
+  });
 
   const finish = useCallback(() => {
     const back = resume.current;
@@ -175,6 +200,15 @@ function TourRun() {
       return;
     }
     setSkipped((prev) => (prev.includes(step.id) ? prev : [...prev, step.id]));
+    // Decided here, not in `goTo`, because `skippedRef` is assigned during
+    // render and this effect calls `goTo` synchronously — so when the LAST
+    // step is the first one skipped, the ref is still empty and the tour
+    // would end silently. Two skips happened to work only because a render
+    // landed between them.
+    if (direction === 1 && index + 1 >= TOUR_STEPS.length) {
+      setClosing(true);
+      return;
+    }
     if (index + direction < 0) {
       // Back off the front of a step that isn't there: go forward instead of
       // stopping on a spotlight with nothing under it.
@@ -307,7 +341,7 @@ function TourRun() {
   const card = placeCard(
     box,
     { width: window.innerWidth, height: window.innerHeight },
-    cardRef.current?.offsetHeight || CARD_HEIGHT_ESTIMATE,
+    cardHeight,
   );
 
   return (

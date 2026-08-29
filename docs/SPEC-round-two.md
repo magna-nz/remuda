@@ -469,3 +469,45 @@ open are recorded here rather than silently dropped.
 
 **Gates:** `npm run typecheck`, `npm test` (801 passed, 54 files),
 `npm run build` — all clean.
+
+### Native pass — the packaged app on macOS
+
+The dev server exercises the frontend but not the Tauri shell, so the branch
+was built with `scripts/build-and-install.sh --debug` and driven in
+`/Applications/Remuda.app`. Two bugs surfaced that neither jsdom nor a browser
+tab could reach, both in the tour's card placement:
+
+1. **The step card was clipped by the window edge.** `placeCard` was handed
+   `cardRef.current?.offsetHeight` *during render*, which is the height of the
+   card still on screen — the previous step's. A step with a longer body than
+   the one before it was therefore placed against a height too small, and with
+   its target low in the window (Format's composer pill) the footer carrying
+   Skip / Back / Next was pushed off the bottom. The height is now measured in
+   a layout effect, costing one extra pass and making the clamp true. jsdom
+   reports every rect as zero, so no render test could have caught this.
+
+2. **The closing card was skipped when the last step was the only skip.**
+   `skippedRef` is assigned during render, but the measure effect calls
+   `setSkipped` and then `goTo` synchronously — so with exactly one skip, and
+   that skip being the final step, the ref was still empty and the tour ended
+   silently. Two skips only worked by accident, because a render landed
+   between them. The end-of-tour decision now happens at skip time rather than
+   reading the ref. Reached in the app by having a chat open (Format has its
+   pill) with no Modelfile draft (Prompt does not).
+
+**Also confirmed on the real install**, none of which the dev server can show:
+the installed binary is byte-identical to the branch build; existing chat
+history loads unchanged, so the decision not to bump `SESSIONS_STORAGE_KEY`
+holds against a real user profile; the first-run offer does not return after a
+restart; `Settings → Run the tour` starts it; and the Connection row reports
+host data (`6 models · 141.8 GB on disk`) through the Tauri bridge.
+
+**A process note worth keeping:** a Remuda instance running from before
+`brew uninstall --cask remuda` survives the uninstall, and `open -a`
+re-activates *that* process rather than launching the new bundle. The first
+screenshots of this pass were of the old app and showed neither Benches nor
+the tour. Compare process start time against the installed binary's mtime
+before trusting anything on screen.
+
+**Gates:** `npm run typecheck`, `npm test` (804 passed, 54 files),
+`npm run build` — all clean.
