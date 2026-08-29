@@ -8,10 +8,19 @@
  * screen-reader text so the dot is never the only carrier of the state.
  * "+ New chat" binds a session to the active resident model, so it needs one
  * loaded. Search filters by title substring.
+ *
+ * Two groups, not one: **Benches** (T5) sits above **Recent**, because a
+ * bench is a thing you reach for from wherever you are — most often from
+ * inside the Modelfile editor, having just saved a change.
  */
 import { useState } from "react";
 import "./Sidebar.css";
 import { relativeTime, shortTag, type ChatSession } from "../chat/sessions";
+// T5 / R4 — the Benches group. It lives in app/src/bench/ so the rail's own
+// file keeps to one job; the group is above Recent because the rail persists
+// across every surface, which is what makes a bench reachable from inside
+// the Modelfile editor.
+import { BenchRail } from "../bench/BenchRail";
 import { useRemuda } from "./state";
 
 function SessionRow({ session, active }: { session: ChatSession; active: boolean }) {
@@ -98,6 +107,7 @@ export function Sidebar() {
           New chat
         </button>
       </div>
+      <BenchRail />
       <div className="side-label">Recent</div>
       <div className="sesslist">
         {filtered.length === 0 ? (

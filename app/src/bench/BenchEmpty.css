@@ -1,0 +1,84 @@
+/* docs/mockup-proposals-2.html §05 `.emptyfeat` — the help nobody has to go
+   looking for. */
+.emptyfeat {
+  padding: 46px 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 11px;
+}
+
+.emptyfeat .ef-ic {
+  width: 44px;
+  height: 44px;
+  border-radius: 13px;
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--ember) 30%, transparent);
+}
+
+.emptyfeat .ef-ic svg {
+  width: 21px;
+  height: 21px;
+}
+
+.emptyfeat h3 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.emptyfeat p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 52ch;
+  line-height: 1.65;
+}
+
+.emptyfeat .ef-how {
+  margin: 6px 0 0;
+  padding: 12px 15px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  text-align: left;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  max-width: 430px;
+}
+
+.emptyfeat .ef-how li {
+  display: flex;
+  gap: 10px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.55;
+}
+
+.emptyfeat .ef-how b {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ember-ink);
+  flex: 0 0 auto;
+  padding-top: 3px;
+}
+
+/* A named control, quoted inside prose: it stays in the UI face so it reads
+   as the button it is, not as emphasis. */
+.emptyfeat .ef-how b.ef-ui {
+  font-family: var(--ui);
+  font-size: inherit;
+  color: var(--ink);
+  padding-top: 0;
+}
+
+.emptyfeat .ef-note {
+  font-size: 12px;
+  color: var(--faint);
+  margin-top: 4px;
+}

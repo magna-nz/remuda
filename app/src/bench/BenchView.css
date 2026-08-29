@@ -1,0 +1,321 @@
+/* The run table (docs/mockup-proposals-2.html §01).
+   Class names are prefixed where the app already uses the mockup's: `.tally`
+   belongs to the tool playground, so the bench's is `.btally`. */
+.benchview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.benchhead {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+
+.benchhead b {
+  font-size: 14px;
+}
+
+.benchhead .bmeta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.benchhead .spacer {
+  flex: 1;
+}
+
+.benchrename {
+  border: 0;
+  background: transparent;
+  color: var(--faint);
+  font-size: 12px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  margin-left: -8px;
+}
+
+.benchrename:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.runsel {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+}
+
+/* The line that makes the Modelfile history and the results one artifact. */
+.runbar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.runbar .against {
+  color: var(--ember-ink);
+}
+
+.runbar .spacer {
+  flex: 1;
+}
+
+.btally {
+  display: inline-flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btally span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-weight: 600;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+
+.btally .changed {
+  background: var(--warn-tint);
+  color: var(--warn);
+}
+
+.btally .same {
+  background: var(--good-tint);
+  color: var(--good);
+}
+
+.btally .error {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+.btally .new,
+.btally .pending {
+  background: var(--raised);
+  color: var(--faint);
+}
+
+.brow {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+
+.brow-h {
+  display: flex;
+  align-items: flex-start;
+  gap: 11px;
+  padding: 12px 34px 12px 16px;
+  width: 100%;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.brow-h:hover {
+  background: var(--surface-2);
+}
+
+.brow-n {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  width: 20px;
+  flex: 0 0 auto;
+  padding-top: 2px;
+}
+
+.brow-p {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.brow-p .sn {
+  display: block;
+  margin-top: 4px;
+  font-size: 11.5px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The failure, in the collapsed row. Row 05 of the mockup: it is telling
+   you your num_ctx is too small, which is exactly what a bench is for. */
+.brow-p .sn.err {
+  color: var(--crit);
+}
+
+.bbadge {
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 3px 9px;
+  border-radius: 999px;
+  margin-top: 1px;
+}
+
+.bbadge.changed {
+  background: var(--warn-tint);
+  color: var(--warn);
+}
+
+.bbadge.same {
+  background: var(--good-tint);
+  color: var(--good);
+}
+
+.bbadge.error {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+.bbadge.new,
+.bbadge.pending {
+  background: var(--raised);
+  color: var(--faint);
+}
+
+.brow-t {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  flex: 0 0 auto;
+  width: 62px;
+  text-align: right;
+  padding-top: 3px;
+  font-variant-numeric: tabular-nums;
+}
+
+.brow-x {
+  position: absolute;
+  top: 11px;
+  right: 10px;
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  opacity: 0;
+}
+
+.brow:hover .brow-x,
+.brow:focus-within .brow-x {
+  opacity: 1;
+}
+
+.brow-x:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.brow-b {
+  padding: 0 16px 15px 47px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.brow-b:has(> .bcol:only-child) {
+  grid-template-columns: 1fr;
+}
+
+.bcol {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.bcol-h {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 11px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.bcol-h .now {
+  color: var(--ember-ink);
+  font-weight: 600;
+}
+
+.bcol-b {
+  padding: 10px 12px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.bcol-b del {
+  background: var(--crit-tint);
+  color: #f0a196;
+  text-decoration: none;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.bcol-b ins {
+  background: var(--good-tint);
+  color: #b6dd93;
+  text-decoration: none;
+  border-radius: 3px;
+  padding: 0 2px;
+}
+
+.bcol-none {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.bcol-err {
+  color: var(--crit);
+}
+
+.bfoot {
+  display: flex;
+  gap: 12px;
+  padding: 7px 11px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}

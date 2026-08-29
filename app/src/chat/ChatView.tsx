@@ -358,6 +358,7 @@ export function ChatView() {
     keepLane,
     regenerateReply,
     promoteToSystem,
+    addToBench,
   } = useRemuda();
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingImage[]>([]);
@@ -588,6 +589,32 @@ export function ChatView() {
     );
   };
 
+  /**
+   * The menu on a *user* message (T5 capture).
+   *
+   * Deliberately its own thing rather than a widened `replyMenu`: none of
+   * that menu's items mean anything on a prompt — there is no reply to
+   * re-roll, promote or export — so it carries the one item that does, and
+   * says "Prompt actions" rather than claiming to act on a reply.
+   */
+  const promptMenu = (message: Message, index: number) => {
+    const id = message.id ?? `u-${index}`;
+    return (
+      <ReplyMenu
+        name={`for prompt ${index + 1}`}
+        label="Prompt actions"
+        open={menuFor === id}
+        onToggle={() => setMenuFor((prev) => (prev === id ? null : id))}
+        onClose={() => setMenuFor(null)}
+        busy={streaming}
+        onAddToBench={() => {
+          addToBench(message.content);
+          setMenuFor(null);
+        }}
+      />
+    );
+  };
+
   /** One full-width message — the single-lane transcript, unchanged. */
   const renderMessage = (m: Message, i: number) => {
     const isLast = i === session.messages.length - 1;
@@ -644,6 +671,7 @@ export function ChatView() {
           {m.role === "assistant" && (
             <div className="msgfoot">{replyMenu(m, i, `for message ${i + 1}`)}</div>
           )}
+          {m.role === "user" && <div className="msgfoot">{promptMenu(m, i)}</div>}
           {m.role === "assistant" && isLast && stats !== null && (
             <>
               <StatsStrip

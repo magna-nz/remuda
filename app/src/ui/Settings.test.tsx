@@ -1,9 +1,11 @@
 import "../chat/test/localStorage";
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DOCS_BASE_URL, Settings } from "./Settings";
 import { RemudaProvider } from "./state";
 import { FakeClient } from "./test/FakeClient";
+import { GLOSSARY } from "../help/glossary";
+import { isPaneHelpOpen, setPaneHelpOpen } from "../help/persistence";
 
 const SETTINGS_KEY = "remuda.settings.v1";
 
@@ -138,6 +140,54 @@ describe("Settings", () => {
       "aria-checked",
       "false",
     );
+  });
+});
+
+describe("Help section (R5)", () => {
+  it("renders the guided tour row disabled, since the tour isn't built yet", () => {
+    const client = new FakeClient({ connected: true });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    expect(screen.getByRole("button", { name: "Run the tour" })).toBeDisabled();
+  });
+
+  it("'Reopen all' restores a pane dismissed elsewhere", () => {
+    setPaneHelpOpen("format", false);
+    expect(isPaneHelpOpen("format")).toBe(false);
+
+    const client = new FakeClient({ connected: true });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Reopen all" }));
+    expect(isPaneHelpOpen("format")).toBe(true);
+  });
+
+  it("lists every glossary term with its definition", () => {
+    const client = new FakeClient({ connected: true });
+    const { container } = render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    // Scoped to the glossary list itself: a couple of these words (e.g.
+    // `keep_alive`) already appear elsewhere in Settings as plain `<code>`.
+    const list = container.querySelector(".glossary-list") as HTMLElement;
+    expect(list).toBeInTheDocument();
+    const entries = Object.values(GLOSSARY);
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      expect(within(list).getByText(entry.term)).toBeInTheDocument();
+      expect(within(list).getByText(entry.definition)).toBeInTheDocument();
+    }
   });
 });
 

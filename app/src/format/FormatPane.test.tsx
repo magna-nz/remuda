@@ -148,6 +148,47 @@ describe("the pane and its pill", () => {
   });
 });
 
+describe("layer 2 — pane help (R5)", () => {
+  it("renders the toggle and shows the strip open on first sight", async () => {
+    seedSession();
+    await openSeeded(client());
+    fireEvent.click(pill("off"));
+
+    const pane = screen.getByRole("region", { name: "Format" });
+    const toggle = within(pane).getByRole("button", { name: "About this pane" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      within(pane).getByRole("region", { name: "About Format — force the reply into a shape" }),
+    ).toBeInTheDocument();
+  });
+
+  it("dismissing the strip persists the close", async () => {
+    seedSession();
+    await openSeeded(client());
+    fireEvent.click(pill("off"));
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close help for Format/ }));
+    expect(
+      screen.queryByRole("region", { name: "About Format — force the reply into a shape" }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("remuda.help.v1")).toContain("format");
+  });
+});
+
+describe("layer 1 — the empty state (R5)", () => {
+  it("explains itself while off, and steps back once a constraint is chosen", async () => {
+    seedSession();
+    await openSeeded(client());
+    fireEvent.click(pill("off"));
+
+    const pane = screen.getByRole("region", { name: "Format" });
+    expect(within(pane).getByText("Nothing is constrained yet")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Schema" }));
+    expect(within(pane).queryByText("Nothing is constrained yet")).not.toBeInTheDocument();
+  });
+});
+
 describe("what reaches the request", () => {
   it("omits `format` entirely while off", async () => {
     seedSession();

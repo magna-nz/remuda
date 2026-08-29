@@ -84,7 +84,23 @@ import {
   type ModelfileSnapshot,
 } from "../editor/history";
 
-export type View = "chat" | "modelfile" | "tools" | "pull" | "settings";
+// T5 / R4 — Bench. The data model, its persistence and the replay loop all
+// live in app/src/bench/; this file owns only the wiring: which bench is
+// open, and the one run that may be in flight (SPEC §8).
+import {
+  addPrompt,
+  appendRun,
+  createBench as makeBench,
+  defaultBenchName,
+  loadBenches,
+  removePrompt,
+  saveBenches,
+  type Bench,
+  type BenchResult,
+} from "../bench/benches";
+import { runBench } from "../bench/run";
+
+export type View = "chat" | "modelfile" | "tools" | "bench" | "pull" | "settings";
 
 /** Settings persisted across restarts (SPEC §5.6), separate from chat sessions. */
 const SETTINGS_STORAGE_KEY = "remuda.settings.v1";
@@ -491,6 +507,49 @@ export interface RemudaContextValue {
    * created and nothing is saved; no-op when no model is loaded.
    */
   promoteToSystem: (text: string) => Promise<void>;
+
+  // ---- Bench (docs/SPEC-tuning.md T5, docs/SPEC-round-two.md R4) ----
+  /** Every saved bench, newest-touched first. */
+  benches: Bench[];
+  /** The bench the main area is showing; null when none is open. */
+  activeBenchId: string | null;
+  /**
+   * The run in flight, or null. Its results accumulate here rather than in
+   * `benches` so a half-finished run is never persisted — the finished
+   * `BenchRun` is appended in one write when the loop ends, cancelled or not.
+   */
+  benchProgress: BenchProgress | null;
+  /** Create an empty bench on the given model (default: the active one). */
+  createBench: (name?: string, model?: string) => string | null;
+  openBench: (id: string) => void;
+  /** Under the existing §8 confirm toggle, like deleting a model. */
+  deleteBench: (id: string) => void;
+  renameBench: (id: string, name: string) => void;
+  /**
+   * Capture (T5): put one prompt in a bench, with no form in the way.
+   *
+   * Targets the open bench when it runs the same model, else the first bench
+   * for that model, else it creates one named after the model. Returns the
+   * bench id, or null when there is no model to bind a bench to. Adding text
+   * already in the bench is a no-op.
+   */
+  addToBench: (text: string, model?: string) => string | null;
+  removeBenchPrompt: (benchId: string, promptId: string) => void;
+  /** Replay every prompt, sequentially, on one pinned seed. */
+  startBenchRun: (benchId: string) => Promise<void>;
+  /** Keeps the finished rows and marks the run partial (T5). */
+  cancelBenchRun: () => void;
+}
+
+/** A bench run in flight (T5). */
+export interface BenchProgress {
+  benchId: string;
+  /** Pinned across every prompt of this run. */
+  seed: number;
+  done: number;
+  total: number;
+  /** Finished rows so far, in prompt order. */
+  results: BenchResult[];
 }
 
 const RemudaContext = createContext<RemudaContextValue | null>(null);
@@ -644,6 +703,29 @@ export function RemudaProvider({
   historyRef.current = modelfileHistory;
   const [editorPane, setEditorPane] = useState<EditorPane>("form");
 
+  // T5 / R4 — Bench. Loaded once from localStorage and written back on every
+  // mutation; there is no per-token churn to debounce, because a run commits
+  // once, at the end.
+  const [benches, setBenches] = useState<Bench[]>(() => loadBenches());
+  const benchesRef = useRef(benches);
+  benchesRef.current = benches;
+  const [activeBenchId, setActiveBenchId] = useState<string | null>(null);
+  const activeBenchIdRef = useRef<string | null>(null);
+  activeBenchIdRef.current = activeBenchId;
+  const [benchProgress, setBenchProgress] = useState<BenchProgress | null>(null);
+  /**
+   * The run in flight, and the §8 guard for it. A bench run is a generation
+   * like any other: it may not start beside a chat or a compare, and neither
+   * may start beside it.
+   */
+  const benchRunRef = useRef<{ controller: AbortController; benchId: string } | null>(null);
+
+  const commitBenches = useCallback((next: Bench[]) => {
+    benchesRef.current = next;
+    setBenches(next);
+    saveBenches(next);
+  }, []);
+
   /** SPEC §8: unsaved editor changes prompt before navigating away. */
   const confirmUnsavedChanges = useCallback((): boolean => {
     if (!editorDraftRef.current?.dirty) return true;
@@ -652,6 +734,10 @@ export function RemudaProvider({
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // Read at call time by addToBench, which must not re-identify on every
+  // session switch.
+  const activeSessionIdRef = useRef<string | null>(null);
+  activeSessionIdRef.current = activeSessionId;
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [errorsByMessage, setErrorsByMessage] = useState<Record<string, string>>({});
@@ -957,6 +1043,9 @@ export function RemudaProvider({
     // one start on a run the user just cancelled. Cancel cancels both lanes
     // and keeps whatever streamed (SPEC-tuning T2).
     compareRunRef.current?.controller.abort();
+    // Same for a bench replay: it keeps its finished rows and is recorded
+    // partial rather than discarded (T5).
+    benchRunRef.current?.controller.abort();
     for (const entry of streamsRef.current.values()) {
       entry.controller.abort();
     }
@@ -1102,7 +1191,11 @@ export function RemudaProvider({
         (trimmed === "" && !hasImages) ||
         sessionId === null ||
         streamsRef.current.size > 0 ||
-        compareRunRef.current !== null
+        compareRunRef.current !== null ||
+        // A bench replay is a generation too (T5): it holds the slot for as
+        // long as it runs, and a send that slipped past here would put two
+        // requests on one runner.
+        benchRunRef.current !== null
       )
         return;
       const session = sessionsRef.current.find((s) => s.id === sessionId);
@@ -1661,6 +1754,154 @@ export function RemudaProvider({
     [client, confirmUnsavedChanges],
   );
 
+  /* ------------------------------------- Bench (SPEC-tuning T5 / R4) ---- */
+
+  const createBench = useCallback(
+    (name?: string, model?: string): string | null => {
+      const tag = model ?? activeModelRef.current?.variant ?? null;
+      // A bench with no model has nothing to replay against, so there is no
+      // honest empty state for one — same rule as "+ New chat".
+      if (tag === null) return null;
+      const bench = makeBench(name?.trim() === "" || name === undefined ? defaultBenchName(tag) : name, tag);
+      commitBenches([bench, ...benchesRef.current]);
+      return bench.id;
+    },
+    [commitBenches],
+  );
+
+  const openBench = useCallback(
+    (id: string) => {
+      if (viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
+      setActiveBenchId(id);
+      activeBenchIdRef.current = id;
+      setViewState("bench");
+    },
+    [confirmUnsavedChanges],
+  );
+
+  const deleteBench = useCallback(
+    (id: string) => {
+      const bench = benchesRef.current.find((b) => b.id === id);
+      if (bench === undefined) return;
+      // SPEC §5.6/§8: the same confirm toggle that guards deleting a model.
+      if (confirmDeleteModel && !window.confirm(`Delete the bench "${bench.name}"?`)) return;
+      // Only this bench's run. There is at most one, but aborting blind
+      // would take down a run the user never asked to stop.
+      if (benchRunRef.current?.benchId === id) benchRunRef.current.controller.abort();
+      commitBenches(benchesRef.current.filter((b) => b.id !== id));
+      setActiveBenchId((prev) => (prev === id ? null : prev));
+    },
+    [commitBenches, confirmDeleteModel],
+  );
+
+  const renameBench = useCallback(
+    (id: string, name: string) => {
+      const trimmed = name.trim();
+      if (trimmed === "") return;
+      commitBenches(benchesRef.current.map((b) => (b.id === id ? { ...b, name: trimmed } : b)));
+    },
+    [commitBenches],
+  );
+
+  const addToBench = useCallback(
+    (text: string, model?: string): string | null => {
+      const trimmed = text.trim();
+      if (trimmed === "") return null;
+      const session = sessionsRef.current.find((s) => s.id === activeSessionIdRef.current);
+      const tag = model ?? session?.model ?? activeModelRef.current?.variant ?? null;
+      if (tag === null) return null;
+      const all = benchesRef.current;
+      // The open bench first, so repeated captures land where the user is
+      // looking; otherwise any bench on this model; otherwise a new one.
+      const open = all.find((b) => b.id === activeBenchIdRef.current && b.model === tag);
+      const target = open ?? all.find((b) => b.model === tag) ?? null;
+      if (target === null) {
+        const bench = addPrompt(makeBench(defaultBenchName(tag), tag), trimmed);
+        commitBenches([bench, ...all]);
+        return bench.id;
+      }
+      const next = addPrompt(target, trimmed);
+      // Content-addressed: the same prompt twice changes nothing, and
+      // rewriting storage for a no-op would be a lie in the file.
+      if (next !== target) {
+        commitBenches(all.map((b) => (b.id === target.id ? next : b)));
+      }
+      return target.id;
+    },
+    [commitBenches],
+  );
+
+  const removeBenchPrompt = useCallback(
+    (benchId: string, promptId: string) => {
+      commitBenches(
+        benchesRef.current.map((b) => (b.id === benchId ? removePrompt(b, promptId) : b)),
+      );
+    },
+    [commitBenches],
+  );
+
+  const cancelBenchRun = useCallback(() => {
+    benchRunRef.current?.controller.abort();
+  }, []);
+
+  const startBenchRun = useCallback(
+    async (benchId: string) => {
+      const bench = benchesRef.current.find((b) => b.id === benchId);
+      if (bench === undefined || bench.prompts.length === 0) return;
+      // SPEC §8, one generation at a time, app-wide — chat, compare and
+      // bench all queue behind each other rather than racing.
+      if (
+        benchRunRef.current !== null ||
+        streamsRef.current.size > 0 ||
+        compareRunRef.current !== null
+      ) {
+        return;
+      }
+      const controller = new AbortController();
+      benchRunRef.current = { controller, benchId };
+      // One seed, drawn once, held across every prompt of the run (T5).
+      const seed = randomSeed();
+      // The T1 snapshot this ran against: the newest Modelfile saved for
+      // this tag. null when the tag has no history — an honest "unknown"
+      // rather than a snapshot id that names the wrong text.
+      const snapshotId = snapshotsForTag(historyRef.current, bench.model)[0]?.id ?? null;
+      setBenchProgress({ benchId, seed, done: 0, total: bench.prompts.length, results: [] });
+      try {
+        const run = await runBench({
+          bench,
+          seed,
+          snapshotId,
+          signal: controller.signal,
+          chat: (messages, opts) =>
+            client.chat(bench.model, messages, {
+              keepAlive,
+              signal: opts.signal,
+              // The pinned seed is the whole point; nothing else is
+              // overridden, so a bench measures the model as configured.
+              options: { seed: opts.seed },
+            }),
+          onResult: (result, done, total) => {
+            setBenchProgress((prev) =>
+              prev === null || prev.benchId !== benchId
+                ? prev
+                : { ...prev, done, total, results: [...prev.results, result] },
+            );
+          },
+        });
+        // One write, at the end: a cancelled run still records the rows it
+        // finished, marked partial (T5).
+        commitBenches(
+          benchesRef.current.map((b) => (b.id === benchId ? appendRun(b, run) : b)),
+        );
+        void syncModels().catch(() => {});
+      } finally {
+        benchRunRef.current = null;
+        setBenchProgress(null);
+      }
+    },
+    [client, commitBenches, keepAlive, syncModels],
+  );
+
   const saveDraft = useCallback(
     async (asName?: string, quantize?: string) => {
       const draft = editorDraftRef.current;
@@ -1794,6 +2035,17 @@ export function RemudaProvider({
     setEditorPane,
     restoreSnapshot,
     promoteToSystem,
+    benches,
+    activeBenchId,
+    benchProgress,
+    createBench,
+    openBench,
+    deleteBench,
+    renameBench,
+    addToBench,
+    removeBenchPrompt,
+    startBenchRun,
+    cancelBenchRun,
   }), [
     client, status, checked, models, groups, running, loaded, activeModel, keepAlive,
     confirmDeleteModel, setConfirmDeleteModel, view, setView, loadPaneOpen,
@@ -1809,6 +2061,8 @@ export function RemudaProvider({
     revertEditor, saving, saveError, reloadToast, saveDraft,
     modelfileHistory, historyForTag, editorPane, setEditorPane, restoreSnapshot,
     promoteToSystem,
+    benches, activeBenchId, benchProgress, createBench, openBench, deleteBench,
+    renameBench, addToBench, removeBenchPrompt, startBenchRun, cancelBenchRun,
   ]);
 
   return <RemudaContext.Provider value={value}>{children}</RemudaContext.Provider>;

@@ -317,3 +317,47 @@ describe("the schema editor", () => {
     expect(await screen.findByLabelText("Tool schema")).toHaveValue("[]");
   });
 });
+
+describe("layer 2 — pane help (R5)", () => {
+  it("renders the toggle and shows the strip open on first sight", async () => {
+    renderPane(client(["tools"]));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument());
+
+    const toggle = screen.getByRole("button", { name: "About this pane" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("region", { name: "About Tools — see what the model actually calls" }),
+    ).toBeInTheDocument();
+  });
+
+  it("dismissing the strip persists the close", async () => {
+    renderPane(client(["tools"]));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close help for Tools/ }));
+    expect(
+      screen.queryByRole("region", { name: "About Tools — see what the model actually calls" }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("remuda.help.v1")).toContain("tools");
+  });
+});
+
+describe("layer 1 — the empty state (R5)", () => {
+  it("explains itself before any call has been made", async () => {
+    renderPane(client(["tools"]));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument());
+
+    expect(
+      screen.getByText("See exactly what the model calls, and whether it got it right"),
+    ).toBeInTheDocument();
+  });
+
+  it("goes away once a call is on the transcript", async () => {
+    const c = client(["tools"], callChunk("get_weather", { city: "Wellington" }));
+    await ask(c);
+
+    expect(
+      screen.queryByText("See exactly what the model calls, and whether it got it right"),
+    ).not.toBeInTheDocument();
+  });
+});

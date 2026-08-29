@@ -30,6 +30,7 @@ import {
   template as templateOf,
 } from "../../modelfile";
 import { copyText } from "../../chat/ReplyMenu";
+import { PaneHelp, PaneHelpToggle } from "../../help/PaneHelp";
 import { analyseTemplate, declaredRenderer } from "./analyse";
 import {
   renderTemplate,
@@ -207,7 +208,25 @@ export function PromptView() {
             </>
           )}
         </span>
+        <span className="spacer" />
+        <PaneHelpToggle paneId="prompt" />
       </div>
+
+      <PaneHelp
+        paneId="prompt"
+        title="Prompt — the exact text the model receives"
+        what="Your SYSTEM and your messages don’t reach the model as you wrote them — Ollama pours them into the model’s own template, which adds the control tokens that family expects."
+        why="This pane shows the result, so a system prompt that never reaches the model is obvious here instead of invisible from the chat window."
+        steps={[
+          "Left is the template Ollama reports; the highlighted words are its slots.",
+          "Right is the same template with your current chat filled in.",
+          <>
+            Watch the <b>references .System</b> check — if it goes red, your system prompt is
+            being dropped before the model ever sees it.
+          </>,
+        ]}
+      />
+
       <div className="split prompt-split">
         <div className="col">
           <div className="col-h">

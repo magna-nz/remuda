@@ -4,8 +4,9 @@
  * flips, and a template outside the subset falls back to the raw text
  * instead of a guess.
  */
+import "../../chat/test/localStorage";
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { EditorView } from "../EditorView";
 import { TopNav } from "../../ui/TopNav";
 import { RemudaProvider } from "../../ui/state";
@@ -90,7 +91,10 @@ describe("PromptView", () => {
     expect(rendered.querySelector(".slotfill")?.textContent).toBe(
       "You are terse. Answer in one line.",
     );
-    expect(screen.getByText(/references/).textContent).toContain("✓ references");
+    // Anchored on the ✓: the pane's own help strip also mentions
+    // "references .System" in its third step, so a bare /references/ regex
+    // now matches two elements.
+    expect(screen.getByText(/✓ references/).textContent).toContain("✓ references");
   });
 
   it("goes red when the template cannot see the system prompt", async () => {
@@ -151,5 +155,31 @@ describe("PromptView — Jinja templates", () => {
     // indicator, and the right-hand pane, in place of a render.
     expect(screen.getAllByText(/Jinja/).length).toBeGreaterThanOrEqual(2);
     expect(screen.queryByText(/unsupported action/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("PromptView — layer 2 pane help (R5)", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("renders the toggle and shows the strip open on first sight", async () => {
+    await openPrompt(WITH_SYSTEM);
+
+    const toggle = screen.getByRole("button", { name: "About this pane" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    expect(
+      screen.getByRole("region", { name: "About Prompt — the exact text the model receives" }),
+    ).toBeInTheDocument();
+  });
+
+  it("dismissing the strip persists the close", async () => {
+    await openPrompt(WITH_SYSTEM);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Close help for Prompt/ }));
+    expect(
+      screen.queryByRole("region", { name: "About Prompt — the exact text the model receives" }),
+    ).not.toBeInTheDocument();
+    expect(window.localStorage.getItem("remuda.help.v1")).toContain("prompt");
   });
 });

@@ -341,3 +341,53 @@ enum, `breaking` boolean.
 
 **Gates:** `npm run typecheck`, `npm test` (696 passed, 46 files),
 `npm run build` — all clean.
+
+### Wave 3 — R4 Bench + R5 layer 1 and wiring · complete, all gates green
+
+**3A [opus-5] — R4.** New `app/src/bench/`, plus `ui/Sidebar.tsx`,
+`chat/ReplyMenu.tsx`, `ui/state.tsx`.
+
+- `words.ts` **reuses `editor/diff.ts`** rather than writing a second LCS:
+  words are fed to `diffLines` one per line and the returned indices look the
+  original whitespace back up.
+- `run.ts` takes a `BenchChat` callback, not a client, so all four run rules
+  are testable without a server or a render.
+- `ReplyMenu`'s items are now individually optional, so one component serves
+  an assistant message (the full menu) and a user message (capture alone).
+- Two states beyond T5's three: `new` (nothing to compare a first run
+  against) and `pending` (cancelled before this prompt was reached). Both
+  appear in the tally only when non-zero.
+- A cancel mid-prompt **drops that row** rather than storing a half-streamed
+  answer, which would diff as `changed` for a reason that has nothing to do
+  with the model.
+
+**3B [sonnet-5] — R5 layer 1 and wiring.** `format/FormatPane`,
+`editor/prompt/PromptView`, `tools/ToolsView`, `ui/Settings`.
+
+- `PaneHelp` wired into three panes with stable ids; layer-1 empty states for
+  Format and Tools.
+- Settings gains a **Help** section: the tour row ships genuinely `disabled`
+  with an honest tooltip rather than a stub that pretends to work, *Reopen
+  all* calls `reopenAll()`, and the glossary renders inline from `GLOSSARY`.
+
+**Wiring finished in the main thread.** 3A delivered Bench **complete and
+unreachable**: `App.tsx`'s panel router had no `bench` branch, so `openBench`
+set the view and fell through to `<ChatView />`; and capture had no home,
+because `ChatView` renders a reply menu only for assistant messages. Both
+files were outside 3A's scope and it stopped rather than widening it, which
+was right. Added here: the `bench` branch, and a separate `promptMenu` for
+user messages — its own function rather than a widened `replyMenu`, since
+none of that menu's items mean anything on a prompt.
+
+The reachability test renders the **real `App`** rather than a harness, and
+was confirmed to fail with the router branch removed.
+
+**Verified live** against Ollama 0.32.15: captured a prompt from a real chat
+through the message menu, watched the bench appear in the rail as *1 prompt ·
+never run*, and opened it to the run table. A full run against a live model
+was not exercised by hand — the run loop is covered by `run.ts`'s tests.
+Also confirmed `Message.constrained` survives a reload: a restored chat kept
+its conformance card.
+
+**Gates:** `npm run typecheck`, `npm test` (768 passed, 50 files),
+`npm run build` — all clean.

@@ -45,6 +45,10 @@
   color: var(--faint);
 }
 
+.prompt-h .spacer {
+  flex: 1;
+}
+
 .prompt-h .hint b {
   color: var(--ink-2);
   font-weight: 600;

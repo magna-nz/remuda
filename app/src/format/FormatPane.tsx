@@ -21,6 +21,7 @@
 import "./FormatPane.css";
 import type { FormatConfig, FormatMode } from "../chat/sessions";
 import { formatLabel, parseSchema, propertyNames } from "./format";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
 
 const MODES: { value: FormatMode; label: string; title: string }[] = [
   { value: "schema", label: "Schema", title: "Constrain decoding to the JSON Schema below" },
@@ -82,7 +83,6 @@ export function FormatPane({
   // The editor stays live in every mode: a schema you switched away from is
   // one you are coming back to, and clearing it on `off` would be the pane
   // throwing away the user's work to save a field.
-  const inForce = config.mode === "schema";
 
   return (
     <section className="fmtpane" aria-label="Format">
@@ -106,10 +106,24 @@ export function FormatPane({
             </button>
           ))}
         </span>
+        <PaneHelpToggle paneId="format" />
         <button type="button" className="fmtclose" aria-label="Close Format" onClick={onClose}>
           ✕
         </button>
       </div>
+
+      <PaneHelp
+        paneId="format"
+        title="Format — force the reply into a shape"
+        what="Ollama restricts what the model is allowed to say next so that the answer always fits the JSON Schema you write here."
+        why="It isn’t an instruction the model can ignore and it isn’t a retry — a malformed reply is simply unreachable."
+        steps={[
+          "Write or paste a JSON Schema below.",
+          "Switch to Schema — every reply now comes back in that shape.",
+          "The card under each reply checks it field by field against your schema.",
+        ]}
+        note="This chat only — there’s no setting for it on a saved model, so there’s nothing to bake in."
+      />
 
       <textarea
         className="fmtbox"
@@ -143,12 +157,50 @@ export function FormatPane({
         </span>
       </div>
 
-      {!inForce && (
+      {config.mode === "json" && (
         <p className="fmtnote" role="note">
-          {config.mode === "json"
-            ? "Replies will be valid JSON, but nothing holds them to this schema."
-            : "Nothing constrains the reply. The schema is kept for when you switch back."}
+          Replies will be valid JSON, but nothing holds them to this schema.
         </p>
+      )}
+
+      {/* Layer 1 — the empty state (R5). Nothing is turned on yet, so the
+          pane explains itself before asking the user to discover the mode
+          switch above on their own. */}
+      {config.mode === "off" && (
+        <div className="fmtempty">
+          <span className="ef-ic">
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={1.8}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M8 4H6a2 2 0 00-2 2v4l-2 2 2 2v4a2 2 0 002 2h2M16 4h2a2 2 0 012 2v4l2 2-2 2v4a2 2 0 01-2 2h-2" />
+            </svg>
+          </span>
+          <h3>Nothing is constrained yet</h3>
+          <p>
+            Turn this on and Ollama restricts what the model can say next, so every reply fits
+            the schema below instead of just being asked nicely to.
+          </p>
+          <ol className="ef-how">
+            <li>
+              <b>1</b>
+              <span>Write or paste a JSON Schema below — a working example is already there.</span>
+            </li>
+            <li>
+              <b>2</b>
+              <span>Switch the mode above from off to Schema.</span>
+            </li>
+            <li>
+              <b>3</b>
+              <span>Chat as normal; the card under each reply checks it field by field.</span>
+            </li>
+          </ol>
+        </div>
       )}
     </section>
   );
