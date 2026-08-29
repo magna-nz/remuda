@@ -20,6 +20,7 @@
 import { useEffect, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import "./ChatView.css";
 import { useRemuda, type LastStats } from "../ui/state";
+import { pasteChord } from "../ui/platform";
 import type { Model, ThinkLevel } from "../api/types";
 import { shortTag, type ChatSession, type Lane, type Message } from "./sessions";
 import { ThinkingBlock } from "./ThinkingBlock";
@@ -1008,7 +1009,7 @@ export function ChatView() {
                 num_ctx {groupDigits(overrides.numCtx)} — the next message reloads the model
               </span>
             )}
-            {canSee && <span className="hint">drop an image in the log, or ⌘V</span>}
+            {canSee && <span className="hint">drop an image in the log, or {pasteChord()}</span>}
           </div>
         </div>
       )}
