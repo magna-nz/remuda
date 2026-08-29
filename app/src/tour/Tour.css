@@ -1,0 +1,182 @@
+/* The guided tour (R6; mockup-proposals-2.html §06 `.tour-spot`, `.tour-card`,
+   `.tour-dots`, `.firstrun`). Every colour is an index.css token. */
+
+/*
+ * The spotlight. The dimming is this element's own box-shadow spread over
+ * the whole viewport rather than a separate scrim — one element, and it
+ * cannot drift out of alignment with the ring it surrounds. A box-shadow
+ * takes no pointer events either, so the app underneath stays clickable,
+ * which is what "runs on the real UI" has to mean.
+ *
+ * `fixed`, not the mockup's `absolute`: the mockup sat inside a fake window
+ * with a positioned ancestor, and getBoundingClientRect gives us viewport
+ * coordinates.
+ */
+.tour-spot {
+  position: fixed;
+  border-radius: 11px;
+  border: 2px solid var(--ember);
+  box-shadow: 0 0 0 9999px rgba(10, 9, 9, 0.72);
+  z-index: 31;
+  pointer-events: none;
+  transition: left 140ms ease, top 140ms ease, width 140ms ease, height 140ms ease;
+}
+
+.tour-card {
+  position: fixed;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 13px;
+  box-shadow: var(--shadow-lg);
+  z-index: 33;
+  overflow: hidden;
+}
+
+.tour-card:focus {
+  outline: none;
+}
+
+.tour-card:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+.tour-card .tc-b {
+  padding: 14px 15px;
+}
+
+.tour-card .tc-step {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--ember-ink);
+}
+
+.tour-card h4 {
+  font-size: 14px;
+  margin: 5px 0 0;
+  color: var(--ink);
+}
+
+.tour-card p {
+  margin: 7px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.tour-card .tc-f {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 13px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.tour-card .tc-f .spacer {
+  flex: 1;
+}
+
+.tour-dots {
+  display: flex;
+  gap: 5px;
+}
+
+.tour-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--border-strong);
+  display: block;
+  transition: width 140ms ease;
+}
+
+.tour-dots i.on {
+  background: var(--ember);
+  width: 16px;
+  border-radius: 999px;
+}
+
+/* The first-run offer: a strip in the shell's flow, never a modal. */
+.firstrun {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  padding: 13px 15px;
+  border-radius: 12px;
+  border: 1px solid color-mix(in srgb, var(--ember) 38%, transparent);
+  background: color-mix(in srgb, var(--ember-tint) 70%, var(--surface));
+  margin: 16px;
+}
+
+.firstrun .fr-ic {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--ember);
+  color: var(--ink);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.firstrun .fr-ic svg {
+  width: 16px;
+  height: 16px;
+}
+
+.firstrun .fr-b {
+  flex: 1;
+  min-width: 0;
+}
+
+.firstrun b {
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.firstrun p {
+  margin: 2px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+/*
+ * R6: a spotlight that glides between two corners of the window is exactly
+ * the motion that makes some people ill. Under reduce it cuts.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .tour-spot,
+  .tour-dots i {
+    transition: none;
+  }
+}
+
+/* The closing card (R6): no spotlight to anchor to, so it centres itself. */
+.tour-closing {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: var(--tour-card-width, 322px);
+}
+.tour-missed {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+.tour-missed b {
+  color: var(--ink);
+  font-weight: 600;
+}
+.tour-closing .tc-note {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 12.5px;
+}

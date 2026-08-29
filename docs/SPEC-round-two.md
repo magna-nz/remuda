@@ -391,3 +391,48 @@ its conformance card.
 
 **Gates:** `npm run typecheck`, `npm test` (768 passed, 50 files),
 `npm run build` — all clean.
+
+### Wave 4 — R6 the guided tour · complete, all gates green
+
+**4A [opus-5] — R6.** New `app/src/tour/`, plus `App.tsx`, `ui/Settings.tsx`,
+and a one-line ref registration in each of `TopNav`, `ViewTabs`, `BenchRail`,
+`FormatPane` and `EditorView`. No component was restructured.
+
+- `steps.ts` holds the five steps as data; `registry.ts` maps step id →
+  live element, so the tour reads the real DOM and never mirrors it.
+- `place.ts` is pure card geometry, which is the only way any of this is
+  testable: jsdom measures every rect as zero.
+- The spotlight's dim is its own 9999px box-shadow and takes no pointer
+  events, so the app stays clickable underneath — the tour is genuinely
+  offered rather than modal.
+- Arrow keys are ignored while the caret is in a text field, since the user
+  can type with the tour up.
+- `setView` refusal is treated as absence: if an unsaved-changes prompt
+  cancels the switch, the step is skipped rather than the tour overriding a
+  save confirmation.
+
+**Fixed in the main thread — the tour ended by vanishing.** Driving it on an
+empty app (the state it is *for*) showed the real failure: the offer promises
+five steps, the card said "Step 3 of 5", and then the tour simply stopped,
+because Format needs a chat open and Prompt needs a draft. Skipping was
+correct; disappearing was not — three of a promised five with no explanation
+reads as the feature breaking.
+
+Steps now carry a `missingNote`, and a **closing card** names what was
+stepped over and why: *Saw 3 of 5 · Format lives in the composer, so it needs
+a chat open · Prompt is part of the Modelfile editor, so it needs a model
+loaded · Run the tour again from Settings once you have a model loaded.* It
+appears on the mostly-complete path too — finishing with one step skipped
+still owes the user that account.
+
+Also removed a stale comment in `EditorView.tsx` claiming Prompt was held
+outside `EditorPane`; wave 2 moved it into the union and the comment had come
+to describe the opposite of the code.
+
+**Verified live** against Ollama 0.32.15 with nothing loaded: the offer
+renders as a banner (the app stays usable behind it), the spotlight rings the
+model control, `→` advances, the view switches on step 2, and the closing card
+appears with both skipped steps named.
+
+**Gates:** `npm run typecheck`, `npm test` (800 passed, 54 files),
+`npm run build` — all clean.

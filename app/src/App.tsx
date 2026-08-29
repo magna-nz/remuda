@@ -12,6 +12,8 @@ import { TopNav } from "./ui/TopNav";
 import { PullView } from "./pull/PullView";
 import { ToolsView } from "./tools/ToolsView";
 import { BenchView } from "./bench/BenchView";
+import { FirstRunOffer } from "./tour/FirstRunOffer";
+import { Tour } from "./tour/Tour";
 
 function MainPanel() {
   const { view } = useRemuda();
@@ -31,6 +33,9 @@ function Shell() {
     <div className="app">
       <TopNav />
       <OfflineBanner />
+      {/* R6: the tour is offered in the shell's flow, above the body — a
+          card the user can ignore, never a modal in front of the app. */}
+      <FirstRunOffer />
       <div className="body">
         <Sidebar />
         <main className="main">
@@ -42,6 +47,7 @@ function Shell() {
       </div>
       <LoadPane />
       <ReloadToast />
+      <Tour />
     </div>
   );
 }

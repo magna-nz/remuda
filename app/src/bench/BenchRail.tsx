@@ -14,14 +14,18 @@
 import "./BenchRail.css";
 import { benchSubtitle } from "./benches";
 import { useRemuda } from "../ui/state";
+import { useTourTarget } from "../tour/registry";
 
 export function BenchRail() {
   const { benches, activeBenchId, view, openBench, deleteBench, createBench, activeModel } =
     useRemuda();
+  // R6 step 3's target. The header is here whether or not a bench is, which
+  // is what makes the step safe on an app with nothing in it yet.
+  const tourRef = useTourTarget("bench");
 
   return (
     <>
-      <div className="side-label">
+      <div className="side-label" ref={tourRef}>
         Benches
         <button
           type="button"

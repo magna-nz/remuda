@@ -6,6 +6,7 @@ import { RemudaProvider } from "./state";
 import { FakeClient } from "./test/FakeClient";
 import { GLOSSARY } from "../help/glossary";
 import { isPaneHelpOpen, setPaneHelpOpen } from "../help/persistence";
+import { isTourRunning, stopTour } from "../tour/controller";
 
 const SETTINGS_KEY = "remuda.settings.v1";
 
@@ -144,7 +145,10 @@ describe("Settings", () => {
 });
 
 describe("Help section (R5)", () => {
-  it("renders the guided tour row disabled, since the tour isn't built yet", () => {
+  // R6 shipped the tour, so this row is live: the button is enabled, and
+  // pressing it starts the tour (asserted end to end in tour/Tour.test.tsx,
+  // which has the App around it to run one in).
+  it("renders the guided tour row live", () => {
     const client = new FakeClient({ connected: true });
     render(
       <RemudaProvider client={client} pollIntervalMs={1_000_000}>
@@ -152,7 +156,12 @@ describe("Help section (R5)", () => {
       </RemudaProvider>,
     );
 
-    expect(screen.getByRole("button", { name: "Run the tour" })).toBeDisabled();
+    const run = screen.getByRole("button", { name: "Run the tour" });
+    expect(run).toBeEnabled();
+    expect(isTourRunning()).toBe(false);
+    fireEvent.click(run);
+    expect(isTourRunning()).toBe(true);
+    stopTour();
   });
 
   it("'Reopen all' restores a pane dismissed elsewhere", () => {

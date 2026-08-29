@@ -22,6 +22,7 @@ import "./FormatPane.css";
 import type { FormatConfig, FormatMode } from "../chat/sessions";
 import { formatLabel, parseSchema, propertyNames } from "./format";
 import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
+import { useTourTarget } from "../tour/registry";
 
 const MODES: { value: FormatMode; label: string; title: string }[] = [
   { value: "schema", label: "Schema", title: "Constrain decoding to the JSON Schema below" },
@@ -44,9 +45,14 @@ export function FormatPill({
   onToggle: () => void;
 }) {
   const mode = config?.mode ?? "off";
+  // R6 step 4's target. The pill only exists once there is a chat to hang it
+  // off, so on an empty app the tour skips that step rather than pointing at
+  // nothing.
+  const tourRef = useTourTarget("format");
   return (
     <button
       type="button"
+      ref={tourRef}
       className={`runpill${mode === "off" ? "" : " dirty"}`}
       aria-expanded={open}
       onClick={onToggle}

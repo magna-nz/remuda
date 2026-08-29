@@ -18,6 +18,7 @@ import { SaveAsDialog } from "./SaveAsDialog";
 import { HistoryView } from "./HistoryView";
 import { PromptView } from "./prompt/PromptView";
 import { passthroughKinds } from "./passthrough";
+import { useTourTarget } from "../tour/registry";
 import {
   from,
   parameters,
@@ -71,18 +72,11 @@ export function EditorView() {
   const [addingStop, setAddingStop] = useState(false);
   const [stopDraft, setStopDraft] = useState("");
   /**
-   * The Prompt segment (SPEC-round-two.md R3), held here rather than in
-   * `EditorPane`.
-   *
-   * Prompt is a *read-only* view of the draft — nothing outside this
-   * component ever needs to route to it, unlike Raw (Restore switches to it)
-   * or Form (promote-to-system does). Keeping it local means the store's
-   * `EditorPane` union is untouched and every existing `setEditorPane` call
-   * still means what it said. The effect below is the one thing that costs:
-   * an external switch to Raw or Form has to pull the user off Prompt, or
-   * they would sit on a pane that has silently stopped being what they
-   * asked for.
+   * R6 step 5's target — the Form · Raw · Prompt · History group, which only
+   * exists once a draft is open. With no model there is no draft, so the tour
+   * skips the step instead of ringing an empty pane.
    */
+  const segRef = useTourTarget("prompt");
   // Resync the raw pane from the doc only at "external" moments — opening a
   // model, opening a new one, reverting, or a completed save — all of which
   // replace `savedDoc`. Ordinary form edits update `rawText` directly (see
@@ -209,7 +203,7 @@ export function EditorView() {
             History and Prompt replace the two columns; Form and Raw give one
             of them the room — and, when the window is too narrow for SPEC
             §5.4's two columns, decide which one is on screen. */}
-        <div className="seg" role="group" aria-label="Editor view">
+        <div className="seg" role="group" aria-label="Editor view" ref={segRef}>
           {segment("form", "Form")}
           {segment("raw", "Raw")}
           {segment("prompt", "Prompt")}

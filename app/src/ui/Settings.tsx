@@ -20,6 +20,7 @@ import { DEFAULT_BASE_URL, type KeepAlive } from "../api/types";
 import { openExternal } from "../api/host";
 import { GLOSSARY } from "../help/glossary";
 import { reopenAll } from "../help/persistence";
+import { startTour } from "../tour/controller";
 
 type TestResult = "idle" | "testing" | "healthy" | "unreachable";
 
@@ -197,12 +198,9 @@ export function Settings() {
               and Prompt.
             </div>
           </div>
-          <button
-            type="button"
-            className="btn sm"
-            disabled
-            title="Arrives with the guided tour — not built yet"
-          >
+          {/* R6: the tour's permanent home. It puts the app back where it
+              found it on the way out, so this row is where you land again. */}
+          <button type="button" className="btn sm" onClick={() => startTour()}>
             Run the tour
           </button>
         </div>

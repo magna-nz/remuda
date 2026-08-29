@@ -9,6 +9,7 @@ import "./ViewTabs.css";
 import { toolCapableModel } from "../tools/gate";
 import { useRemuda } from "../ui/state";
 import type { View } from "../ui/state";
+import { useTourTarget } from "../tour/registry";
 
 export function ViewTabs() {
   const { view, setView, editorDraft, activeModel, openEditor, models } = useRemuda();
@@ -17,9 +18,24 @@ export function ViewTabs() {
   // An empty list means the server didn't say, and the tab does not appear.
   const toolCapable = toolCapableModel(models, activeModel) !== null;
 
-  const tab = (target: View, label: string, opts?: { disabled?: boolean; title?: string; onClick?: () => void }) => (
+  // R6 step 2's target. The tab strip is chrome — it is on screen whether or
+  // not anything is loaded — so this step survives a first launch with no
+  // Ollama, which is the point of registering the tab rather than the pane.
+  const modelfileTabRef = useTourTarget("modelfile");
+
+  const tab = (
+    target: View,
+    label: string,
+    opts?: {
+      disabled?: boolean;
+      title?: string;
+      onClick?: () => void;
+      ref?: (el: HTMLElement | null) => void;
+    },
+  ) => (
     <button
       type="button"
+      ref={opts?.ref}
       className={`tab${view === target ? " active" : ""}`}
       aria-current={view === target || undefined}
       disabled={opts?.disabled}
@@ -50,6 +66,7 @@ export function ViewTabs() {
         disabled: !editorDraft && !activeModel,
         title: !editorDraft && !activeModel ? "Load a model first" : undefined,
         onClick: openModelfileTab,
+        ref: modelfileTabRef,
       })}
       {toolCapable && tab("tools", "Tools")}
     </div>
