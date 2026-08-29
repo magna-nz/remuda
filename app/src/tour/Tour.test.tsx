@@ -154,6 +154,10 @@ describe("a first launch with no Ollama", () => {
     expect(screen.getByText(/needs a chat open/)).toBeInTheDocument();
     expect(screen.getByText(/needs a model loaded/)).toBeInTheDocument();
 
+    // Focus follows the closing card. It replaces the step card without
+    // changing the spotlight, so nothing else would move it.
+    expect(document.activeElement).toBe(screen.getByRole("dialog"));
+
     fireEvent.click(screen.getByRole("button", { name: "Done" }));
     expect(isTourRunning()).toBe(false);
 

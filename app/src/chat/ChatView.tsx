@@ -345,6 +345,7 @@ export function ChatView() {
     lastStats,
     statsByMessage,
     compareRun,
+    benchProgress,
     sendMessage,
     cancelGeneration,
     setSessionOptions,
@@ -403,7 +404,12 @@ export function ChatView() {
   const compareHere = compareRun !== null && compareRun.sessionId === session.id;
   // A compare run holds the app-wide guard across the gap between its lanes,
   // so "something is generating" is the union of the two.
-  const streaming = streamingSessionId !== null || compareRun !== null;
+  // A bench replay is a generation like any other, and SPEC §8's "one at a
+  // time" is enforced app-wide in the store. Leaving it out here left Send
+  // enabled through a replay that can run for minutes: the store refused the
+  // send and the composer said nothing, so the message just sat there.
+  const streaming =
+    streamingSessionId !== null || compareRun !== null || benchProgress !== null;
   const streamingHere = streamingSessionId === session.id;
   const busyHere = streamingHere || compareHere;
   const last = session.messages[session.messages.length - 1];

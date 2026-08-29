@@ -408,3 +408,39 @@ describe("Bench is reachable from the real app", () => {
     expect(screen.getByRole("button", { name: "Run all" })).toBeInTheDocument();
   });
 });
+
+/**
+ * SPEC §8 is one generation at a time, app-wide, and the store enforces it by
+ * silently refusing. A control left enabled through a refusal is a dead
+ * button — the user presses Send and nothing happens at all, with the message
+ * still sitting in the box and no explanation. A bench replay runs one chat
+ * call per prompt, so that window is minutes wide, not milliseconds.
+ */
+describe("the one-generation-at-a-time guard is visible, not just enforced", () => {
+  it("disables the chat composer while a bench replay is in flight", async () => {
+    window.localStorage.setItem(
+      "remuda.sessions.v1",
+      JSON.stringify([
+        {
+          id: "s-1",
+          title: "Tuning",
+          model: MODEL,
+          updatedAt: new Date().toISOString(),
+          messages: [],
+        },
+      ]),
+    );
+    seedBench({ prompts: [{ id: "p-1", text: "Explain a mutex in one line." }] });
+    // No emitChat(): the bench's first prompt hangs, holding the run open.
+    render(<App client={new FakeClient({ models: models() })} />);
+    await untilLoaded();
+
+    fireEvent.click(screen.getByText("Coding voice"));
+    fireEvent.click(screen.getByRole("button", { name: "Run all" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument());
+
+    // Now walk into the chat the way a user would, mid-replay.
+    fireEvent.click(screen.getByText("Tuning"));
+    expect(screen.getByRole("button", { name: /Send/ })).toBeDisabled();
+  });
+});

@@ -211,9 +211,12 @@ function TourRun() {
   // be and a screen reader reads the new step rather than staying wherever
   // the last click left it.
   useEffect(() => {
-    if (box === null) return;
+    // `closing` is in the deps because the closing card replaces the step
+    // card without touching `box` or `index` — without it, focus would be
+    // left on the Next button that just unmounted, i.e. on nothing.
+    if (box === null && !closing) return;
     cardRef.current?.focus();
-  }, [box, index]);
+  }, [box, index, closing]);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {

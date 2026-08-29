@@ -192,7 +192,11 @@ export function BenchView() {
     cancelBenchRun,
     removeBenchPrompt,
     renameBench,
+    streamingSessionId,
+    compareRun,
   } = useRemuda();
+  /** A chat or an A/B pair mid-flight; a bench must queue behind it (SPEC §8). */
+  const elsewhereBusy = streamingSessionId !== null || compareRun !== null;
   const [selectedRunId, setSelectedRunId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
 
@@ -291,8 +295,16 @@ export function BenchView() {
           <button
             type="button"
             className="btn sm primary"
-            disabled={bench.prompts.length === 0}
-            title={bench.prompts.length === 0 ? "Add a prompt first" : undefined}
+            // Same SPEC §8 guard the store enforces. Without it the button
+            // looked live during a chat stream and did nothing when pressed.
+            disabled={bench.prompts.length === 0 || elsewhereBusy}
+            title={
+              bench.prompts.length === 0
+                ? "Add a prompt first"
+                : elsewhereBusy
+                  ? "Something else is generating — Remuda runs one at a time"
+                  : undefined
+            }
             onClick={() => void startBenchRun(bench.id)}
           >
             Run all

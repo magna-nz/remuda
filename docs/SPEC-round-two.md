@@ -436,3 +436,36 @@ appears with both skipped steps named.
 
 **Gates:** `npm run typecheck`, `npm test` (800 passed, 54 files),
 `npm run build` — all clean.
+
+### Review pass — `/code-review high`
+
+Twelve findings across the four waves. Ten were fixed as they were found (the
+first eight are already described in the wave entries above); the two left
+open are recorded here rather than silently dropped.
+
+**Fixed in this pass:**
+
+- **The one-generation-at-a-time guard was enforced but invisible.**
+  `SPEC §8` is app-wide and the store honours it by *silently returning*.
+  Neither UI reflected it, so both had a dead button. `ChatView`'s `streaming`
+  omitted bench runs, leaving Send enabled through a replay that runs one chat
+  call per prompt — press it and the message just sits there. `BenchView`'s
+  **Run all** had the mirror problem during a chat stream. Both now disable,
+  and Run all says why. Confirmed by reverting each fix and watching the new
+  test fail.
+- **The tour's closing card never took focus.** The focus effect keyed on
+  `[box, index]`, neither of which changes when the closing card replaces the
+  step card, so focus fell to `<body>` and the Tab trap had nothing to hold.
+
+**Left open, deliberately:**
+
+- `addToBench` no-ops silently on a duplicate prompt. Content-addressing is
+  right; the silence is not, but the fix is a toast and this round has no
+  toast surface.
+- `finish()` restores the view captured at tour start, which discards any
+  navigation the user made during the tour. Correct for the tour's own view
+  switches, wrong for the user's — worth splitting, but not without deciding
+  what "the user moved" means while a step is driving the view.
+
+**Gates:** `npm run typecheck`, `npm test` (801 passed, 54 files),
+`npm run build` — all clean.
