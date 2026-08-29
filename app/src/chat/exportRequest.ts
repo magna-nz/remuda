@@ -171,7 +171,7 @@ export function asOllamaRun(input: ExportInput): string {
 
   if (input.think !== undefined) {
     lines.push(
-      `# think: ${input.think} can't be reproduced here — it's an /api/chat request field, not a PARAMETER 'ollama run' understands`,
+      `# think: ${input.think} can't be reproduced here. It's an /api/chat request field, not a PARAMETER 'ollama run' understands`,
     );
   }
 
@@ -181,14 +181,14 @@ export function asOllamaRun(input: ExportInput): string {
     // decoding at all. A command that dropped it silently would produce
     // unconstrained output while looking like a faithful reproduction.
     lines.push(
-      "# format: constrained output can't be reproduced here — it's an /api/chat request field, and there is no PARAMETER format",
+      "# format: constrained output can't be reproduced here. It's an /api/chat request field, and there is no PARAMETER format",
     );
   }
 
   const hasImages = input.messages.some((m) => m.images !== undefined && m.images.length > 0);
   if (hasImages) {
     lines.push(
-      "# one or more messages attached images — 'ollama run' takes a local file path, not embedded image data, so they are not reproduced here",
+      "# one or more messages attached images. 'ollama run' takes a local file path, not embedded image data, so they are not reproduced here",
     );
   }
 
@@ -197,7 +197,7 @@ export function asOllamaRun(input: ExportInput): string {
     userMessages.length > 1 || input.messages.some((m) => m.role === "assistant" || m.role === "system");
   if (hasEarlierTurns) {
     lines.push(
-      "# only the final prompt is shown below — 'ollama run' can't replay a full multi-turn conversation in one command",
+      "# only the final prompt is shown below. 'ollama run' can't replay a full multi-turn conversation in one command",
     );
   }
 

@@ -115,8 +115,8 @@ the chat window and obvious here.
   `ModelDetail.template`. No new request.
 - **The renderer is a documented subset**, not a Go `text/template`
   implementation: `if`, `range`, `.System`, `.Prompt`, `.Messages`, `.Role`,
-  `.Content`, `.Tools`. Anything outside it renders as *"unsupported template
-  action — showing the raw template"* rather than a guess. A wrong render is
+  `.Content`, `.Tools`. Anything outside it renders as *"Unsupported template
+  action {{ … }}. Showing the raw template."* rather than a guess. A wrong render is
   worse than an absent one.
 - The left footer carries the check that is the point of the pane: **references
   `.System`**, red when the template cannot see the system prompt.

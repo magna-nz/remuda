@@ -38,7 +38,7 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
         className="sess-open"
         onClick={() => openSession(session.id)}
         aria-current={active || undefined}
-        title={`${tag} — ${state}`}
+        title={`${tag}, ${state}`}
       >
         <div className="strow">
           <span className={isLoaded ? "sdot" : "sdot off"} aria-hidden="true" />
@@ -139,7 +139,7 @@ export function Sidebar() {
         {filtered.length === 0 ? (
           <p className="empty-note">
             {sessions.length === 0
-              ? "No chats yet — load a model, then start one."
+              ? "No chats yet. Load a model, then start one."
               : "No chats match."}
           </p>
         ) : (

@@ -54,7 +54,7 @@ export type ConformStatus =
 
 export interface Conformance {
   status: ConformStatus;
-  /** The card's headline: "Conforms", "Cut off — not valid JSON", … */
+  /** The card's headline: "Conforms", "Cut off, not valid JSON", … */
   headline: string;
   /** The right-hand detail: property counts, or the cause of the cut. */
   summary: string;
@@ -323,7 +323,7 @@ export function conformance(
     if (!scan.complete) {
       return {
         status: "truncated",
-        headline: "Cut off — not valid JSON",
+        headline: "Cut off, not valid JSON",
         summary:
           numPredict === undefined
             ? "num_predict ran out before the reply closed"
@@ -345,7 +345,7 @@ export function conformance(
     return {
       status: "conforms",
       headline: "Valid JSON",
-      summary: "json mode — the shape was not constrained",
+      summary: "json mode, the shape was not constrained",
       rows: [],
     };
   }

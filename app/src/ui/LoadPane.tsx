@@ -162,7 +162,7 @@ function MemorySlot({
             type="button"
             className="btn sm ghost"
             disabled={busy || disabled}
-            title={kept ? `Let ${entry.tag} expire again` : `Keep ${entry.tag} in memory — no expiry`}
+            title={kept ? `Let ${entry.tag} expire again` : `Keep ${entry.tag} in memory, no expiry`}
             onClick={() => onKeep(!kept)}
           >
             {kept ? "Let expire" : "Keep"}
@@ -374,7 +374,7 @@ function FitPanel({
       : "Estimated · assumes an f16 KV cache · load once to calibrate"
     : archParams === null
       ? "The server didn't say enough to predict. Load it and Remuda will measure."
-      : "Available inside the Remuda desktop app — load it and Remuda will measure from /api/ps.";
+      : "Available inside the Remuda desktop app. Load it and Remuda will measure from /api/ps.";
 
   // calibrationVersion has no direct reader: re-reading calibrationFactorFor
   // above on every render is what actually picks up a fresh write, and this
@@ -464,7 +464,7 @@ function FitPanel({
             {numGpu === null
               ? "Auto lets Ollama decide how many layers fit on the GPU."
               : numGpu === 0
-                ? "No layers on the GPU — the model runs entirely on CPU."
+                ? "No layers on the GPU. The model runs entirely on CPU."
                 : `${numGpu} of ${archParams.blockCount} transformer layers on the GPU.`}
           </span>
           {numGpu !== null && (
@@ -1021,7 +1021,7 @@ export function LoadPane() {
                 </div>
                 {droppedVariant !== null && (
                   <div className="pnote">
-                    {shortTag(droppedVariant)} is built on the other quantisation — reset to Original (base).
+                    {shortTag(droppedVariant)} is built on the other quantisation. Reset to Original (base).
                   </div>
                 )}
               </div>
@@ -1080,7 +1080,7 @@ export function LoadPane() {
                     <div className="pptext">
                       {phase === "done"
                         ? `✓ ${variantTag} loaded and ready`
-                        : `Loading ${variantTag} — pulling weights into memory…`}
+                        : `Loading ${variantTag}, pulling weights into memory…`}
                     </div>
                   </div>
                 )}

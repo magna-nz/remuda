@@ -82,7 +82,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  */
 export function parseSchema(text: string): ParsedSchema {
   if (text.trim() === "") {
-    return { schema: null, error: "the response schema is empty — write one, or switch to json" };
+    return { schema: null, error: "the response schema is empty. Write one, or switch to json" };
   }
   let parsed: unknown;
   try {
@@ -143,7 +143,7 @@ export function wireFormat(config: FormatConfig | undefined): WireFormat {
   const { schema, error } = parseSchema(config.text);
   if (schema === null) {
     return {
-      error: `The response schema doesn’t parse (${error ?? "invalid JSON"}) — nothing was sent. Fix it in the Format pane, or switch the constraint off.`,
+      error: `The response schema doesn’t parse (${error ?? "invalid JSON"}). Nothing was sent. Fix it in the Format pane, or switch the constraint off.`,
     };
   }
   return { format: schema, error: null };

@@ -25,7 +25,7 @@ import { relativeTime } from "../chat/sessions";
 /** The summary line under a timeline entry: this snapshot vs the one before it. */
 function entrySummary(snapshot: ModelfileSnapshot, older: ModelfileSnapshot | undefined): string {
   if (older === undefined) {
-    return snapshot.kind === "saveas" ? "forked — first snapshot" : "first snapshot";
+    return snapshot.kind === "saveas" ? "forked, first snapshot" : "first snapshot";
   }
   return formatSummary(summarize(older.rawText, snapshot.rawText));
 }
@@ -49,7 +49,7 @@ export function HistoryView({ rawText }: { rawText: string }) {
     return (
       <div className="histwrap empty">
         <p>
-          This Modelfile has no target yet — <b>Save as…</b> names it, and that first save
+          This Modelfile has no target yet. <b>Save as…</b> names it, and that first save
           starts its history.
         </p>
       </div>
@@ -60,7 +60,7 @@ export function HistoryView({ rawText }: { rawText: string }) {
       <div className="histwrap empty">
         <p>
           No snapshots for <code>{tag}</code> yet. Every <b>Save</b> and <b>Save as…</b> records
-          one — nothing else does.
+          one, and nothing else does.
         </p>
       </div>
     );
@@ -125,7 +125,7 @@ export function HistoryView({ rawText }: { rawText: string }) {
           {unchanged ? (
             <div className="dl hunk">
               <span className="gut" />
-              <span className="txt">no difference — this is the working text</span>
+              <span className="txt">no difference, this is the working text</span>
             </div>
           ) : (
             lines.map((line, i) => (

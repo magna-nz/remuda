@@ -105,7 +105,7 @@ describe("ChatView", () => {
     const client = new FakeClient({ models: [makeModel({ tag: "llama3.1:8b" })] });
     renderChat(client);
     // Give the health check time to land; the button must stay disabled.
-    await screen.findByText("No chats yet — load a model, then start one.");
+    await screen.findByText("No chats yet. Load a model, then start one.");
     const button = screen.getByRole("button", { name: "New chat" });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", "Load a model first");

@@ -436,7 +436,7 @@ export function RunControls({
                 <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
               </svg>
               <div>
-                <b>Context length reloads the model.</b> This isn’t a sampling knob — the next
+                <b>Context length reloads the model.</b> This isn’t a sampling knob. The next
                 message restarts the runner with a different memory footprint, and the model is
                 briefly unavailable.
               </div>

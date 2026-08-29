@@ -84,6 +84,15 @@ reach the server, it is mostly inert and says so plainly (§9).
   brand — the brand is spent only on the primary action and active state.
 - Design tokens live in one place (CSS custom properties in the mockup);
   change the tokens, not scattered literals.
+- **No em dashes in copy the user reads.** Labels, help text, tooltips,
+  empty states, error messages and generated comments use a full stop or a
+  comma instead. Two deliberate exceptions: source comments keep theirs,
+  which is the house voice, and the lone `—` that stands in for a figure
+  nobody measured is a **glyph, not punctuation**, and must stay (§8).
+- **Copy names things the way a user would**, and the same thing keeps the
+  same name everywhere. A field the chips call a Modelfile is labelled
+  Modelfile in the editor above it, never a second word for the same
+  object.
 
 ## 5. Information architecture
 
@@ -321,7 +330,8 @@ template does not reference `.System`. The template comes from the `/api/show`
 data already held, so this costs no new request. The renderer is a
 **documented subset** of Go's `text/template` — `if`, `range`, `.System`,
 `.Prompt`, `.Messages`, `.Role`, `.Content`, `.Tools` — and anything outside
-it renders as *"Unsupported template action … — showing the raw template."*
+it renders as *"Unsupported template action {{ … }}. Showing the raw
+template."*
 rather than a guess, because a wrong render is worse than an absent one.
 
 ## 5.5 Pull (global)

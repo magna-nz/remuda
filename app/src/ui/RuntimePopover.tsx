@@ -207,7 +207,7 @@ export function RuntimePopover({ onClose }: { onClose: () => void }) {
         ) : (
           <div className="rsec">
             <div className="absent">GPU utilisation unavailable on this machine</div>
-            <div className="rnote">Absent, never zero — a meter pinned at 0% is a lie a user will act on.</div>
+            <div className="rnote">Absent, never zero. A meter pinned at 0% is a lie a user will act on.</div>
           </div>
         ))}
 

@@ -72,7 +72,7 @@ describe("wireFormat", () => {
     const result = wireFormat({ mode: "schema", text: '{"type": "obj' });
     expect(result.format).toBeUndefined();
     expect(result.error).toContain("doesn’t parse");
-    expect(result.error).toContain("nothing was sent");
+    expect(result.error).toContain("Nothing was sent");
   });
 
   it("refuses an empty schema too", () => {

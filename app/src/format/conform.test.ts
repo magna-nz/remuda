@@ -110,7 +110,7 @@ describe("conformance — truncation, the failure that actually happens", () => 
   it("names num_predict rather than showing a parse error", () => {
     const verdict = conformance(CUT, SCHEMA, 64);
     expect(verdict.status).toBe("truncated");
-    expect(verdict.headline).toBe("Cut off — not valid JSON");
+    expect(verdict.headline).toBe("Cut off, not valid JSON");
     expect(verdict.summary).toBe("num_predict 64 reached");
     // Not the JSON.parse message, in any form.
     expect(verdict.summary).not.toMatch(/JSON|token|position/i);

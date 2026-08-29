@@ -319,7 +319,7 @@ function scopeError(field: TemplateField, scope: Scope, source: string): RenderF
     ok: false,
     kind: "unsupported",
     action: source,
-    message: `Unsupported template action ${source} — .${field} ${where}.`,
+    message: `Unsupported template action ${source}. .${field} ${where}.`,
   };
 }
 
@@ -328,7 +328,7 @@ function unsupported(source: string): RenderFailure {
     ok: false,
     kind: "unsupported",
     action: source,
-    message: `Unsupported template action ${source} — showing the raw template.`,
+    message: `Unsupported template action ${source}. Showing the raw template.`,
   };
 }
 
@@ -383,7 +383,7 @@ function execBlock(
               kind: "unsupported",
               action: token.source,
               message:
-                `Unsupported template action ${token.source} — .Messages can only be used ` +
+                `Unsupported template action ${token.source}. .Messages can only be used ` +
                 "with {{ range }} or {{ if }}.",
             };
           }
@@ -417,7 +417,7 @@ function execBlock(
             ok: false,
             kind: "unsupported",
             action: token.source,
-            message: `Unsupported template action ${token.source} — nested {{ range }} is outside the subset.`,
+            message: `Unsupported template action ${token.source}. Nested {{ range }} is outside the subset.`,
           };
         }
         const bodyStart = cur.i;

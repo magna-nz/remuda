@@ -354,7 +354,7 @@ describe("the conformance card", () => {
     await openSeeded(client());
 
     const card = await screen.findByRole("group", { name: "Conformance" });
-    expect(within(card).getByText("Cut off — not valid JSON")).toBeInTheDocument();
+    expect(within(card).getByText("Cut off, not valid JSON")).toBeInTheDocument();
     expect(within(card).getByText("num_predict 64 reached")).toBeInTheDocument();
     expect(within(card).getByText("truncated mid-string")).toBeInTheDocument();
     // breaking, issues and severity all stopped short of being written.
