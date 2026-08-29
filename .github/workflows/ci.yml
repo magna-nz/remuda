@@ -127,3 +127,106 @@ jobs:
       # The `#[ignore]`d tests need a live `ollama serve` and stay excluded.
       - name: Test
         run: cargo test --all-targets
+
+  # Proves the thing the `rust` job cannot: that the app actually *bundles*
+  # on Linux. `cargo check`/`clippy`/`test` compile and link the crate, but
+  # they never run the frontend build, never invoke the Tauri bundler, and
+  # never produce an installable artifact.
+  #
+  # Deliberately a separate job rather than another step on the `rust`
+  # matrix: this is a full release-profile build (minutes, not seconds) and
+  # it should not sit in front of the fast feedback that fmt/clippy/test give.
+  bundle-linux:
+    name: Bundle (linux)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same set as the `rust` job's Linux leg. `libssl-dev` stays absent —
+      # reqwest is rustls (see Cargo.toml).
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry & build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-bundle-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bundle-
+
+      # `tauri build` shells out to `npm run build` in app/ via
+      # `beforeBuildCommand`, which needs the dependencies present first.
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      # Installed via npm rather than `cargo install tauri-cli`, matching
+      # release.yml — the npm artifact is a prebuilt binary, so it's cheaper
+      # than rebuilding tauri-cli here.
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      # Bundle targets come from tauri.linux.conf.json (deb + appimage),
+      # which Tauri merges over tauri.conf.json on Linux — so this builds
+      # exactly what a Linux release would, with no CLI-only override that
+      # could drift from the committed config.
+      #
+      # APPIMAGE_EXTRACT_AND_RUN: the AppImage tooling mounts itself with
+      # FUSE, which isn't available on a runner. Extracting instead is the
+      # supported workaround.
+      - name: Build
+        working-directory: src-tauri
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: tauri build
+
+      # A zero exit code from the bundler is not proof that a usable package
+      # came out of it. Assert both artifacts exist, and read the .deb's
+      # control metadata back — that catches a malformed package, a missing
+      # icon or a broken dependency list, none of which fail the build.
+      - name: Inspect artifacts
+        run: |
+          set -euo pipefail
+          # `|| true`: with `set -e`, find failing on a missing directory
+          # would abort here and hide the explicit message below, which is
+          # the one that actually says which bundle is missing.
+          deb=$(find src-tauri/target/release/bundle/deb -name '*.deb' -print -quit 2>/dev/null || true)
+          app=$(find src-tauri/target/release/bundle/appimage -name '*.AppImage' -print -quit 2>/dev/null || true)
+          test -n "$deb" || { echo "::error::no .deb produced"; exit 1; }
+          test -n "$app" || { echo "::error::no .AppImage produced"; exit 1; }
+          ls -lh "$deb" "$app"
+          echo "--- dpkg-deb --info ---"
+          dpkg-deb --info "$deb"
+          echo "--- dpkg-deb --contents (desktop entry and binary) ---"
+          dpkg-deb --contents "$deb" | grep -E '\.desktop|/bin/|\.png' || true
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: remuda-linux-bundles
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 14
