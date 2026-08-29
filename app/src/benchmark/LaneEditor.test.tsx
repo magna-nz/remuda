@@ -180,6 +180,65 @@ describe("the chip label", () => {
       "gone · Original",
     );
   });
+
+  /**
+   * The shape `migrateBenches` produces: an R4 bench whose model was itself a
+   * variant becomes a lane carrying that variant's tag with `modelfile: null`
+   * (benchmarks.ts, `benchmarkFromBench`). The tag is what Ollama loads, so
+   * reading the null as "Original" credits the base model with answers the
+   * variant wrote, which is the one thing this table must never get wrong.
+   */
+  it("names the Modelfile its model resolves to, not a stale null", () => {
+    const migrated: Lane = { id: "from-bench", model: "gemma-terse:latest", modelfile: null };
+    expect(laneChipLabel(migrated, CHOICES)).toBe("gemma-4-31b · terse-v2");
+  });
+
+  // A variant's Modelfile name is its own tag, so it arrives carrying the
+  // `:latest` every other chip in the app drops.
+  it("drops :latest from a Modelfile named by its tag", () => {
+    const tagged: LaneChoice[] = [
+      { base: "gemma-4-31b:latest", model: "gemma-4-31b:latest", modelfile: null },
+      {
+        base: "gemma-4-31b:latest",
+        model: "gemma-coding-q5:latest",
+        modelfile: "gemma-coding-q5:latest",
+      },
+    ];
+    const lane: Lane = { id: "l", model: "gemma-coding-q5:latest", modelfile: null };
+    expect(laneChipLabel(lane, tagged)).toBe("gemma-4-31b · gemma-coding-q5");
+  });
+});
+
+describe("a lane whose Modelfile disagrees with its model", () => {
+  const migrated: Lane = { id: "from-bench", model: "gemma-terse:latest", modelfile: null };
+
+  it("shows the Modelfile the model actually names", () => {
+    renderEditor([migrated]);
+    const model = screen.getByRole("combobox", { name: "Lane 1 model" }) as HTMLSelectElement;
+    const modelfile = screen.getByRole("combobox", {
+      name: "Lane 1 Modelfile",
+    }) as HTMLSelectElement;
+    expect(model.value).toBe("gemma-4-31b:latest");
+    expect(modelfile.value).toBe("terse-v2");
+  });
+
+  it("does not offer a tag some lane is already running", () => {
+    // The base is taken outright and the migrated lane holds gemma-terse, so
+    // the only gemma configuration left to offer is gemma-warm. Matching on
+    // the tag alone is what sees the second one as taken.
+    const lanes: Lane[] = [{ id: "l1", model: "gemma-4-31b:latest", modelfile: null }, migrated];
+    expect(nextLaneChoice(lanes, CHOICES)).toEqual(CHOICES[2]);
+  });
+
+  it("carries the resolved Modelfile across a change of model", () => {
+    const onChange = renderEditor([migrated]);
+    fireEvent.change(screen.getByRole("combobox", { name: "Lane 1 model" }), {
+      target: { value: "qwen3.8-27b:latest" },
+    });
+    expect(onChange).toHaveBeenCalledWith([
+      { id: "from-bench", model: "qwen-terse:latest", modelfile: "terse-v2" },
+    ]);
+  });
 });
 
 describe("nextLaneChoice", () => {

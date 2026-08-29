@@ -54,16 +54,47 @@ export interface LaneEditorProps {
   makeLaneId?: () => string;
 }
 
-/** The base model a lane runs on, or null when `choices` does not know it. */
-function knownBase(lane: Lane, choices: LaneChoice[]): string | null {
+/**
+ * The configuration a lane actually runs, as `choices` understands it.
+ *
+ * `model` is the tag that goes on the wire and `modelfile` is display only
+ * (types.ts), so when the two disagree the model is what happened and the
+ * Modelfile name is what is stale. A benchmark migrated from R4 is exactly
+ * that case: `benchmarkFromBench` sets `modelfile: null` on a lane whose
+ * model may itself be a variant's own tag, and believing that null prints
+ * "Original" over answers the variant produced.
+ */
+function resolveLane(lane: Lane, choices: LaneChoice[]): LaneChoice | null {
   const exact = choices.find((c) => c.model === lane.model && c.modelfile === lane.modelfile);
-  if (exact !== undefined) return exact.base;
-  return choices.find((c) => c.model === lane.model)?.base ?? null;
+  if (exact !== undefined) return exact;
+  return choices.find((c) => c.model === lane.model) ?? null;
 }
 
 /** The base model a lane runs on, or its own tag when nothing matches. */
 export function laneBase(lane: Lane, choices: LaneChoice[]): string {
-  return knownBase(lane, choices) ?? lane.model;
+  return resolveLane(lane, choices)?.base ?? lane.model;
+}
+
+/**
+ * The Modelfile a lane actually runs, which is the one its *model* names.
+ * Falls back to the lane's own field only when `choices` cannot place the tag
+ * at all, because then there is nothing better to say.
+ */
+export function laneModelfile(lane: Lane, choices: LaneChoice[]): string | null {
+  const resolved = resolveLane(lane, choices);
+  return resolved === null ? lane.modelfile : resolved.modelfile;
+}
+
+/**
+ * How a Modelfile reads on a chip or in a select.
+ *
+ * A variant's name here *is* its tag (`laneChoices` in BenchmarkPane), so it
+ * arrives carrying the `:latest` every other surface in the app strips. Only
+ * the label is shortened: the raw value stays the option's `value`, because
+ * that is the key `pickModelfile` and `known` match on.
+ */
+export function modelfileLabel(modelfile: string | null): string {
+  return modelfile === null ? BASE_MODELFILE_LABEL : shortTag(modelfile);
 }
 
 /**
@@ -79,9 +110,9 @@ export function laneBase(lane: Lane, choices: LaneChoice[]): string {
  * `laneLabel` is the fallback when it does not.
  */
 export function laneChipLabel(lane: Lane, choices: LaneChoice[]): string {
-  const base = knownBase(lane, choices);
-  if (base === null) return laneLabel(lane);
-  return `${shortTag(base)} · ${lane.modelfile ?? BASE_MODELFILE_LABEL}`;
+  const resolved = resolveLane(lane, choices);
+  if (resolved === null) return laneLabel(lane);
+  return `${shortTag(resolved.base)} · ${modelfileLabel(resolved.modelfile)}`;
 }
 
 /** The distinct base models on offer, in the order `choices` gives them. */
@@ -105,8 +136,9 @@ export function modelfilesFor(base: string, choices: LaneChoice[]): LaneChoice[]
  */
 export function nextLaneChoice(lanes: Lane[], choices: LaneChoice[]): LaneChoice | null {
   if (choices.length === 0) return null;
-  const taken = (c: LaneChoice) =>
-    lanes.some((l) => l.model === c.model && l.modelfile === c.modelfile);
+  // Compared on the tag alone: that is what gets loaded, so two lanes sharing
+  // it are the same configuration however their `modelfile` reads.
+  const taken = (c: LaneChoice) => lanes.some((l) => l.model === c.model);
   const last = lanes[lanes.length - 1];
   if (last !== undefined) {
     const sibling = modelfilesFor(laneBase(last, choices), choices).find((c) => !taken(c));
@@ -137,7 +169,7 @@ export function LaneEditor({
     if (lane === undefined) return;
     const siblings = modelfilesFor(base, choices);
     const target =
-      siblings.find((c) => c.modelfile === lane.modelfile) ??
+      siblings.find((c) => c.modelfile === laneModelfile(lane, choices)) ??
       siblings.find((c) => c.modelfile === null) ??
       siblings[0];
     if (target === undefined) return;
@@ -181,7 +213,8 @@ export function LaneEditor({
         {lanes.map((lane, index) => {
           const base = laneBase(lane, choices);
           const siblings = modelfilesFor(base, choices);
-          const known = siblings.some((c) => c.modelfile === lane.modelfile);
+          const modelfile = laneModelfile(lane, choices);
+          const known = siblings.some((c) => c.modelfile === modelfile);
           const name = `Lane ${index + 1}`;
           return (
             <li key={lane.id} className="lanerow">
@@ -206,18 +239,14 @@ export function LaneEditor({
               <select
                 className="lane-sel"
                 aria-label={`${name} Modelfile`}
-                value={lane.modelfile ?? ""}
+                value={modelfile ?? ""}
                 disabled={disabled || siblings.length === 0}
                 onChange={(e) => pickModelfile(index, e.target.value)}
               >
-                {!known && (
-                  <option value={lane.modelfile ?? ""}>
-                    {lane.modelfile ?? BASE_MODELFILE_LABEL}
-                  </option>
-                )}
+                {!known && <option value={modelfile ?? ""}>{modelfileLabel(modelfile)}</option>}
                 {siblings.map((c) => (
-                  <option key={c.modelfile ?? " base"} value={c.modelfile ?? ""}>
-                    {c.modelfile ?? BASE_MODELFILE_LABEL}
+                  <option key={c.modelfile ?? " base"} value={c.modelfile ?? ""}>
+                    {modelfileLabel(c.modelfile)}
                   </option>
                 ))}
               </select>
