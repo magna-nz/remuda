@@ -1,0 +1,121 @@
+/* Conformance card (docs/mockup-proposals-2.html §02, `.conform`) — the
+   tool-call card's shape, applied to the reply. */
+
+.conform {
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 9px;
+  max-width: 560px;
+}
+
+.conform-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.conform-h .ok {
+  color: var(--good);
+}
+
+.conform-h .bad {
+  color: var(--crit);
+}
+
+.conform-h svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.conform-h .spacer {
+  flex: 1;
+}
+
+.conform-h .sname {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  font-weight: 400;
+}
+
+.frow {
+  display: flex;
+  align-items: baseline;
+  gap: 9px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+.frow:last-child {
+  border-bottom: 0;
+}
+
+.frow .fk {
+  color: var(--ink);
+  min-width: 112px;
+}
+
+.frow .fv {
+  color: var(--ink-2);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fb {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 7px;
+  border-radius: 5px;
+  flex: 0 0 auto;
+}
+
+.fb.ok {
+  background: var(--good-tint);
+  color: var(--good);
+}
+
+.fb.no {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+.fb.extra {
+  background: var(--warn-tint);
+  color: var(--warn);
+}
+
+.fb.miss {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+/* The badge in words, for the rows that failed. A badge alone says
+   "wrong type"; the note says what was expected instead. */
+.fnote {
+  display: flex;
+  gap: 9px;
+  padding: 5px 12px;
+  border-top: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--muted);
+}
+
+.fnote .fk {
+  color: var(--faint);
+  min-width: 112px;
+}

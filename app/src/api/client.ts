@@ -6,6 +6,7 @@
 import type {
   ArchParams,
   ChatChunk,
+  ChatFormat,
   ChatMessage,
   CreateRequest,
   CreateStatus,
@@ -613,6 +614,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         think?: ThinkLevel;
         options?: RunOptions;
         tools?: unknown[];
+        format?: ChatFormat;
       },
     ): AsyncIterable<ChatChunk> {
       const requestBody: Record<string, unknown> = {
@@ -631,6 +633,11 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       }
       if (opts.tools !== undefined && opts.tools.length > 0) {
         requestBody.tools = opts.tools;
+      }
+      // Constrained output (R2). Undefined omits the key: "off" is the
+      // absence of `format`, not an empty one — see ChatFormat in types.ts.
+      if (opts.format !== undefined) {
+        requestBody.format = opts.format;
       }
       const res = await send("POST", "/api/chat", requestBody, opts.signal);
       const body = requireBody(res, "/api/chat");

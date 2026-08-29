@@ -112,6 +112,15 @@ describe("asCurl", () => {
     expect(withoutKeepAlive).not.toHaveProperty("keep_alive");
   });
 
+  it("mirrors `format`: the schema object, the string, or no key at all (R2)", () => {
+    // The wire mapping here is a hand-mirror of client.ts, so "Copy as curl"
+    // drifts from what was sent unless this is asserted.
+    const schema = { type: "object", properties: { ok: { type: "boolean" } } };
+    expect(bodyFromCurl(asCurl(fixture({ format: schema }))).format).toEqual(schema);
+    expect(bodyFromCurl(asCurl(fixture({ format: "json" }))).format).toBe("json");
+    expect(bodyFromCurl(asCurl(fixture()))).not.toHaveProperty("format");
+  });
+
   it("pretty-prints the JSON body", () => {
     const command = asCurl(fixture());
     expect(command).toContain("\n");
@@ -129,6 +138,15 @@ describe("asOllamaRun", () => {
     const command = asOllamaRun(fixture({ options: { temperature: 0.4, seed: 4417 } }));
     expect(command).toContain("/set parameter temperature 0.4");
     expect(command).toContain("/set parameter seed 4417");
+  });
+
+  it("says plainly that constrained output can't be reproduced (R2)", () => {
+    // There is no PARAMETER format and no /set for it, so a command that
+    // dropped the constraint silently would look faithful and lie.
+    const command = asOllamaRun(fixture({ format: "json" }));
+    expect(command).toContain("# format:");
+    expect(command).not.toContain("/set parameter format");
+    expect(asOllamaRun(fixture())).not.toContain("# format:");
   });
 
   it("emits no /set parameter lines when no options are set", () => {

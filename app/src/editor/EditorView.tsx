@@ -16,6 +16,7 @@ import { useRemuda } from "../ui/state";
 import type { EditorPane } from "../ui/state";
 import { SaveAsDialog } from "./SaveAsDialog";
 import { HistoryView } from "./HistoryView";
+import { PromptView } from "./prompt/PromptView";
 import { passthroughKinds } from "./passthrough";
 import {
   from,
@@ -69,7 +70,19 @@ export function EditorView() {
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
   const [stopDraft, setStopDraft] = useState("");
-
+  /**
+   * The Prompt segment (SPEC-round-two.md R3), held here rather than in
+   * `EditorPane`.
+   *
+   * Prompt is a *read-only* view of the draft — nothing outside this
+   * component ever needs to route to it, unlike Raw (Restore switches to it)
+   * or Form (promote-to-system does). Keeping it local means the store's
+   * `EditorPane` union is untouched and every existing `setEditorPane` call
+   * still means what it said. The effect below is the one thing that costs:
+   * an external switch to Raw or Form has to pull the user off Prompt, or
+   * they would sit on a pane that has silently stopped being what they
+   * asked for.
+   */
   // Resync the raw pane from the doc only at "external" moments — opening a
   // model, opening a new one, reverting, or a completed save — all of which
   // replace `savedDoc`. Ordinary form edits update `rawText` directly (see
@@ -173,34 +186,39 @@ export function EditorView() {
     applyDocUpdate((d) => setStops(d, stops.filter((_, i) => i !== index)));
   }
 
-  const segment = (pane: EditorPane, label: string) => (
-    <button
-      type="button"
-      className={editorPane === pane ? "on" : undefined}
-      aria-pressed={editorPane === pane}
-      onClick={() => setEditorPane(pane)}
-    >
-      {label}
-    </button>
-  );
+  const segment = (pane: EditorPane, label: string) => {
+    const on = editorPane === pane;
+    return (
+      <button
+        type="button"
+        className={on ? "on" : undefined}
+        aria-pressed={on}
+        onClick={() => setEditorPane(pane)}
+      >
+        {label}
+      </button>
+    );
+  };
 
   return (
     <div className="editorview">
       <div className="mfhead">
         <span className="mft">{(editorDraft.targetTag ?? "new") + ".Modelfile"}</span>
         <span className="spacer" />
-        {/* Form · Raw · History (SPEC-tuning T1). History replaces the two
-            columns; Form and Raw give one of them the room — and, when the
-            window is too narrow for SPEC §5.4's two columns, decide which
-            one is on screen. */}
+        {/* Form · Raw · Prompt · History (SPEC-tuning T1, SPEC-round-two R3).
+            History and Prompt replace the two columns; Form and Raw give one
+            of them the room — and, when the window is too narrow for SPEC
+            §5.4's two columns, decide which one is on screen. */}
         <div className="seg" role="group" aria-label="Editor view">
           {segment("form", "Form")}
           {segment("raw", "Raw")}
+          {segment("prompt", "Prompt")}
           {segment("history", "History")}
         </div>
       </div>
+      {editorPane === "prompt" && <PromptView />}
       {editorPane === "history" && <HistoryView rawText={rawText} />}
-      {editorPane !== "history" && (
+      {editorPane !== "history" && editorPane !== "prompt" && (
       <div className={`split pane-${editorPane}`}>
         <div className="col form">
           <div className="col-h">

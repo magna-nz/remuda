@@ -22,6 +22,7 @@ import {
 } from "react";
 import { createClient } from "../api/client";
 import type {
+  ChatFormat,
   ChatMessage,
   KeepAlive,
   Model,
@@ -41,10 +42,14 @@ import {
   sortSessions,
   titleFor,
   type ChatSession,
+  type FormatConfig,
   type Lane,
   type LaneConfig,
   type Message,
 } from "../chat/sessions";
+// R2 — constrained output (docs/SPEC-round-two.md). The pure parts live in
+// app/src/format/; this file owns only the send.
+import { wireFormat } from "../format/format";
 // T2 — A/B compare (docs/SPEC-tuning.md). The pure parts live next door in
 // chat/compare.ts; this file owns only the run itself.
 import {
@@ -142,7 +147,12 @@ export interface EditorDraft {
 }
 
 /** Which pane the Modelfile editor is showing (SPEC-tuning T1). */
-export type EditorPane = "form" | "raw" | "history";
+/**
+ * `prompt` is a full member rather than a flag beside this union so that
+ * anything able to switch panes can reach it — the guided tour's step on the
+ * rendered prompt (R6) opens it the same way the segment buttons do.
+ */
+export type EditorPane = "form" | "raw" | "prompt" | "history";
 
 export type ReloadPhase = "creating" | "stopping" | "reloading" | "done";
 
@@ -221,6 +231,11 @@ export interface RunGenerationArgs {
   messages: ChatMessage[];
   options?: RunOptions;
   think?: ThinkLevel;
+  /**
+   * Constrained output for this request (R2). Per-chat, so both A/B lanes
+   * carry the same one; undefined omits `format` from the body.
+   */
+  format?: ChatFormat;
   /**
    * Cancels this run. A/B passes one signal to both lanes so a single
    * Cancel stops the pair; the stream map still tracks each lane on its own.
@@ -351,6 +366,12 @@ export interface RemudaContextValue {
   setSessionOptions: (sessionId: string, options: RunOptions) => void;
   /** Per-session reasoning effort; "off" omits `think` from the request. */
   setSessionThink: (sessionId: string, level: ThinkLevel) => void;
+  /**
+   * Per-session constrained output (R2): the mode and the raw schema text,
+   * stored verbatim so a half-typed schema survives. Never a Modelfile
+   * setting — Ollama has no `PARAMETER format`.
+   */
+  setSessionFormat: (sessionId: string, format: FormatConfig) => void;
 
   // ---- A/B compare (docs/SPEC-tuning.md T2) ----
   /**
@@ -962,6 +983,7 @@ export function RemudaProvider({
       messages,
       options,
       think,
+      format,
       signal,
     }: RunGenerationArgs) => {
       // Own controller, chained to the caller's signal. The caller's signal
@@ -992,6 +1014,7 @@ export function RemudaProvider({
           signal: controller.signal,
           think,
           options,
+          format,
         })) {
           const thinking = chunk.thinking ?? "";
           if (chunk.content !== "" || thinking !== "") {
@@ -1084,6 +1107,17 @@ export function RemudaProvider({
         return;
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) return;
+      // R2: a schema that doesn't parse refuses the send. Going ahead
+      // without it would produce unconstrained output that reads as a model
+      // ignoring the shape, when in fact nothing ever asked for one — the
+      // one outcome worse than an error. The composer disables Send and
+      // opens the pane on the error; this is the backstop for every other
+      // way in (Enter, and anything that reaches the store directly).
+      const format = wireFormat(session.format);
+      if (format.error !== null) {
+        setStreamError(format.error);
+        return;
+      }
 
       const userMessage: Message = { id: newMessageId(), role: "user", content: trimmed };
       if (hasImages) {
@@ -1108,7 +1142,15 @@ export function RemudaProvider({
         messages: [
           ...s.messages,
           userMessage,
-          { id: targetMessageId, role: "assistant", content: "" },
+          // `constrained` records that a schema was in force for THIS reply,
+          // so the conformance card never appears under an older prose reply
+          // that was generated before the schema was switched on (R2).
+          {
+            id: targetMessageId,
+            role: "assistant",
+            content: "",
+            ...(format.format !== undefined ? { constrained: true } : {}),
+          },
         ],
         updatedAt: new Date().toISOString(),
       }));
@@ -1121,6 +1163,7 @@ export function RemudaProvider({
         // Per-session, sent on every request for that session.
         options: session.options,
         think: session.think,
+        format: format.format,
         signal: send.signal,
       });
     },
@@ -1142,6 +1185,19 @@ export function RemudaProvider({
   const setSessionThink = useCallback(
     (sessionId: string, level: ThinkLevel) => {
       updateSession(sessionId, (s) => ({ ...s, think: level }));
+    },
+    [updateSession],
+  );
+
+  /**
+   * Constrained output for one chat (R2). Like the two above it this is a
+   * setting, not activity, so it leaves `updatedAt` alone — and like them it
+   * is stored on the session, which is what makes the raw schema text
+   * survive a reload.
+   */
+  const setSessionFormat = useCallback(
+    (sessionId: string, format: FormatConfig) => {
+      updateSession(sessionId, (s) => ({ ...s, format }));
     },
     [updateSession],
   );
@@ -1230,6 +1286,13 @@ export function RemudaProvider({
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session || session.compare === undefined) return;
       const compare = session.compare;
+      // R2: same refusal as sendMessage. `format` is per-chat, not per-lane,
+      // so a broken schema breaks the pair rather than one side of it.
+      const format = wireFormat(session.format);
+      if (format.error !== null) {
+        setStreamError(format.error);
+        return;
+      }
 
       // Stored once, with no lane: it is one prompt. Two copies would show
       // the user asking the same question twice and would be re-sent as two
@@ -1257,8 +1320,12 @@ export function RemudaProvider({
         messages: [
           ...s.messages,
           userMessage,
-          { id: targets.a, role: "assistant", content: "", lane: "a" },
-          { id: targets.b, role: "assistant", content: "", lane: "b" },
+          // Both lanes share the chat's one format config, so they are
+          // constrained together or not at all (see `constrained` above).
+          { id: targets.a, role: "assistant", content: "", lane: "a",
+            ...(format.format !== undefined ? { constrained: true } : {}) },
+          { id: targets.b, role: "assistant", content: "", lane: "b",
+            ...(format.format !== undefined ? { constrained: true } : {}) },
         ],
         updatedAt: new Date().toISOString(),
       }));
@@ -1278,6 +1345,9 @@ export function RemudaProvider({
             messages: historyForLane(history, lane).map(forWire),
             options: effectiveLaneOptions(compare, lane),
             think: config.think,
+            // Per-chat: both lanes are decoded under the same constraint,
+            // so the difference between them stays the thing being compared.
+            format: format.format,
             signal: controller.signal,
           });
         }
@@ -1335,6 +1405,13 @@ export function RemudaProvider({
       if (index === -1) return;
       const target = session.messages[index];
       if (target.role !== "assistant") return;
+      // R2: a re-roll under a broken schema would come back unconstrained
+      // and look like the model having changed its mind about the shape.
+      const format = wireFormat(session.format);
+      if (format.error !== null) {
+        setStreamError(format.error);
+        return;
+      }
 
       // Everything before it — and, for a lane reply, only that lane's half
       // of it. Re-sending the other lane's answer as context would re-roll
@@ -1362,8 +1439,16 @@ export function RemudaProvider({
         const i = s.messages.findIndex((m) => m.id === messageId);
         if (i === -1) return s;
         const messages = [...s.messages];
-        const { thinking: _thinking, ...rest } = messages[i];
-        messages[i] = { ...rest, content: "" };
+        const { thinking: _thinking, constrained: _was, ...rest } = messages[i];
+        // Re-stamped from the schema in force *now*, not the one that
+        // produced the reply being replaced — a re-roll after switching
+        // format off must stop being judged, and one after switching it on
+        // must start (R2).
+        messages[i] = {
+          ...rest,
+          content: "",
+          ...(format.format !== undefined ? { constrained: true } : {}),
+        };
         return { ...s, messages };
       });
       setLastStats((prev) => (prev?.messageId === messageId ? null : prev));
@@ -1380,6 +1465,7 @@ export function RemudaProvider({
         messages: history.map(forWire),
         options,
         think,
+        format: format.format,
         signal: new AbortController().signal,
       });
     },
@@ -1682,6 +1768,7 @@ export function RemudaProvider({
     runGeneration,
     setSessionOptions,
     setSessionThink,
+    setSessionFormat,
     toggleCompare,
     setLaneConfig,
     setPinnedSeed,
@@ -1715,6 +1802,7 @@ export function RemudaProvider({
     activeSessionId, streamingSessionId, streamError, errorsByMessage, lastStats, statsByMessage,
     compareRun, newChat,
     openSession, deleteSession, sendMessage, runGeneration, setSessionOptions, setSessionThink,
+    setSessionFormat,
     toggleCompare, setLaneConfig, setPinnedSeed, sendCompare, keepLane, regenerateReply,
     bakeOptionsIntoEditor, cancelGeneration, editorDraft,
     editorLoading, editorError, openEditor, openEditorForNew, setEditorDoc,

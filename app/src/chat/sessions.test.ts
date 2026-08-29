@@ -315,6 +315,51 @@ describe("forward/backward compatibility of the stored shape", () => {
   });
 });
 
+describe("constrained output persistence (R2)", () => {
+  const HALF_TYPED = '{ "type": "object", "properties": { "summary": { "type": "str';
+
+  it("round-trips the raw schema text verbatim, half-typed and all", () => {
+    // The text is the source of truth, not a parsed schema: JSON in the
+    // middle of an edit doesn't parse, and persisting the parsed form would
+    // throw away exactly this.
+    const session = fixtureSession({ format: { mode: "schema", text: HALF_TYPED } });
+    saveSessions([session]);
+    const [loaded] = loadSessions();
+    expect(loaded.format).toEqual({ mode: "schema", text: HALF_TYPED });
+  });
+
+  it("keeps the schema text while the mode is json or off", () => {
+    for (const mode of ["json", "off"] as const) {
+      window.localStorage.clear();
+      saveSessions([fixtureSession({ format: { mode, text: HALF_TYPED } })]);
+      expect(loadSessions()[0].format).toEqual({ mode, text: HALF_TYPED });
+    }
+  });
+
+  it("drops an unrecognised mode and keeps the session", () => {
+    const good = fixtureSession();
+    window.localStorage.setItem(
+      SESSIONS_STORAGE_KEY,
+      JSON.stringify([{ ...good, format: { mode: "yaml", text: "{}" } }]),
+    );
+    const [loaded] = loadSessions();
+    expect(loaded).toEqual(good);
+    expect(loaded.format).toBeUndefined();
+  });
+
+  it("keeps the mode when the text is missing, degrading the text to empty", () => {
+    // A chat set to json is still constrained even if whatever wrote the
+    // payload lost the editor contents; dropping the mode would silently
+    // unconstrain it.
+    const good = fixtureSession();
+    window.localStorage.setItem(
+      SESSIONS_STORAGE_KEY,
+      JSON.stringify([{ ...good, format: { mode: "json" } }]),
+    );
+    expect(loadSessions()[0].format).toEqual({ mode: "json", text: "" });
+  });
+});
+
 describe("image persistence", () => {
   const RAW = "iVBORw0KGgoAAAANSUhEUg";
   const THUMB = "data:image/png;base64,iVBORw0KGg";

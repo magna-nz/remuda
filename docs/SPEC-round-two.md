@@ -278,3 +278,66 @@ touched.
 **Gates:** `npm run typecheck`, `npm test` (566 passed, 40 files),
 `npm run build` — all clean. Pushed to the draft PR for the macOS and Linux
 legs.
+
+### Wave 2 — R2 `format` + R3 rendered prompt · complete, all gates green
+
+**2A [opus-5] — R2.** New `app/src/format/`, plus `api/{types,client}.ts`,
+`chat/{ChatView,sessions,exportRequest}.ts(x)`, `ui/state.tsx`.
+
+- `tools/validate.ts` is **reused, not forked**: the reply body is handed to
+  `validateCall` as a call's arguments with the schema as its parameters, so
+  the type/enum/required rules and the note strings are literally the tool
+  card's.
+- Truncation is detected **structurally** — `scanJson` asks whether the text
+  is a *prefix* of valid JSON. Under `format` that is exactly truncation, and
+  it needs no `done_reason`, so `api/` stayed at "the `format` field only".
+- An unparseable schema **refuses the send** rather than quietly sending an
+  unconstrained request.
+- `format` is per-chat and offers no bake-into-Modelfile path, because there
+  is no `PARAMETER format` to bake it into.
+
+**2B [opus-5] — R3.** New `app/src/editor/prompt/`, plus `editor/EditorView`.
+
+- `render.ts` is pure and total: 46 tests, no throw on any input, and an
+  action outside the subset returns a failure naming it rather than a partial
+  render.
+- The template is read from the **draft**, not `ModelDetail.template` — the
+  store parses `detail.modelfile` and discards the detail, and reading the
+  draft means editing `TEMPLATE` in the Raw pane updates the render live.
+- **Send as raw…** deferred: it needs `api/` and `state.tsx`, both owned by
+  2A this wave. TODO sits at its call site.
+
+**Three things fixed in the main thread. Two were false alarms on the one
+indicator this pane exists for**, both found by pointing the app at a live
+Ollama 0.32.15 rather than by reading the code.
+
+1. **Jinja templates.** Newer models ship the Jinja chat template embedded in
+   their GGUF instead of a Go `text/template` — four of the six models on the
+   development machine do. Jinja reaches the system prompt through its
+   `messages` array and never writes `.System`, so the footer read *"your
+   system prompt never reaches the model"* on every one of them. `analyse.ts`
+   now reports a `dialect`, and the indicator is **absent** for Jinja rather
+   than red. Fixture taken verbatim from the live server.
+2. **`RENDERER`.** gemma-4 declares `RENDERER gemma4` and ships
+   `TEMPLATE {{ .Prompt }}` as a stub: Ollama assembles the real prompt
+   natively. The template renders *cleanly*, so this could not be caught by
+   the failure path — the pane showed a plausible rendered prompt that was a
+   fraction of the truth, under a red `.System` flag. `declaredRenderer()`
+   now suppresses the indicator and puts a banner above the rendered output
+   saying it is not what the model receives.
+3. **The conformance card judged replies written before the schema existed.**
+   Switching a schema on put a red "not valid JSON" verdict under older
+   prose. `Message.constrained` records the constraint at generation time, so
+   only replies actually decoded under a schema are judged.
+
+Also: `EditorPane` gained `"prompt"` as a real member rather than the local
+`useState` 2B was forced into, because R6's tour step has to be able to open
+that pane the same way the segment buttons do.
+
+**Verified live**, against Ollama 0.32.15 with `gemma-4-31b` loaded: a
+constrained send returned conforming JSON and the card read *Conforms — 3 of
+4 properties · 2 of 2 required present*, badging `summary` string, `severity`
+enum, `breaking` boolean.
+
+**Gates:** `npm run typecheck`, `npm test` (696 passed, 46 files),
+`npm run build` — all clean.

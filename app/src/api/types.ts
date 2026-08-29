@@ -278,6 +278,25 @@ export interface CreateRequest {
   rawModelfile: string;
 }
 
+/**
+ * Constrained output: `format` on POST /api/chat (docs/SPEC-round-two.md R2).
+ *
+ * Two values plus a third state that is the *absence* of the field:
+ *
+ *   Record<string, unknown> → a JSON Schema. Ollama constrains decoding to
+ *                             it, so a reply that doesn't fit is unreachable.
+ *   "json"                  → the older mode: valid JSON, no shape.
+ *   undefined               → omit `format` from the body entirely.
+ *
+ * `off` is the omitted key and never `""` or `null`. Ollama reads an empty
+ * string as a format it must honour, so sending one for "off" would be a
+ * different instruction rather than the absence of one.
+ *
+ * Per-chat only. There is no `PARAMETER format`, so this never appears in a
+ * Modelfile and is not part of RunOptions.
+ */
+export type ChatFormat = "json" | Record<string, unknown>;
+
 /** keep_alive values Remuda exposes (SPEC §5.6). */
 export type KeepAlive = "5m" | "30m" | -1;
 
@@ -339,6 +358,9 @@ export interface OllamaClient {
       /** Raw tool definitions, passed through verbatim; omitted from the
        * request body entirely when empty/unset rather than sent as `[]`. */
       tools?: unknown[];
+      /** Constrained output (R2). A schema object or "json"; undefined
+       * omits `format` entirely — never `""`, never `null`. */
+      format?: ChatFormat;
     },
   ): AsyncIterable<ChatChunk>;
   /** POST /api/create with stream: true — structured body first, legacy
