@@ -5,8 +5,7 @@
   <p>
     <a href="https://github.com/magna-nz/remuda/actions/workflows/ci.yml"><img src="https://github.com/magna-nz/remuda/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
     <a href="https://github.com/magna-nz/remuda/releases/latest"><img src="https://img.shields.io/github/v/release/magna-nz/remuda?sort=semver&label=release" alt="Latest release" /></a>
-    <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-runs%20local-000000?logo=ollama&logoColor=white" alt="Talks to a local Ollama" /></a>
-    <a href="https://tauri.app"><img src="https://img.shields.io/badge/Tauri-2-24C8DB?logo=tauri&logoColor=white" alt="Built with Tauri 2" /></a>
+    <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-000000?logo=ollama&logoColor=white" alt="Talks to a local Ollama" /></a>
     <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="Runs on macOS and Linux" />
     <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   </p>
