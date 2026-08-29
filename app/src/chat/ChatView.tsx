@@ -868,7 +868,7 @@ export function ChatView() {
           </>,
           <>
             The <b>⌄</b> under any message re-rolls it, copies the exact request, or adds the
-            prompt to a <Term name="bench">bench</Term> so you can re-run it after your next
+            prompt to a <Term name="benchmark">benchmark</Term> so you can re-run it after your next
             save.
           </>,
         ]}

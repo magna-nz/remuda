@@ -161,7 +161,7 @@ export function ReplyMenu({
               <span className="ic" aria-hidden="true">
                 ≡
               </span>
-              Add to bench
+              Add to benchmark
             </button>
           )}
           {onPromote !== undefined && (
