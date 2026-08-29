@@ -16,6 +16,7 @@ import { useRemuda } from "../ui/state";
 import type { EditorPane } from "../ui/state";
 import { SaveAsDialog } from "./SaveAsDialog";
 import { HistoryView } from "./HistoryView";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
 import { PromptView } from "./prompt/PromptView";
 import { passthroughKinds } from "./passthrough";
 import { useTourTarget } from "../tour/registry";
@@ -209,7 +210,28 @@ export function EditorView() {
           {segment("prompt", "Prompt")}
           {segment("history", "History")}
         </div>
+        <PaneHelpToggle paneId="modelfile" label="About the Modelfile editor" />
       </div>
+      <PaneHelp
+        paneId="modelfile"
+        title="Modelfile — the recipe this model runs on"
+        what="Which model it starts from, its system prompt, and the settings baked in beside it. Saving one rebuilds the model through Ollama and reloads it, so your next message uses the change."
+        why="This is the loop the app exists for: change one thing, save, ask the same question again, and see what moved."
+        steps={[
+          <>
+            <b>Form</b> edits the parts most people change; <b>Raw</b> is the same file as
+            text, and the two stay in sync.
+          </>,
+          <>
+            <b>Prompt</b> shows the exact text the model is sent. <b>History</b> is every
+            save you have made, with a diff.
+          </>,
+          <>
+            <b>Save</b> overwrites this Modelfile; <b>Save as…</b> forks a new variant and
+            leaves the original alone.
+          </>,
+        ]}
+      />
       {editorPane === "prompt" && <PromptView />}
       {editorPane === "history" && <HistoryView rawText={rawText} />}
       {editorPane !== "history" && editorPane !== "prompt" && (

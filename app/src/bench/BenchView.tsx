@@ -39,6 +39,7 @@ import {
 import { diffWords, newSide, oldSide, type WordChunk } from "./words";
 import { shortTag } from "../chat/sessions";
 import { useRemuda } from "../ui/state";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
 import type { ModelfileSnapshot } from "../editor/history";
 
 /** "14:22" — the run bar's time, in the user's own locale. */
@@ -56,8 +57,11 @@ function clockTime(iso: string): string {
  * is to identify the text that produced these answers, and a wrong name is
  * worse than an admitted gap.
  */
-function snapshotLabel(snapshotId: string | null, history: ModelfileSnapshot[]): string {
-  if (snapshotId === null) return "no saved Modelfile";
+function snapshotLabel(
+  snapshotId: string | null,
+  history: ModelfileSnapshot[],
+): string | null {
+  if (snapshotId === null) return null;
   const snapshot = history.find((s) => s.id === snapshotId);
   if (snapshot === undefined) return "a Modelfile no longer in history";
   return `${shortTag(snapshot.tag)} @ ${clockTime(snapshot.savedAt)}`;
@@ -310,7 +314,31 @@ export function BenchView() {
             Run all
           </button>
         )}
+        <PaneHelpToggle paneId="bench" label="About benches" />
       </div>
+      {/* Always reachable, unlike the empty state, which disappears the
+          moment a bench has a prompt in it — and "bench" is exactly the word
+          a new user will not know. */}
+      <PaneHelp
+        paneId="bench"
+        title="Bench — re-run your prompts after a change"
+        what="A saved set of prompts, replayed against the current model on one click, with each answer diffed against what it returned last run."
+        why="Every edit to a Modelfile changes all of a model's behaviour, not just the part you were working on. A bench is how you notice what else moved."
+        steps={[
+          <>
+            Add prompts from any chat — the <b>⌄</b> under a message, then{" "}
+            <b>Add to bench</b>. It is on the reply as well as the prompt.
+          </>,
+          <>
+            Press <b>Run all</b> after saving a Modelfile. Every prompt runs on one pinned
+            seed, so you are reading the change and not the randomness.
+          </>,
+          <>
+            Read the rows badged <b>Changed</b>; expand one to see both answers word-diffed.
+          </>,
+        ]}
+        note="Same or changed is a diff, not a verdict — Remuda never says one answer is better than another."
+      />
 
       {bench.prompts.length === 0 ? (
         <BenchEmpty />
@@ -324,9 +352,25 @@ export function BenchView() {
                 {live !== null
                   ? `running ${benchProgress?.done ?? 0} of ${benchProgress?.total ?? 0}`
                   : currentHead}{" "}
-                · against{" "}
-                <span className="against">{snapshotLabel(chosen.snapshotId, modelfileHistory)}</span>{" "}
                 · seed {chosen.seed}
+                {/* "against X" only when there IS an X. Rendering the absence
+                    in the same accented style as a snapshot name made
+                    "no saved Modelfile" read as the name of one. */}
+                {snapshotLabel(chosen.snapshotId, modelfileHistory) === null ? (
+                  <span className="nosnap">
+                    {" "}
+                    · this model has no saved Modelfile yet, so there is nothing to tie
+                    these answers to
+                  </span>
+                ) : (
+                  <>
+                    {" "}
+                    · against{" "}
+                    <span className="against">
+                      {snapshotLabel(chosen.snapshotId, modelfileHistory)}
+                    </span>
+                  </>
+                )}
                 {chosen.partial && live === null && " · partial"}
               </span>
             )}

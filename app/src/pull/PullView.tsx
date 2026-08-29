@@ -13,6 +13,7 @@
 import { useEffect, useState } from "react";
 import "./PullView.css";
 import { useRemuda } from "../ui/state";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
 import { Capabilities } from "../ui/Capabilities";
 import type { Model } from "../api/types";
 import { isProbeAvailable, probeModel, type ProbeResult } from "../api/registry";
@@ -157,7 +158,25 @@ export function PullView() {
 
   return (
     <section className="pullview" aria-label="Pull models">
-      <div className="eyebrow">Pull a model</div>
+      <div className="eyebrow">
+        Pull a model
+        <PaneHelpToggle paneId="pull" label="About getting models" />
+      </div>
+      <PaneHelp
+        paneId="pull"
+        title="Get models — download one to run"
+        what="Fetches a model from Ollama's library onto this machine. Nothing here talks to anything but Ollama, and the download is Ollama's, not Remuda's."
+        why="Remuda runs models, it does not ship any. This is where you get one to tune."
+        steps={[
+          <>Search the list, or type an exact name like <code>llama3.2:3b</code>.</>,
+          <>
+            Press <b>Pull</b> and watch the per-layer progress. Big models take a while.
+          </>,
+          <>
+            When it lands, open the model control in the top bar and <b>Load</b> it.
+          </>,
+        ]}
+      />
       <div className="pullbar">
         <input
           className="pull-input"

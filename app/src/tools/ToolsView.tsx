@@ -236,7 +236,7 @@ export function ToolsView() {
           <button type="button" className="btn sm ghost" onClick={reset}>
             Reset
           </button>
-          <PaneHelpToggle paneId="tools" />
+          <PaneHelpToggle paneId="tools" label="About the tool playground" />
         </div>
 
         <PaneHelp

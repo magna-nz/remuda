@@ -112,7 +112,7 @@ export function FormatPane({
             </button>
           ))}
         </span>
-        <PaneHelpToggle paneId="format" />
+        <PaneHelpToggle paneId="format" label="About Format" />
         <button type="button" className="fmtclose" aria-label="Close Format" onClick={onClose}>
           ✕
         </button>

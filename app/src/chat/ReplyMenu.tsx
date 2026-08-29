@@ -190,8 +190,8 @@ export function ReplyMenu({
                 <span className="ic" aria-hidden="true">
                   ↻
                 </span>
-                Regenerate
-                <span className="kbd">{seed === null ? "no seed set" : `seed ${seed}`}</span>
+                Regenerate · same seed
+                <span className="kbd">{seed === null ? "none set" : `${seed}`}</span>
               </button>
             </>
           )}
@@ -207,8 +207,7 @@ export function ReplyMenu({
               <span className="ic" aria-hidden="true">
                 ↻
               </span>
-              Regenerate
-              <span className="kbd">new seed</span>
+              Regenerate · new seed
             </button>
           )}
           {onCopyCurl !== undefined && <div className="msep" />}

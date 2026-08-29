@@ -544,3 +544,43 @@ all on GPU, ctx 16 384):
 
 **Gates:** `npm run typecheck`, `npm test` (805 passed, 54 files),
 `npm run build` — all clean.
+
+### Usability pass — from using the app, not reading it
+
+Four things reported while actually using the installed build. Two were
+pre-existing, two were mine.
+
+**1. Two menu items both labelled "Regenerate."** The distinction — hold the
+seed and re-roll the *configuration*, or draw a new seed and re-roll the
+*sampling* — lived in a right-aligned hint styled like a keyboard shortcut,
+which reads as metadata rather than as the label. Now
+`Regenerate · same seed` and `Regenerate · new seed`, with the seed number
+kept as the hint. Pre-existing (T6).
+
+**2. "Add to bench" was only on the user message.** A bench stores prompts, so
+capturing from the prompt was the tidy reading — and the wrong one: you decide
+a prompt is worth keeping *after* reading the answer, and the answer is where
+you are looking when you decide. The assistant menu now offers it too and
+captures the user message that produced that reply.
+
+**3. Every pane needed the `?`, and Bench most of all.** Wave 3 wired the
+explainer into Format, Prompt and Tools and deliberately skipped Bench,
+because Bench ships its own empty state. That reasoning was wrong in the way
+that matters: **the empty state disappears the moment a bench has a prompt in
+it**, so the one word a new user is least likely to know lost its explanation
+permanently, with no way back. `PaneHelp` is now on Bench, Chat, Modelfile and
+Pull as well, and `help/coverage.test.ts` asserts the set — a source-level
+check, because per-pane render tests are exactly what let the gap open.
+
+Each toggle also gained a distinct accessible name. Two buttons called "About
+this pane" appear together on the Modelfile page (the editor's and Prompt's),
+which is ambiguous to a screen reader.
+
+**4. "run 2 · against no saved Modelfile · seed 69594" read as a name.** The
+absence was rendered in the same accent as a real snapshot name, so it looked
+like a Modelfile *called* "no saved Modelfile". The clause is now dropped
+entirely when there is no snapshot, replaced with a muted "this model has no
+saved Modelfile yet, so there is nothing to tie these answers to".
+
+**Gates:** `npm run typecheck`, `npm test` (813 passed, 55 files),
+`npm run build` — all clean. Verified in the packaged app.

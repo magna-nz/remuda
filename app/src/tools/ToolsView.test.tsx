@@ -323,7 +323,7 @@ describe("layer 2 — pane help (R5)", () => {
     renderPane(client(["tools"]));
     await waitFor(() => expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument());
 
-    const toggle = screen.getByRole("button", { name: "About this pane" });
+    const toggle = screen.getByRole("button", { name: "About the tool playground" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByRole("region", { name: "About Tools — see what the model actually calls" }),

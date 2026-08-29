@@ -444,7 +444,7 @@ describe("reply overflow menu (T6 1–3)", () => {
     await sendOnce(client);
 
     fireEvent.click(screen.getByRole("button", { name: "Reply actions for message 2" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate seed 4417" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate · same seed 4417" }));
     await act(async () => {});
     await act(async () => {
       client.emitChat({ content: "Another take.", done: true });
@@ -457,7 +457,7 @@ describe("reply overflow menu (T6 1–3)", () => {
     expect(document.querySelectorAll(".msg.bot")).toHaveLength(1);
 
     fireEvent.click(screen.getByRole("button", { name: "Reply actions for message 2" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate new seed" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Regenerate · new seed" }));
     await act(async () => {});
     expect(client.chatCalls).toHaveLength(3);
     // …while a new seed re-rolls the SAMPLING: everything else held.
@@ -474,8 +474,8 @@ describe("reply overflow menu (T6 1–3)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Reply actions for message 2" }));
     // Not a silent no-op and not a fake "same seed": there is no seed.
-    expect(screen.getByRole("menuitem", { name: "Regenerate no seed set" })).toBeDisabled();
-    expect(screen.getByRole("menuitem", { name: "Regenerate new seed" })).toBeEnabled();
+    expect(screen.getByRole("menuitem", { name: "Regenerate · same seed none set" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Regenerate · new seed" })).toBeEnabled();
   });
 
   it("regenerates one lane against its own half of the conversation", async () => {
@@ -490,7 +490,7 @@ describe("reply overflow menu (T6 1–3)", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Reply actions for lane A, turn 1" }),
     );
-    fireEvent.click(screen.getByRole("menuitem", { name: /^Regenerate seed/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Regenerate · same seed/ }));
     await act(async () => {});
 
     expect(client.chatCalls).toHaveLength(3);

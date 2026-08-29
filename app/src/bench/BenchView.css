@@ -319,3 +319,9 @@
   font-size: 10.5px;
   color: var(--faint);
 }
+
+/* An absence, not a name: deliberately not `.against`'s accent, which reads
+   as "this is the thing it ran against". */
+.runbar .nosnap {
+  color: var(--faint);
+}

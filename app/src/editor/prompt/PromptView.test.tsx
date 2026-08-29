@@ -166,7 +166,7 @@ describe("PromptView — layer 2 pane help (R5)", () => {
   it("renders the toggle and shows the strip open on first sight", async () => {
     await openPrompt(WITH_SYSTEM);
 
-    const toggle = screen.getByRole("button", { name: "About this pane" });
+    const toggle = screen.getByRole("button", { name: "About the rendered prompt" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(
       screen.getByRole("region", { name: "About Prompt — the exact text the model receives" }),

@@ -209,7 +209,7 @@ export function PromptView() {
           )}
         </span>
         <span className="spacer" />
-        <PaneHelpToggle paneId="prompt" />
+        <PaneHelpToggle paneId="prompt" label="About the rendered prompt" />
       </div>
 
       <PaneHelp

@@ -155,7 +155,7 @@ describe("layer 2 — pane help (R5)", () => {
     fireEvent.click(pill("off"));
 
     const pane = screen.getByRole("region", { name: "Format" });
-    const toggle = within(pane).getByRole("button", { name: "About this pane" });
+    const toggle = within(pane).getByRole("button", { name: "About Format" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(
       within(pane).getByRole("region", { name: "About Format — force the reply into a shape" }),
@@ -273,7 +273,7 @@ describe("a schema that doesn't parse refuses the send", () => {
     await openSeeded(c);
 
     fireEvent.click(screen.getByRole("button", { name: "Reply actions for message 2" }));
-    fireEvent.click(screen.getByRole("menuitem", { name: /Regenerate new seed/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /Regenerate · new seed/ }));
     await act(async () => {});
 
     expect(c.sends).toBe(0);

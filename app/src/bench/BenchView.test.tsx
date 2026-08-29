@@ -135,7 +135,11 @@ describe("the empty state", () => {
     await openSeeded(new FakeClient({ models: models() }));
     expect(screen.getByText("A bench is a set of prompts you re-run after a change")).toBeInTheDocument();
     expect(screen.getByText(/which answers moved/i)).toBeInTheDocument();
-    const steps = screen.getAllByRole("listitem");
+    // Scoped to the empty state: the pane's `?` explainer also lists three
+    // steps, and it is open by default the first time a pane is seen.
+    const empty = document.querySelector(".emptyfeat");
+    expect(empty).not.toBeNull();
+    const steps = within(empty as HTMLElement).getAllByRole("listitem");
     expect(steps).toHaveLength(3);
     expect(steps[0]!.textContent).toContain("Add to bench");
     expect(steps[1]!.textContent).toContain("Run all");
@@ -403,7 +407,7 @@ describe("Bench is reachable from the real app", () => {
     fireEvent.click(screen.getByRole("menuitem", { name: /Add to bench/ }));
 
     // And the rail now leads somewhere: App routes view === "bench".
-    fireEvent.click(await screen.findByText(/bench$/));
+    fireEvent.click(await screen.findByText(/bench$/, { selector: ".stitle" }));
     expect(await screen.findByText("Explain a mutex in one line.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Run all" })).toBeInTheDocument();
   });

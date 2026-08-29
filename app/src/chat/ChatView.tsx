@@ -20,6 +20,7 @@
 import { useEffect, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import "./ChatView.css";
 import { useRemuda, type LastStats } from "../ui/state";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
 import { pasteChord } from "../ui/platform";
 import type { Model, ThinkLevel } from "../api/types";
 import { shortTag, type ChatSession, type Lane, type Message } from "./sessions";
@@ -593,9 +594,31 @@ export function ChatView() {
         }}
         onCopyCurl={() => void copyText(asCurl(input))}
         onCopyOllamaRun={() => void copyText(asOllamaRun(input))}
+        // Capture from the *reply*, not just the prompt. A bench stores
+        // prompts, so this adds the user message that produced this answer —
+        // because you decide a prompt is worth keeping after reading what it
+        // got you, and the answer is where you are looking when you decide.
+        onAddToBench={
+          promptBefore(index) === null
+            ? undefined
+            : () => {
+                addToBench(promptBefore(index) ?? "");
+                setMenuFor(null);
+              }
+        }
       />
     );
   };
+
+  /** The user message a given reply is answering, or null if there isn't one. */
+  function promptBefore(index: number): string | null {
+    const messages = session?.messages ?? [];
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (m !== undefined && m.role === "user") return m.content;
+    }
+    return null;
+  }
 
   /**
    * The menu on a *user* message (T5 capture).
@@ -809,6 +832,7 @@ export function ChatView() {
               chat, and a second copy in the main column is a second thing to
               keep in sync for no gain. */}
           <span className="spacer" />
+          <PaneHelpToggle paneId="chat" label="About the chat" />
           <button
             type="button"
             className={`cmpbtn${compare === undefined ? "" : " on"}`}
@@ -828,6 +852,25 @@ export function ChatView() {
           </button>
         </div>
       )}
+      <PaneHelp
+        paneId="chat"
+        title="Chat — where you test the model"
+        what="A conversation with the model that is loaded right now. Each chat remembers which model it ran on, so an old one still tells you what produced it."
+        why="This is where a Modelfile change becomes something you can feel. Edit the Modelfile beside it, save, and ask the same question again."
+        steps={[
+          <>
+            Type a message and press <b>Enter</b>. <b>⇧Enter</b> makes a new line.
+          </>,
+          <>
+            <b>Run controls</b> changes settings for this chat only; <b>Format</b> makes the
+            reply fit a JSON shape you give it.
+          </>,
+          <>
+            The <b>⌄</b> under any message re-rolls it, copies the exact request, or adds the
+            prompt to a <b>bench</b> so you can re-run it after your next save.
+          </>,
+        ]}
+      />
       {!modelIsLoaded && <UnloadedBanner session={session} />}
       {!canChat && <EmbeddingGate tag={session.model} />}
 
