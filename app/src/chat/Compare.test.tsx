@@ -1,4 +1,5 @@
 import "./test/localStorage";
+import { untilModelResident } from "../ui/test/newMenu";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ChatView } from "./ChatView";
@@ -55,7 +56,7 @@ function renderChat(client: FakeClient) {
 
 async function openSeeded(client: FakeClient, title = "Support tone rewrite") {
   renderChat(client);
-  await waitFor(() => expect(screen.getByRole("button", { name: "New chat" })).toBeEnabled());
+  await untilModelResident();
   fireEvent.click(screen.getByText(title));
 }
 

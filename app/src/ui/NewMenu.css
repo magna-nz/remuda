@@ -1,0 +1,82 @@
+/* The "+ New" button and its menu (docs/mockup-new-menu.html §01). */
+
+.newmenu {
+  position: relative;
+}
+
+.nmenu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 60;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  box-shadow: var(--shadow-lg);
+  padding: 5px;
+  animation: nmenu-in 0.11s ease-out;
+}
+
+@keyframes nmenu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+  }
+}
+
+.nmi {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 9px;
+  padding: 9px 10px;
+  color: inherit;
+}
+
+.nmi:hover,
+.nmi:focus-visible {
+  background: var(--raised);
+  outline: none;
+}
+
+.nmi .ic {
+  width: 26px;
+  height: 26px;
+  flex: 0 0 auto;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+  margin-top: 1px;
+}
+
+.nmi .ic svg {
+  width: 14px;
+  height: 14px;
+}
+
+.nmi .col {
+  min-width: 0;
+  flex: 1;
+}
+
+.nmi b {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.nmi small {
+  display: block;
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.45;
+  margin-top: 1px;
+}

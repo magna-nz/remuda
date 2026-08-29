@@ -24,8 +24,8 @@ A calm, local-first desktop app that lets a person:
    **Modelfile** (the base/"OG", or a tuned variant), click **Load**, and
    Remuda loads it in Ollama with a progress bar.
 2. **Chat to test it** — chats live down the left. Each is a saved session
-   that **remembers the model it ran on**; **New chat** opens on the
-   currently loaded model.
+   that **remembers the model it ran on**; **＋ New ▸ New chat** opens one,
+   asking which model only when the answer is ambiguous.
 3. **Tweak the Modelfile in place** — open the Modelfile editor without
    leaving the chat context (the chat list stays put). Edit the system
    prompt and parameters via a friendly form *or* the raw Modelfile.
@@ -102,7 +102,7 @@ reach the server, it is mostly inert and says so plainly (§9).
 ├──────────────┬───────────────────────────────────────────┤
 │ Chats        │ Chat · Modelfile                          │  ← section tabs
 │              │                                            │
-│ + New chat   │  (Chat, the in-context Modelfile editor,   │
+│ + New     ▾  │  (Chat, the in-context Modelfile editor,   │
 │ ─ BENCHMARKS │   a benchmark, Pull, or Settings — the      │
 │  my prompts  │   Chats list stays visible for all of them) │
 │ ─ Recent     │                                            │
@@ -187,8 +187,30 @@ count is unknown, because there is then no honest ceiling to offer.
   other row carries it in the row's tooltip (`gemma-4-31b-coding-q5 —
   not loaded`) and in screen-reader-only text, so the dot's colour is never
   the sole carrier of the state.
-- **＋ New chat** opens an empty session on the **currently loaded** model +
-  Modelfile.
+- **＋ New** is the rail's primary action and is **never disabled**. It opens
+  a two-item menu — **New chat**, then **New benchmark** — and the item's
+  description says what it will do with the models it can see ("Talk to
+  llama3.1:8b", "Choose from 3 models in memory", "Pick a model to load").
+- **New chat** binds a session to one model for its life, so it needs one. It
+  asks **only when the answer is ambiguous**:
+  - **one resident** — no question; binds to the active model, as before.
+  - **two or more** — a picker of the resident models, with the active one
+    preselected, so `Enter` reproduces the old behaviour exactly.
+  - **none resident** — the installed list, and the button reads **Load and
+    start chat**. §5.1's rule holds: opening the question loads nothing.
+  With models already resident the picker also offers **Load a different
+  model…**, which states that loading another *may* evict one — Ollama
+  decides, and no endpoint reports `OLLAMA_MAX_LOADED_MODELS`, so Remuda
+  claims no number.
+- **New benchmark** **never asks about a model.** A lane is a model *and* a
+  Modelfile, chosen on the benchmark page from every **installed** model, and
+  the weights are only needed at Run (§5.7). It creates and opens, whatever is
+  resident; the rail's `+` beside **BENCHMARKS** does exactly the same thing.
+- Both branches navigate away from the Modelfile editor, so both run §8's
+  unsaved-changes gate — **once, and before anything is committed or loaded.**
+  Refusing it creates no benchmark and loads no weights. Asking afterwards
+  would leave a benchmark nobody wanted, or a multi-gigabyte load nobody got a
+  chat for.
 - Sessions persist and are sorted most-recent first.
 
 ## 5.3 Chat / Test (main)
@@ -411,6 +433,11 @@ answer stops depending on the one example that happened to be on screen.
 - The **lane editor** picks the model and the Modelfile for each lane and adds
   or removes lanes, up to four. Each lane is a full model load, which is the
   ceiling's only reason.
+- Lane choices come from every **installed** model and never consult what is
+  resident, so a benchmark is fully configurable with nothing in memory. A
+  benchmark created before any model was picked carries one lane with **no
+  model chosen**; the editor is where that is resolved, and **Run all** stays
+  disabled until every lane has one.
 - The header carries the name, the prompt count and a **lane chip** per
   configuration — `gemma-4-31b · Original`, `qwen3.8-27b · terse-v2`.
 - The table is **one row per prompt, one column per lane**. Expanding a row
@@ -447,6 +474,49 @@ difference between two loads and twenty.
 - A **failed cell is a result**, kept in the table with its cause; the run
   carries on.
 - **Cancel** keeps every finished cell and marks the run `partial`.
+
+#### The memory check, before anything loads
+
+Because lanes run one at a time, two lanes never have to be resident together
+— "lane A **plus** lane B won't fit" is not a state this feature can reach,
+and summing the lanes would invent a problem. What *can* collide is the model
+you were already chatting to. If **Y** is resident and a lane's model is not
+Y, both are in memory the moment that lane loads. So the check is **pairwise**,
+lane by lane:
+
+    lane.model === Y.tag  →  reuse; nothing loads
+    otherwise             →  Y.measured + lane.predicted > usable ?
+
+**Y is measured, not predicted.** It is resident, so `/api/ps` reports its
+real size — a fact, not an estimate. Only the lane about to load is predicted.
+
+**The context length is observed, not assumed.** KV cache is linear in
+context, and Remuda sends no `num_ctx` for a benchmark, so Ollama chooses —
+recent versions size the context to available memory rather than to a fixed
+default. The prediction therefore uses the context `/api/ps` reports for the
+resident runners (the largest of them, since under-estimating KV is the error
+that costs a wasted load), clamped to what each lane's model was trained for.
+A constant is used only when nothing is resident to observe, which is also the
+case where there is no collision to miss.
+
+- A **collision** opens a dialog before anything loads: **Unload and run** /
+  **Run anyway** / **Cancel**. Unloading does **not** reload Y afterwards —
+  that matches Eject (§7), and a surprise load landing after a long run is
+  nobody's request; the chat reloads it on its next message. When Y is
+  **pinned** (`keep_alive: -1`) the dialog says that unloading clears the pin.
+- A lane that does not fit **even on an empty machine** is named as its own
+  problem. Unloading would not save it, so it is not offered as the fix.
+- **Run anyway** always remains. A prediction is a prediction, and the
+  server's own error is a better answer than Remuda's refusal — a lane that
+  fails to load is a result (above), not the end of the run.
+- **No prediction is a first-class result.** With no host-memory reading, a
+  discrete GPU, or a server whose `model_info` omits the architecture fields,
+  the check reports that it could not be made and **Run is not blocked**. An
+  absent prediction is not a failed one.
+- The same verdicts appear **passively on each lane row** as lanes are edited.
+  They cost no extra request: the architecture fields ride the `POST
+  /api/show` sweep the model list already makes. The row hint can be scrolled
+  past, which is why Run still asks.
 
 ### Different is a diff, never a verdict
 

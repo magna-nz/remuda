@@ -18,7 +18,8 @@
  * owns persistence.
  */
 import "./LaneEditor.css";
-import { laneLabel, newLaneId } from "./benchmarks";
+import { laneLabel, newLaneId, UNCONFIGURED_LANE } from "./benchmarks";
+import type { LaneVerdict } from "./preflight";
 import { MAX_LANES, type Lane } from "./types";
 import { shortTag } from "../chat/sessions";
 
@@ -52,6 +53,15 @@ export interface LaneEditorProps {
   onChange: (lanes: Lane[]) => void;
   /** Injectable so a test can assert on stable ids. */
   makeLaneId?: () => string;
+  /**
+   * The memory check's verdict per lane, shown as a passive chip on the row.
+   *
+   * Passive on purpose: the hint can be scrolled past, so it never replaces
+   * the blocking question Run asks (RunPreflight). It costs nothing to
+   * compute — `Model.archParams` rides an /api/show sweep the store already
+   * makes — which is the only reason it is affordable on every edit.
+   */
+  verdicts?: LaneVerdict[];
 }
 
 /**
@@ -147,12 +157,35 @@ export function nextLaneChoice(lanes: Lane[], choices: LaneChoice[]): LaneChoice
   return choices.find((c) => !taken(c)) ?? choices[0] ?? null;
 }
 
+/**
+ * One lane's memory verdict, as a chip beside its selects.
+ *
+ * `fits` says nothing: a row that reads "fine" on every lane is noise, and
+ * the absence of a chip already means there is nothing to say. `unknown` is
+ * likewise silent here — the reason belongs in the Run dialog, where it can
+ * be read in full, not truncated onto a row.
+ */
+function LaneHint({ verdict }: { verdict: LaneVerdict | null }) {
+  const chip =
+    verdict === null || verdict.kind === "fits" || verdict.kind === "unknown"
+      ? null
+      : verdict.kind === "reuse"
+        ? <span className="lane-hint ok">in memory</span>
+        : verdict.kind === "too-big"
+          ? <span className="lane-hint bad">too big for this machine</span>
+          : <span className="lane-hint bad">needs memory freed</span>;
+  // The cell is always present, empty or not: the grid column collapses to
+  // nothing without it, and the remove button would shift between rows.
+  return <span className="lane-hint-slot">{chip}</span>;
+}
+
 export function LaneEditor({
   lanes,
   choices,
   disabled = false,
   onChange,
   makeLaneId = () => newLaneId(),
+  verdicts = [],
 }: LaneEditorProps) {
   const bases = baseModels(choices);
   const full = lanes.length >= MAX_LANES;
@@ -219,6 +252,7 @@ export function LaneEditor({
           <span>Model</span>
           <span>Modelfile</span>
         </div>
+        <span className="lane-hint-slot" />
         <span className="lane-x" />
       </div>
       <ol className="lanelist">
@@ -242,10 +276,17 @@ export function LaneEditor({
                 disabled={disabled || choices.length === 0}
                 onChange={(e) => pickBase(index, e.target.value)}
               >
+                {/* A lane created before any model was picked (a benchmark
+                    made with nothing resident) carries UNCONFIGURED_LANE.
+                    Name the gap instead of rendering an empty option — this
+                    select is where the gap is meant to be closed. */}
+                {base === UNCONFIGURED_LANE && <option value={UNCONFIGURED_LANE}>Choose a model…</option>}
                 {/* A lane pointing at a model that is no longer installed
                     keeps its own name on the list rather than silently
                     snapping to somebody else's. */}
-                {!bases.includes(base) && <option value={base}>{shortTag(base)}</option>}
+                {base !== UNCONFIGURED_LANE && !bases.includes(base) && (
+                  <option value={base}>{shortTag(base)}</option>
+                )}
                 {bases.map((b) => (
                   <option key={b} value={b}>
                     {shortTag(b)}
@@ -267,6 +308,7 @@ export function LaneEditor({
                 ))}
               </select>
               </div>
+              <LaneHint verdict={verdicts.find((v) => v.laneId === lane.id) ?? null} />
               <button
                 type="button"
                 className="lane-x"

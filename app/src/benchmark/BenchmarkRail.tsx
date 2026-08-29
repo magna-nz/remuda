@@ -13,6 +13,11 @@
  * The store does not exist yet, so this takes the list and its callbacks as
  * props. Deleting **confirms in the caller**, under the SPEC §8 toggle the
  * store already owns; there is deliberately no `window.confirm` here.
+ *
+ * `+` is **never disabled**. Creating a benchmark has no residency
+ * precondition: lane choices come from every installed model
+ * (`BenchmarkPane.laneChoices`) and the weights are only needed at Run, so an
+ * unconfigured lane is a valid state the lane editor exists to resolve.
  */
 import "./BenchmarkRail.css";
 import { benchmarkSubtitle } from "./benchmarks";
@@ -23,10 +28,6 @@ export interface BenchmarkRailProps {
   activeBenchmarkId: string | null;
   /** True when the Benchmark pane is the one on screen. */
   paneVisible?: boolean;
-  /** False disables `+`, e.g. with no model to put in a lane yet. */
-  canCreate?: boolean;
-  /** The `+` button's tooltip when `canCreate` is false. */
-  createBlockedReason?: string;
   onOpen: (id: string) => void;
   onCreate: () => void;
   /** The caller confirms before it deletes (SPEC §8). */
@@ -42,8 +43,6 @@ export function BenchmarkRail({
   benchmarks,
   activeBenchmarkId,
   paneVisible = false,
-  canCreate = true,
-  createBlockedReason = "Load a model first",
   onOpen,
   onCreate,
   onDelete,
@@ -56,9 +55,8 @@ export function BenchmarkRail({
         <button
           type="button"
           className="side-add"
-          title={canCreate ? "New benchmark" : createBlockedReason}
+          title="New benchmark"
           aria-label="New benchmark"
-          disabled={!canCreate}
           onClick={onCreate}
         >
           +

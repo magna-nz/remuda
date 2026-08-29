@@ -1,4 +1,5 @@
 import "../chat/test/localStorage";
+import { untilModelResident } from "../ui/test/newMenu";
 /**
  * The guided tour, on the real UI (docs/SPEC-round-two.md R6).
  *
@@ -8,7 +9,7 @@ import "../chat/test/localStorage";
  * states that matter are the empty one (no Ollama, no models, no chats, no
  * benches: the likeliest first launch there is) and the full one.
  */
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import App from "../App";
 import { FakeClient, makeModel } from "../ui/test/FakeClient";
@@ -64,7 +65,7 @@ function seedSession() {
 }
 
 async function untilLoaded() {
-  await waitFor(() => expect(screen.getByRole("button", { name: "New chat" })).toBeEnabled());
+  await untilModelResident();
 }
 
 /** Open the Modelfile editor, so the Prompt segment exists to be pointed at. */
@@ -127,7 +128,13 @@ describe("a first launch with no Ollama", () => {
     render(<App client={offlineClient()} />);
     // The state under test, asserted rather than assumed.
     await screen.findByText("Not running");
-    expect(screen.getByRole("button", { name: "New chat" })).toBeDisabled();
+    // No dead end on a first launch: + New is live even with no server, and
+    // says what it would do rather than refusing.
+    const newButton = screen.getByRole("button", { name: "New" });
+    expect(newButton).toBeEnabled();
+    fireEvent.click(newButton);
+    expect(screen.getByText("Pick a model to load")).toBeInTheDocument();
+    fireEvent.click(newButton);
     expect(screen.getByText(/A benchmark runs one set of prompts through several models/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Take the tour" }));

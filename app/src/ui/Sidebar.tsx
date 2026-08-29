@@ -6,8 +6,9 @@
  * shows as much history as it can. The model tag itself only spells itself
  * out on the open chat; elsewhere it lives in the row's tooltip, and in
  * screen-reader text so the dot is never the only carrier of the state.
- * "+ New chat" binds a session to the active resident model, so it needs one
- * loaded. Search filters by title substring.
+ * "+ New" (NewMenu) is the rail's primary action and is never disabled: the
+ * model question lives behind it, and only the chat branch ever asks.
+ * Search filters by title substring.
  *
  * Two groups, not one: **Benches** (T5) sits above **Recent**, because a
  * bench is a thing you reach for from wherever you are — most often from
@@ -21,6 +22,7 @@ import { relativeTime, shortTag, type ChatSession } from "../chat/sessions";
 // across every surface, which is what makes a bench reachable from inside
 // the Modelfile editor.
 import { BenchmarkRail } from "../benchmark/BenchmarkRail";
+import { NewMenu } from "./NewMenu";
 import { useTourTarget } from "../tour/registry";
 import { useRemuda } from "./state";
 
@@ -76,12 +78,10 @@ export function Sidebar() {
     setView,
     sessions,
     activeSessionId,
-    activeModel,
-    newChat,
     benchmarks,
     activeBenchmarkId,
     openBenchmark,
-    createBenchmark,
+    createAndOpenBenchmark,
     deleteBenchmark,
   } = useRemuda();
   // R6 step 3 rings the BENCHMARKS header; the rail takes the ref rather
@@ -110,27 +110,16 @@ export function Sidebar() {
         </div>
       </div>
       <div className="side-new">
-        <button
-          type="button"
-          className="btn primary wide"
-          disabled={!activeModel}
-          title={activeModel ? undefined : "Load a model first"}
-          onClick={newChat}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          New chat
-        </button>
+        <NewMenu />
       </div>
+      {/* The rail's + and the "+ New ▸ New benchmark" menu item do exactly the
+          same thing: create, then open. Neither is gated on residency. */}
       <BenchmarkRail
         benchmarks={benchmarks}
         activeBenchmarkId={activeBenchmarkId}
         paneVisible={view === "benchmark"}
-        canCreate={activeModel !== null}
-        createBlockedReason="Load a model first"
         onOpen={openBenchmark}
-        onCreate={() => void createBenchmark()}
+        onCreate={createAndOpenBenchmark}
         onDelete={deleteBenchmark}
         headerRef={benchmarksRef}
       />
@@ -139,7 +128,7 @@ export function Sidebar() {
         {filtered.length === 0 ? (
           <p className="empty-note">
             {sessions.length === 0
-              ? "No chats yet. Load a model, then start one."
+              ? "No chats yet. Start one with + New."
               : "No chats match."}
           </p>
         ) : (

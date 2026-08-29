@@ -23,9 +23,9 @@
 <br />
 
 <div align="center">
-  <img src="docs/demo.gif" alt="Loading a model, chatting with it, and editing its Modelfile in Remuda" width="820" />
+  <img src="docs/demo.gif" alt="Starting a chat in Remuda: picking a model to load, chatting with it, then running that prompt as a benchmark" width="820" />
   <br />
-  <sub><strong>Chats on the left, the loaded model in the top bar, the Modelfile one click away.</strong></sub>
+  <sub><strong>Start a chat and it asks which model to load. Then send any prompt to a benchmark and run it.</strong> Real time, nothing sped up.</sub>
 </div>
 
 <br />
@@ -39,6 +39,10 @@ Modelfile in another editor — slow enough that most people try one system prom
 the chat, save.** It rebuilds through `ollama create` and reloads, so your next message uses the
 change. Other Ollama GUIs are chat windows; this one is for the tuning.
 
+And then for knowing whether the tuning worked. Any prompt you have already chatted can be sent to
+a **benchmark** and replayed across several configurations at once, on one pinned seed. One good
+answer is luck; a column of them is a reason.
+
 Nothing leaves your machine — Remuda is a client for the Ollama you already run on `127.0.0.1`.
 
 > A *remuda* is the herd of horses a ranch hand picks their mount from each day.
@@ -49,11 +53,13 @@ Nothing leaves your machine — Remuda is a client for the Ollama you already ru
   source of truth and round-trips byte for byte. Save rebuilds and reloads.
 * 🕰️ **Modelfile history** — every save snapshotted with a line diff. Restore loads a draft rather
   than rebuilding behind your back; outside edits show up as drift.
-* 🔀 **Compare (A/B)** — one prompt, two configurations, run sequentially on a pinned seed so you're
-  reading the change and not sampling noise.
 * 🏁 **Benchmark** — keep a set of prompts and run them against several configurations at once: two
   models against each other, or one model under two Modelfiles. One row per prompt, one column per
   lane, every answer on the same pinned seed. It shows you what differs and never scores a lane.
+  Before it loads anything it checks whether the lane fits beside whatever you already have in
+  memory, and offers to unload rather than letting a five-minute load fail.
+* 🔀 **Compare (A/B)** — the same idea for a single prompt and two configurations, when you want the
+  answer now rather than a table.
 * 🧰 **Tool playground** — for models that claim `tools`: write schemas and see every `tool_call`
   validated field by field.
 * 🎛️ **Per-chat parameters** — temperature, seed and the rest for the current chat only, with **Bake
@@ -139,8 +145,10 @@ cd ../src-tauri && cargo tauri dev
 ## 🚀 Quick start
 
 1. Start Ollama with `ollama serve`. Remuda's connection pill goes green.
-2. Click the model control in the top bar, pick a model, hit **Load**.
-3. Hit **＋ New chat** and say hello.
+2. Hit **＋ New → New chat**. With nothing in memory it asks which model to load and binds the
+   chat to it; with one already loaded it just starts. (The model control in the top bar still
+   loads one directly if you'd rather.)
+3. Say hello.
 4. Not the behaviour you wanted? Click the pencil, edit the system prompt, **Save**. The model
    reloads and your next message uses it.
 5. Happy with it? **Save as…** keeps it as a named variant, original left alone.
@@ -160,6 +168,8 @@ First run offers a five-step tour, and every pane has a **?** if you'd rather re
 * [`docs/SPEC-round-two.md`](docs/SPEC-round-two.md) — layer offload, constrained output, the
   rendered prompt, the help layer and Benchmark, with that round's build log.
 * [`docs/mockup.html`](docs/mockup.html) — the design mockup the app is built to.
+* [`docs/mockup-new-menu.html`](docs/mockup-new-menu.html) — the **＋ New** menu and the memory
+  check before a benchmark run, with the reasoning behind each call.
 * [`packaging/homebrew/`](packaging/homebrew/README.md) — release and tap mechanics.
 
 ## 🛠️ Contributing

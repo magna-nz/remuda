@@ -3,6 +3,7 @@
  * in types.ts against Ollama's local API. All requests go to the configured
  * base URL, which defaults to loopback.
  */
+import { normalizeTag } from "../models/tags";
 import type {
   ArchParams,
   ChatChunk,
@@ -128,10 +129,7 @@ function requireBody(res: Response, path: string): ReadableStream<Uint8Array> {
 
 /** Lowercase and strip an explicit or implicit ":latest" so
  * "llama3.1", "llama3.1:latest", and "LLAMA3.1:LATEST" all compare equal. */
-function normalizeTag(tag: string): string {
-  const lower = tag.trim().toLowerCase();
-  return lower.endsWith(":latest") ? lower.slice(0, -":latest".length) : lower;
-}
+
 
 /**
  * The FROM target of a Modelfile, or null. Ollama's /api/show returns a
@@ -438,9 +436,10 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         base: null,
         isVariant: false,
         modifiedAt: m.modified_at ?? "",
-        // /api/tags doesn't carry capabilities; only the /api/show sweep in
-        // listGroups can fill these in.
+        // /api/tags doesn't carry capabilities or model_info; only the
+        // /api/show sweep in listGroups can fill these in.
         capabilities: [],
+        archParams: null,
       };
     });
     return { models, parents, running };
@@ -517,8 +516,9 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
           isVariant: base !== null,
           contextLength: contextLengthFrom(raw?.model_info),
           // Same cached /api/show response the base resolution above reads —
-          // capabilities cost no extra request.
+          // capabilities and archParams cost no extra request.
           capabilities: capabilitiesFrom(raw),
+          archParams: archParamsFrom(raw?.model_info),
         };
       });
       const groups = new Map<string, ModelGroup>();

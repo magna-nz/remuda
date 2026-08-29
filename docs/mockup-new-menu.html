@@ -1,0 +1,1301 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Remuda — "+ New": one button, two things to make</title>
+<style>
+:root{
+  --bg:#191817; --surface:#1e1d1b; --surface-2:#262523; --raised:#302e2b;
+  --border:#3a3733; --border-strong:#55504a;
+  --ink:#f2efe9; --ink-2:#dcd7ce; --muted:#a29c91; --faint:#7b756a;
+  --ember:#6165c6; --ember-press:#6b4fa8; --ember-tint:#262445; --ember-ink:#a9a5ea;
+  --good:#89c360; --good-tint:#1e2a16;
+  --warn:#f1ae27; --warn-tint:#2e2610;
+  --crit:#e75140; --crit-tint:#2f1714;
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 8px 24px -10px rgba(0,0,0,.55);
+  --shadow-lg:0 22px 60px -16px rgba(0,0,0,.7);
+  --radius:12px;
+  --ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono","Cascadia Code",monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;color:inherit}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em}
+code{font-family:var(--mono)}
+::selection{background:var(--ember-tint)}
+
+/* ---------- page chrome ---------- */
+.page{max-width:1080px;margin:0 auto;padding:34px 24px 90px}
+.page > header h1{font-size:21px}
+.page > header p{margin:8px 0 0;color:var(--muted);font-size:13.5px;max-width:74ch}
+.page > header .meta{margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+.sec{margin-top:52px;padding-top:34px;border-top:1px solid var(--border)}
+.sec > .num{font-family:var(--mono);font-size:12px;color:var(--ember-ink);letter-spacing:.06em}
+.sec > h2{font-size:17.5px;margin-top:5px}
+.sec > .why{margin:9px 0 0;color:var(--ink-2);font-size:13.5px;max-width:74ch}
+.sec > .why + .why{margin-top:8px;color:var(--muted)}
+.sec h3.sub{font-size:13.5px;margin:30px 0 0;color:var(--ink)}
+.sec h3.sub + .why{margin-top:6px}
+.caption{margin:11px 2px 0;font-size:12.5px;color:var(--muted);max-width:80ch}
+.caption b{color:var(--ink-2);font-weight:600}
+.caption code{font-size:11.5px;background:var(--surface-2);border:1px solid var(--border);padding:1px 6px;border-radius:5px;color:var(--ink-2)}
+.winwrap{margin-top:16px}
+.api{margin:14px 0 4px;display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.api .k{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-right:2px}
+.api code{font-size:11.5px;background:var(--surface-2);border:1px solid var(--border);padding:2px 8px;border-radius:6px;color:var(--ink-2)}
+
+/* ---------- fake app window ---------- */
+.win{position:relative;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--bg);box-shadow:var(--shadow)}
+.shell{display:flex;min-height:0;position:relative}
+.sidebar{width:238px;flex:0 0 auto;background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
+.side-search{padding:12px 12px 6px}
+.search{display:flex;align-items:center;gap:8px;background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:7px 10px;color:var(--muted)}
+.search svg{width:14px;height:14px;flex:0 0 auto}
+.search .ph{font-size:12.5px;color:var(--faint)}
+.side-new{padding:4px 12px 8px;position:relative}
+.side-label{display:flex;align-items:center;justify-content:space-between;padding:8px 16px 6px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.side-add{width:18px;height:18px;display:grid;place-items:center;border:0;border-radius:5px;background:transparent;color:var(--faint);font-size:14px;line-height:1;padding:0}
+.side-add:hover{background:var(--raised);color:var(--ink)}
+.sesslist{padding:0 8px 6px}
+.sess{position:relative;border:1px solid transparent;border-radius:10px;margin-bottom:2px}
+.sess:hover{background:var(--raised)}
+.sess.active{background:var(--surface-2);border-color:var(--border-strong);box-shadow:var(--shadow)}
+.sess-open{display:block;width:100%;text-align:left;background:transparent;border:0;border-radius:10px;padding:6px 11px;color:inherit;font:inherit}
+.strow{display:flex;align-items:center;gap:8px;min-width:0}
+.stitle{flex:1 1 auto;min-width:0;font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 0 2px var(--good-tint);flex:0 0 auto}
+.sdot.off{background:transparent;border:1px solid var(--warn);box-shadow:none}
+.stime{flex:0 0 auto;color:var(--faint);font-size:10.5px}
+.smodel{margin:2px 0 0 14px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.spacer-fill{flex:1}
+.side-foot{border-top:1px solid var(--border);padding:10px;display:flex;gap:8px}
+.empty-note{margin:4px 8px;padding:9px 11px;font-size:11.5px;line-height:1.5;color:var(--muted);background:var(--surface-2);border:1px solid var(--border);border-radius:9px}
+.main{flex:1;min-width:0;background:var(--surface);display:flex;flex-direction:column}
+.tabs{display:flex;align-items:center;gap:2px;padding:0 16px;border-bottom:1px solid var(--border);background:var(--surface);flex:0 0 auto}
+.tab{padding:12px 12px 11px;font-size:12.5px;font-weight:600;color:var(--muted);background:transparent;border:0;border-bottom:2px solid transparent}
+.tab.active{color:var(--ink);border-bottom-color:var(--ember)}
+.tabs .spacer{flex:1}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:7px;border:1px solid var(--border);background:var(--surface-2);font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px;padding:8px 12px;font-weight:600;font-size:13px;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--ink)}
+.btn:hover{background:var(--raised)}
+.btn svg{width:15px;height:15px}
+.btn.primary{background:var(--ember);border-color:transparent;color:#fff;box-shadow:var(--shadow)}
+.btn.primary:hover{background:var(--ember-press)}
+.btn.wide{width:100%}
+.btn.sm{padding:5px 10px;font-size:12px;border-radius:8px}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{background:var(--raised);color:var(--ink)}
+.btn:disabled{cursor:not-allowed;opacity:.5}
+.btn.iconbtn{width:38px;flex:0 0 auto;padding:8px}
+.btn.open[aria-expanded="true"]{background:var(--ember-press)}
+
+/* ---------- NEW: the + New menu ---------- */
+.nmenu{position:absolute;top:calc(100% - 4px);left:12px;right:12px;z-index:60;
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:12px;
+  box-shadow:var(--shadow-lg);padding:5px;transform-origin:top center}
+.nmenu[data-anim]{animation:pop .11s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(-4px) scale(.98)}to{opacity:1;transform:none}}
+.nmi{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;
+  background:transparent;border:0;border-radius:9px;padding:9px 10px;color:inherit}
+.nmi:hover,.nmi:focus-visible{background:var(--raised);outline:none}
+.nmi .ic{width:26px;height:26px;flex:0 0 auto;border-radius:8px;display:grid;place-items:center;
+  background:var(--ember-tint);color:var(--ember-ink);margin-top:1px}
+.nmi .ic svg{width:14px;height:14px}
+.nmi .col{min-width:0;flex:1}
+.nmi b{display:block;font-size:13px;font-weight:600;color:var(--ink);letter-spacing:-.005em}
+.nmi small{display:block;font-size:11px;color:var(--muted);line-height:1.45;margin-top:1px}
+.nmi kbd{flex:0 0 auto;font-family:var(--mono);font-size:10px;color:var(--faint);
+  border:1px solid var(--border);border-radius:5px;padding:1px 5px;margin-top:4px;background:var(--surface)}
+.nmsep{height:1px;background:var(--border);margin:4px 8px}
+
+/* ---------- NEW: the model question sheet ---------- */
+.scrim{position:absolute;inset:0;background:rgba(12,11,10,.62);z-index:70;display:grid;place-items:center;padding:20px}
+.sheet{width:100%;max-width:430px;max-height:100%;display:flex;flex-direction:column;
+  background:var(--surface-2);border:1px solid var(--border-strong);border-radius:14px;box-shadow:var(--shadow-lg);overflow:hidden}
+.sheet-h{padding:14px 16px 12px;border-bottom:1px solid var(--border);flex:0 0 auto}
+.sheet-h b{font-size:14px;display:block}
+.sheet-h p{margin:4px 0 0;font-size:12px;color:var(--muted);line-height:1.5}
+.sheet-b{overflow-y:auto;padding:6px;flex:1;min-height:0}
+.mgroup{padding:9px 10px 5px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);display:flex;align-items:center;gap:8px}
+.mgroup .rule{flex:1;height:1px;background:var(--border)}
+.mrow{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;
+  border:1px solid transparent;border-radius:10px;padding:8px 10px;color:inherit}
+.mrow:hover{background:var(--raised)}
+.mrow[aria-checked="true"]{background:var(--ember-tint);border-color:color-mix(in srgb,var(--ember) 42%,transparent)}
+.mrow .gl{width:28px;height:28px;flex:0 0 auto;border-radius:8px;display:grid;place-items:center;
+  background:var(--raised);color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:700}
+.mrow[aria-checked="true"] .gl{background:var(--ember);color:#fff}
+.mrow .col{flex:1;min-width:0}
+.mrow .mtag{display:block;font-family:var(--mono);font-size:12px;font-weight:600;color:var(--ink);
+  text-transform:none;letter-spacing:0;padding:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow .sub{display:flex;align-items:center;gap:7px;margin-top:2px;font-size:10.5px;color:var(--muted);flex-wrap:wrap}
+.mrow .sub .dot{width:5px;height:5px;border-radius:50%;background:var(--good);box-shadow:0 0 0 2px var(--good-tint)}
+.mrow .sub .warn{color:var(--warn)}
+.mrow .tick{width:16px;height:16px;flex:0 0 auto;color:var(--ember-ink);opacity:0}
+.mrow[aria-checked="true"] .tick{opacity:1}
+.mrow .tick svg{width:16px;height:16px}
+.sheet-f{display:flex;align-items:center;gap:9px;padding:11px 14px;border-top:1px solid var(--border);flex:0 0 auto}
+.sheet-f .spacer{flex:1}
+.sheet-f .note{font-size:11px;color:var(--faint);font-family:var(--mono)}
+.morelink{display:flex;align-items:center;gap:8px;width:100%;background:transparent;border:0;
+  border-radius:9px;padding:9px 10px;color:var(--muted);font-size:12px;font-weight:600;text-align:left}
+.morelink:hover{background:var(--raised);color:var(--ink)}
+.morelink svg{width:14px;height:14px;flex:0 0 auto}
+.evict{margin:2px 8px 6px;padding:8px 10px;font-size:11px;line-height:1.5;color:var(--warn);
+  background:var(--warn-tint);border:1px solid color-mix(in srgb,var(--warn) 28%,transparent);border-radius:8px}
+
+/* ---------- chat + bench panes ---------- */
+.pane{display:flex;flex-direction:column;height:392px;min-height:0}
+.chatlog{flex:1;overflow-y:auto;padding:20px 22px;display:flex;flex-direction:column;gap:16px}
+.blank{flex:1;display:grid;place-items:center;padding:24px;text-align:center}
+.blank .bx{max-width:38ch}
+.blank .mk{width:40px;height:40px;margin:0 auto 12px;border-radius:11px;display:grid;place-items:center;
+  background:var(--ember-tint);color:var(--ember-ink);font-family:var(--mono);font-size:13px;font-weight:700}
+.blank b{font-size:14px;display:block}
+.blank p{margin:6px 0 0;font-size:12.5px;color:var(--muted);line-height:1.55}
+.composer{flex:0 0 auto;border-top:1px solid var(--border);padding:11px 14px}
+.composer .box{display:flex;align-items:flex-end;gap:9px;border:1px solid var(--border-strong);border-radius:12px;padding:7px 7px 7px 12px;background:var(--surface-2)}
+.composer .fake-input{flex:1;font-size:13px;color:var(--faint);padding:6px 0}
+.composer .send{width:32px;height:32px;border-radius:9px;background:var(--ember);color:#fff;border:0;display:grid;place-items:center;flex:0 0 auto}
+.composer .send svg{width:15px;height:15px}
+.benchhead{display:flex;align-items:center;gap:11px;padding:13px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex:0 0 auto;flex-wrap:wrap}
+.benchhead b{font-size:14px}
+.benchhead .bmeta{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.benchhead .spacer{flex:1}
+.lanes{display:flex;gap:9px;padding:11px 16px;border-bottom:1px solid var(--border);background:var(--surface-2);flex:0 0 auto;flex-wrap:wrap;align-items:center}
+.lane{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface);font-family:var(--mono);font-size:11px;color:var(--ink-2)}
+.lane .dot{width:6px;height:6px;border-radius:50%;background:var(--good);box-shadow:0 0 0 2px var(--good-tint)}
+.lane.add{border-style:dashed;color:var(--muted);font-family:var(--ui);font-weight:600}
+.lane.pick{border-color:color-mix(in srgb,var(--ember) 45%,transparent);background:var(--ember-tint);color:var(--ember-ink);font-family:var(--ui);font-weight:600}
+.lanes .lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint)}
+.laneedit{padding:12px 16px}
+.lrow{display:flex;align-items:center;gap:8px;padding:7px 9px;border:1px solid var(--border);border-radius:10px;background:var(--surface);margin-bottom:6px}
+.lrow .ln{font-family:var(--mono);font-size:10.5px;color:var(--faint);flex:0 0 auto}
+.lsel{display:inline-flex;align-items:center;gap:7px;padding:5px 9px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-2);font-family:var(--mono);font-size:11px;color:var(--ink-2);min-width:0}
+.lsel svg{width:11px;height:11px;color:var(--muted);flex:0 0 auto}
+.lsel.unset{color:var(--ember-ink);border-color:color-mix(in srgb,var(--ember) 45%,transparent);background:var(--ember-tint);font-family:var(--ui);font-weight:600}
+.lsel.add{color:var(--muted);border-style:dashed;border-color:var(--border-strong);background:transparent;font-family:var(--ui);font-weight:600}
+.lsep{color:var(--faint);font-size:11px;flex:0 0 auto}
+.runnote{display:flex;align-items:center;gap:7px;margin-top:9px;font-size:11px;color:var(--faint)}
+.runnote svg{width:12px;height:12px;flex:0 0 auto}
+.runnote b{color:var(--ink-2);font-weight:600}
+/* preflight: the Y + lane memory check */
+.chk{display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:10px;border:1px solid var(--border);background:var(--surface);margin-bottom:6px}
+.chk .st{width:17px;height:17px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;margin-top:1px}
+.chk .st svg{width:10px;height:10px}
+.chk.ok  .st{background:var(--good-tint);color:var(--good)}
+.chk.bad .st{background:var(--crit-tint);color:var(--crit)}
+.chk.unk .st{background:var(--raised);color:var(--faint)}
+.chk .col{flex:1;min-width:0;display:block}
+.chk .ct{display:block;font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--ink);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chk .cs{display:block;font-size:11px;color:var(--muted);margin-top:2px;line-height:1.5}
+.chk.bad .cs b{color:var(--crit)}
+.chk .cs b{color:var(--ink-2);font-weight:600}
+.membar{position:relative;height:11px;border-radius:5px;background:var(--border);display:flex;margin:9px 0 6px;overflow:visible}
+.membar i{display:block;height:100%}
+.membar i:first-child{border-radius:5px 0 0 5px}
+.membar i.res{background:var(--muted)}
+.membar i.lane{background:var(--ember)}
+.membar i.over{background:var(--crit);border-radius:0 5px 5px 0}
+.memcap{position:absolute;top:-4px;bottom:-4px;width:2px;background:var(--ink)}
+.memcap span{position:absolute;top:-15px;right:4px;font-family:var(--mono);font-size:9.5px;color:var(--ink-2);white-space:nowrap}
+.memkey{display:flex;flex-wrap:wrap;gap:12px;font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:10px}
+.memkey span{display:inline-flex;align-items:center;gap:5px}
+.memkey i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.lhint{flex:0 0 auto;font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:999px}
+.lhint.ok{background:var(--good-tint);color:var(--good)}
+.lhint.bad{background:var(--crit-tint);color:var(--crit)}
+.formula{margin:14px 0 0;padding:12px 14px;border:1px solid var(--border);border-left:2px solid var(--ember);border-radius:0 10px 10px 0;background:var(--surface-2);font-family:var(--mono);font-size:11.5px;color:var(--ink-2);line-height:1.9;overflow-x:auto}
+.formula em{color:var(--faint);font-style:normal}
+.formula b{color:var(--ember-ink);font-weight:600}
+
+/* ---------- demo controls ---------- */
+.demobar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 13px;border:1px solid var(--border);
+  border-radius:11px;background:var(--surface-2);margin-bottom:14px}
+.demobar .lbl{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.seg{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:8px;background:var(--raised);border:1px solid var(--border)}
+.seg button{border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600;padding:4px 10px;border-radius:6px}
+.seg button.on{background:var(--ember);color:#fff}
+.demobar .hint{font-size:11.5px;color:var(--faint);margin-left:auto}
+
+/* ---------- flow diagram ---------- */
+.flow{margin-top:18px;border:1px solid var(--border);border-radius:12px;background:var(--surface-2);padding:18px 16px;overflow-x:auto}
+.flow svg{display:block;min-width:660px;width:100%;height:auto}
+
+/* ---------- side-by-side frames ---------- */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
+@media (max-width:860px){.grid2{grid-template-columns:1fr}}
+.frame{border:1px solid var(--border);border-radius:12px;background:var(--bg);overflow:hidden}
+.frame > .fh{padding:9px 12px;border-bottom:1px solid var(--border);background:var(--surface-2);
+  font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--faint);
+  display:flex;align-items:center;gap:8px}
+.frame > .fh .pill{font-family:var(--mono);font-size:10px;letter-spacing:0;text-transform:none;
+  padding:1px 7px;border-radius:999px;font-weight:600}
+.frame > .fh .pill.now{background:var(--crit-tint);color:var(--crit)}
+.frame > .fh .pill.next{background:var(--good-tint);color:var(--good)}
+.frame > .fb{padding:20px 18px;display:grid;place-items:center;background:var(--bg)}
+/* the proposed frame holds an open menu, which is absolutely positioned and would
+   otherwise be clipped by .frame's overflow:hidden — reserve its height */
+.frame > .fb.tall{align-items:start;padding-bottom:176px}
+.grid2.align > .frame{display:flex;flex-direction:column}
+.grid2.align > .frame > .fb{flex:1}
+.railbit{width:214px}
+
+/* ---------- table ---------- */
+table{width:100%;border-collapse:collapse;margin-top:16px;font-size:12.5px}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--border);vertical-align:top}
+th{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+td code{font-size:11.5px;color:var(--ink-2)}
+td b{color:var(--ink-2)}
+.tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px}
+.tag.s{background:var(--good-tint);color:var(--good)}
+.tag.m{background:var(--warn-tint);color:var(--warn)}
+.open-q{margin-top:16px;border:1px solid var(--border);border-left:2px solid var(--warn);border-radius:0 11px 11px 0;background:var(--surface-2);padding:14px 16px}
+.decided{margin-top:16px;border:1px solid var(--border);border-left:2px solid var(--good);border-radius:0 11px 11px 0;background:var(--surface-2);padding:14px 16px}
+.decided h3{font-size:13px}
+.decided > p{margin:6px 0 0;font-size:12.5px;color:var(--muted)}
+.decided dl{margin:12px 0 0}
+.decided dt{font-size:12.5px;font-weight:600;color:var(--ink);display:flex;align-items:baseline;gap:8px}
+.decided dt .v{font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:2px 8px;border-radius:999px;background:var(--good-tint);color:var(--good);flex:0 0 auto}
+.decided dd{margin:5px 0 0;padding-left:0;font-size:12.5px;color:var(--muted);line-height:1.6}
+.decided dd + dt{margin-top:14px}
+.decided dd b{color:var(--ink-2);font-weight:600}
+.decided dd code{font-size:11.5px;background:var(--surface);border:1px solid var(--border);padding:1px 6px;border-radius:5px;color:var(--ink-2)}
+.open-q h3{font-size:13px}
+.open-q ul{margin:9px 0 0;padding-left:18px;color:var(--muted);font-size:12.5px;line-height:1.65}
+.open-q li + li{margin-top:7px}
+.open-q b{color:var(--ink-2)}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>Remuda — “+ New”: one button, two things to make</h1>
+  <p>
+    The rail's primary action currently says <b>+ New chat</b> and is <b>disabled</b> whenever no
+    model is resident — a dead control with a tooltip reading “Load a model first”. Benchmarks are
+    made from a different affordance entirely: a small <code>+</code> in the BENCHMARKS header, also
+    disabled for the same reason.
+  </p>
+  <p>
+    This replaces both entry points with one live button, <b>+ New</b>, which opens a two-item menu.
+    <b>New chat</b> is the only branch that ever asks about a model, and only when the answer isn't
+    already obvious. <b>New benchmark</b> never asks: a lane is a model <em>and</em> a Modelfile,
+    picked on the benchmark page, and the weights load when you press Run.
+  </p>
+  <div class="meta">Interactive · click the window below · mock data from a 36 GB machine</div>
+</header>
+
+<!-- ═══════════════════════════════ 01 ═══════════════════════════════ -->
+<section class="sec" id="button">
+  <div class="num">01</div>
+  <h2>The button, and the menu behind it</h2>
+  <p class="why">
+    <b>+ New</b> is never disabled. That is the whole point: the old button's disabled state was the
+    app refusing to help at the exact moment a new user most needs it. “Load a model first” tells you
+    what is wrong and gives you nothing to click.
+  </p>
+  <p class="why">
+    Chat sits above Benchmark because it is the overwhelmingly more common thing to make, and because
+    the menu should read top-down as most-used first. Both rows carry a one-line description — nobody
+    arrives at this app already knowing what a benchmark is.
+  </p>
+
+  <div class="grid2 align">
+    <div class="frame">
+      <div class="fh"><span class="pill now">today</span> disabled, with a tooltip for a door</div>
+      <div class="fb tall">
+        <div class="railbit">
+          <button class="btn primary wide" disabled title="Load a model first">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            New chat
+          </button>
+          <div class="side-label" style="padding-left:4px;padding-right:4px">Benchmarks <button class="side-add" disabled title="Load a model first">+</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="frame">
+      <div class="fh"><span class="pill next">proposed</span> always live, opens a menu</div>
+      <div class="fb tall">
+        <div class="railbit" style="position:relative">
+          <button class="btn primary wide" aria-expanded="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+            New
+          </button>
+          <div class="nmenu" style="left:0;right:0;top:calc(100% + 6px)">
+            <div class="nmi">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-2.8-.4L3 21l1.5-4.6A8.3 8.3 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/></svg></span>
+              <span class="col"><b>New chat</b><small>Talk to one model</small></span>
+            </div>
+            <div class="nmi">
+              <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9M10 20V4M16 20v-7M22 20H2"/></svg></span>
+              <span class="col"><b>New benchmark</b><small>Run one set of prompts across models</small></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    The word <b>chat</b> loses its position as the primary label — a cost worth naming. It buys the
+    button back for the case where nothing is loaded, which is every first launch.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════ 02 ═══════════════════════════════ -->
+<section class="sec" id="live">
+  <div class="num">02</div>
+  <h2>The whole flow, click-through</h2>
+  <p class="why">
+    Set how many models are resident, then click <b>+ New</b>. The model question appears only when
+    the app cannot answer it for you.
+  </p>
+
+  <div class="winwrap">
+    <div class="demobar">
+      <span class="lbl">Resident models</span>
+      <div class="seg" id="scenario">
+        <button data-scn="none">none</button>
+        <button data-scn="one" class="on">one</button>
+        <button data-scn="many">three</button>
+      </div>
+      <span class="hint" id="hint">One loaded — New chat starts immediately, no question asked.</span>
+    </div>
+
+    <div class="win">
+      <div class="shell">
+        <!-- ── rail ── -->
+        <aside class="sidebar">
+          <div class="side-search">
+            <div class="search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+              <span class="ph">Search chats…</span>
+            </div>
+          </div>
+          <div class="side-new">
+            <button class="btn primary wide" id="newbtn" aria-expanded="false" aria-haspopup="menu">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              New
+            </button>
+            <div class="nmenu" id="nmenu" role="menu" hidden>
+              <button class="nmi" role="menuitem" data-act="chat">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 9.9 9.9 0 0 1-2.8-.4L3 21l1.5-4.6A8.3 8.3 0 0 1 12 3.1a8.4 8.4 0 0 1 9 8.4z"/></svg></span>
+                <span class="col"><b>New chat</b><small>Talk to one model</small></span>
+                <kbd>⌘N</kbd>
+              </button>
+              <button class="nmi" role="menuitem" data-act="bench">
+                <span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V9M10 20V4M16 20v-7M22 20H2"/></svg></span>
+                <span class="col"><b>New benchmark</b><small>Run one set of prompts across models</small></span>
+                <kbd>⌘B</kbd>
+              </button>
+            </div>
+          </div>
+          <div class="side-label">Benchmarks <button class="side-add">+</button></div>
+          <div class="sesslist" id="benchlist">
+            <p class="empty-note">A benchmark runs one set of prompts through several models side by side.</p>
+          </div>
+          <div class="side-label">Recent</div>
+          <div class="sesslist" id="sesslist"></div>
+          <div class="spacer-fill"></div>
+          <div class="side-foot">
+            <button class="btn wide">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+              Get Models
+            </button>
+            <button class="btn iconbtn" title="Settings">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.6 13.6a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 1 1-2.84 2.84l-.06-.06a1.7 1.7 0 0 0-2.88 1.2v.18a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.55 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 1 1-2.84-2.84l.06-.06a1.7 1.7 0 0 0-1.2-2.88H3.1a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.55-1.1 1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.84-2.84l.06.06a1.7 1.7 0 0 0 1.88.34h.08A1.7 1.7 0 0 0 10.24 4.1V3.9a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 2.88 1.2l.06-.06a2 2 0 1 1 2.84 2.84l-.06.06a1.7 1.7 0 0 0-.34 1.88v.08a1.7 1.7 0 0 0 1.55 1.02h.18a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.55 1.1z"/></svg>
+            </button>
+          </div>
+        </aside>
+
+        <!-- ── main ── -->
+        <main class="main">
+          <div class="tabs">
+            <button class="tab active" id="tab-chat">Chat</button>
+            <button class="tab" id="tab-bench" hidden>Benchmark</button>
+            <button class="tab">Modelfile</button>
+            <span class="spacer"></span>
+            <span class="chip" id="topchip">nothing loaded</span>
+          </div>
+
+          <!-- chat pane -->
+          <div class="pane" id="pane-chat">
+            <div class="chatlog" id="chatlog">
+              <div class="blank"><div class="bx">
+                <div class="mk">RE</div>
+                <b id="blank-t">Nothing open</b>
+                <p id="blank-p">Click <b>+ New</b> to start a chat or a benchmark.</p>
+              </div></div>
+            </div>
+            <div class="composer">
+              <div class="box">
+                <span class="fake-input" id="composer-ph">Start a chat to type here…</span>
+                <button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h15M13 6l6 6-6 6"/></svg></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- bench pane -->
+          <div class="pane" id="pane-bench" hidden>
+            <div class="benchhead">
+              <b id="bench-name">Untitled benchmark</b>
+              <span class="bmeta">0 prompts · never run</span>
+              <span class="spacer"></span>
+              <button class="btn sm">Add prompt</button>
+              <button class="btn sm primary">Run</button>
+            </div>
+            <div class="lanes">
+              <span class="lbl">Lanes</span>
+              <span class="lane" id="bench-lane"><span class="dot"></span> qwen2.5:7b</span>
+              <span class="lane add">+ Add lane</span>
+            </div>
+            <div class="blank" style="flex:1"><div class="bx">
+              <div class="mk"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:17px;height:17px"><path d="M4 20V9M10 20V4M16 20v-7M22 20H2"/></svg></div>
+              <b>No prompts yet</b>
+              <p>Add a prompt here, or capture one from any chat with <b>Send to benchmark</b>. Every lane answers the same list.</p>
+            </div></div>
+          </div>
+        </main>
+
+        <!-- ── the model question ── -->
+        <div class="scrim" id="scrim" hidden>
+          <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+            <div class="sheet-h">
+              <b id="sheet-title">Which model?</b>
+              <p id="sheet-sub">Three models are in memory. Pick the one this chat talks to.</p>
+            </div>
+            <div class="sheet-b" id="sheet-b" role="radiogroup"></div>
+            <div class="sheet-f">
+              <span class="note" id="sheet-note"></span>
+              <span class="spacer"></span>
+              <button class="btn sm" id="sheet-cancel">Cancel</button>
+              <button class="btn sm primary" id="sheet-go">Start chat</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    Three resident models, and the sheet lists them with a live keep-alive countdown; nothing
+    resident, and the same sheet lists what is <b>installed</b> instead, with the load cost stated
+    and the button relabelled <b>Load and start chat</b>. One model resident and the sheet never
+    opens at all. <b>New benchmark never opens it in any of the three</b> — try it on <em>none</em>.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════ 03 ═══════════════════════════════ -->
+<section class="sec" id="rule">
+  <div class="num">03</div>
+  <h2>When the question gets asked — and when it doesn't</h2>
+  <p class="why">
+    The rule is one line: <b>ask only when the answer is genuinely ambiguous.</b> A sheet that opens
+    to say “pick the only option” is a click charged for nothing.
+  </p>
+
+  <div class="flow">
+    <svg viewBox="0 0 700 250" xmlns="http://www.w3.org/2000/svg" font-family="Inter, system-ui, sans-serif">
+      <defs>
+        <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+          <path d="M0 0 L10 5 L0 10 z" fill="#7b756a"/>
+        </marker>
+      </defs>
+      <g stroke="#7b756a" stroke-width="1.4" fill="none" marker-end="url(#ar)">
+        <path d="M118 125 H166"/>
+        <path d="M262 105 V60 H352"/>
+        <path d="M262 125 H352"/>
+        <path d="M262 145 V190 H352"/>
+        <path d="M470 60 H556"/>
+        <path d="M470 125 H556"/>
+        <path d="M470 190 H556"/>
+      </g>
+      <g>
+        <rect x="8" y="107" width="110" height="36" rx="9" fill="#6165c6"/>
+        <text x="63" y="130" fill="#fff" font-size="13" font-weight="700" text-anchor="middle">+ New ▸ Chat</text>
+      </g>
+      <g>
+        <rect x="166" y="99" width="96" height="52" rx="9" fill="#262523" stroke="#55504a"/>
+        <text x="214" y="120" fill="#f2efe9" font-size="11.5" font-weight="600" text-anchor="middle">how many</text>
+        <text x="214" y="135" fill="#f2efe9" font-size="11.5" font-weight="600" text-anchor="middle">are resident?</text>
+      </g>
+      <g font-size="11.5" font-weight="600" text-anchor="middle">
+        <rect x="352" y="42" width="118" height="36" rx="9" fill="#2e2610" stroke="#f1ae27" stroke-opacity=".5"/>
+        <text x="411" y="65" fill="#f1ae27">none</text>
+        <rect x="352" y="107" width="118" height="36" rx="9" fill="#1e2a16" stroke="#89c360" stroke-opacity=".5"/>
+        <text x="411" y="130" fill="#89c360">exactly one</text>
+        <rect x="352" y="172" width="118" height="36" rx="9" fill="#262445" stroke="#6165c6" stroke-opacity=".6"/>
+        <text x="411" y="195" fill="#a9a5ea">two or more</text>
+      </g>
+      <g font-size="11.5" text-anchor="start">
+        <text x="556" y="57" fill="#dcd7ce" font-weight="600">Sheet: installed models</text>
+        <text x="556" y="72" fill="#7b756a" font-size="10.5">“Load and start chat”</text>
+        <text x="556" y="122" fill="#dcd7ce" font-weight="600">No sheet — straight in</text>
+        <text x="556" y="137" fill="#7b756a" font-size="10.5">bound to that model</text>
+        <text x="556" y="187" fill="#dcd7ce" font-weight="600">Sheet: resident models</text>
+        <text x="556" y="202" fill="#7b756a" font-size="10.5">active model preselected</text>
+      </g>
+    </svg>
+  </div>
+
+  <p class="caption">
+    “Exactly one” already has a name in the codebase: <code>activeModel</code>, derived in
+    <code>state.tsx</code> as <em>the current chat's model if it's resident, else the first resident
+    one</em>. The two-or-more branch preselects that same value, so <b>Enter</b> reproduces today's
+    behaviour exactly — the sheet costs a keystroke, not a decision.
+  </p>
+
+  <h3 class="sub">The sheet, in its three dressings</h3>
+  <table>
+    <thead>
+      <tr><th style="width:15%">Resident</th><th style="width:26%">Title</th><th style="width:34%">Body</th><th>Primary button</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><b>0</b></td>
+        <td>Load a model</td>
+        <td>Installed models, largest-first, each with size and a fit estimate. No resident group — it would be empty.</td>
+        <td><code>Load and start chat</code><br><span class="tag m">takes a few seconds</span></td>
+      </tr>
+      <tr>
+        <td><b>1</b></td>
+        <td colspan="2" style="color:var(--faint);font-style:italic">— never opens —</td>
+        <td>n/a</td>
+      </tr>
+      <tr>
+        <td><b>2+</b></td>
+        <td>Which model?</td>
+        <td>Resident models first with keep-alive countdowns, then <code>Load a different model…</code> which swaps the body for the installed list.</td>
+        <td><code>Start chat</code><br><span class="tag s">instant</span></td>
+      </tr>
+    </tbody>
+  </table>
+</section>
+
+<!-- ═══════════════════════════════ 04 ═══════════════════════════════ -->
+<section class="sec" id="bench">
+  <div class="num">04</div>
+  <h2>New benchmark — straight to the page, always. It never asks.</h2>
+  <p class="why">
+    Benchmark takes you to the benchmark page and starts one, whether or not anything is in memory.
+    <b>No model question, ever.</b> A lane is a <em>configuration</em> — a model and the Modelfile it
+    runs under — and you pick it on the page, next to the other lanes you are comparing it against.
+    That is the only place the choice makes sense, because the choice is relative.
+  </p>
+  <p class="why">
+    Loading is <b>Run's</b> job, and it happens after the lanes are set. Asking at creation time would
+    charge for a load before you have said what you are comparing — and then charge again at Run for
+    every other lane anyway.
+  </p>
+
+  <div class="api">
+    <span class="k">already true in the code</span>
+    <code>laneChoices()</code>
+    <code>reads <b>groups</b>, not isLoaded</code>
+    <code>BenchmarkPane.tsx:27</code>
+  </div>
+  <p class="caption" style="margin-top:6px">
+    The lane editor is built from every <b>installed</b> model and never consults residency, so the
+    page is already fully usable with nothing loaded. The only thing standing in the way is a guard
+    in the store — see the bottom of this section.
+  </p>
+
+  <div class="grid2 align">
+    <div class="frame">
+      <div class="fh"><span class="pill next">a model is resident</span> lane 1 preseeded</div>
+      <div class="fb" style="padding:0;display:block">
+        <div class="benchhead" style="background:var(--surface)">
+          <b>qwen2.5:7b — 29 Aug</b>
+          <span class="bmeta">0 prompts</span>
+          <span class="spacer"></span>
+          <button class="btn sm primary">Run all</button>
+        </div>
+        <div class="laneedit">
+          <div class="lrow">
+            <span class="ln">1</span>
+            <span class="lsel">qwen2.5:7b <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+            <span class="lsep">·</span>
+            <span class="lsel">Original <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </div>
+          <div class="lrow" style="border-style:dashed;background:transparent">
+            <span class="ln">2</span>
+            <span class="lsel add">+ Add a lane to compare against</span>
+          </div>
+          <div class="runnote">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+            Already in memory — <b>Run all</b> starts immediately.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="fh"><span class="pill next">nothing resident</span> same page, lane 1 unset</div>
+      <div class="fb" style="padding:0;display:block">
+        <div class="benchhead" style="background:var(--surface)">
+          <b>Untitled benchmark</b>
+          <span class="bmeta">0 prompts</span>
+          <span class="spacer"></span>
+          <button class="btn sm primary">Run all</button>
+        </div>
+        <div class="laneedit">
+          <div class="lrow">
+            <span class="ln">1</span>
+            <span class="lsel unset">Choose a model <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+            <span class="lsep">·</span>
+            <span class="lsel" style="opacity:.45">Original <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          </div>
+          <div class="lrow" style="border-style:dashed;background:transparent">
+            <span class="ln">2</span>
+            <span class="lsel add">+ Add a lane to compare against</span>
+          </div>
+          <div class="runnote">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            Nothing loaded yet — <b>Run all</b> loads each lane when you press it.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    The two frames are the <b>same screen</b>. Residency changes one thing: whether lane 1 arrives
+    filled in. With a model already active it is seeded from <code>activeModel</code>, which keeps
+    today's <code>defaultBenchmarkName(tag)</code> naming; with nothing resident the lane's model
+    select simply starts unset and the benchmark is named on first save.
+  </p>
+
+  <h3 class="sub">Where the load actually lands</h3>
+  <p class="why">
+    <b>Run all</b> is the moment weights are needed, and it is the honest place to state the cost —
+    by then the lane list says exactly how many models and which. Remuda loads them in lane order,
+    one at a time, so a four-lane run against a 27B never asks the machine to hold all four at once.
+  </p>
+
+  <div class="frame" style="margin-top:14px">
+    <div class="fh"><span class="pill next">the moment it matters</span> Run, with the cost stated</div>
+    <div class="fb" style="padding:0;display:block">
+      <div class="laneedit" style="padding:14px 16px">
+        <div class="lrow">
+          <span class="ln">1</span>
+          <span class="lsel">gemma3:27b-q4_K_M <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          <span class="lsep">·</span>
+          <span class="lsel">Original <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </div>
+        <div class="lrow">
+          <span class="ln">2</span>
+          <span class="lsel">gemma3:27b-q4_K_M <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          <span class="lsep">·</span>
+          <span class="lsel">terse-v2 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+        </div>
+        <div style="display:flex;align-items:center;gap:11px;margin-top:12px;flex-wrap:wrap">
+          <button class="btn sm primary">Run all · 12 prompts</button>
+          <span class="runnote" style="margin-top:0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+            Loads <b>gemma3:27b-q4_K_M</b> (17.4 GB) first — both lanes share it, so it loads once.
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    Two lanes on one model with different Modelfiles is the usual pair, and it is a <b>single</b>
+    load — the thing a create-time load sheet could never have known, because the lanes did not
+    exist yet. Run is also where the one real memory question gets asked: <a href="#preflight"
+    style="color:var(--ember-ink)">§05</a>.
+  </p>
+
+  <h3 class="sub">What this needs from the store</h3>
+  <table>
+    <thead><tr><th style="width:30%">Today</th><th>Change</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>createBenchmark</code> returns <code>null</code> when there is no resident tag</td>
+        <td>Drop the guard. A benchmark with an unconfigured lane is a valid, expected state — it is
+          the state the lane editor exists to resolve. <code>Lane.model</code> becomes empty until chosen.</td>
+      </tr>
+      <tr>
+        <td><code>canCreate={activeModel !== null}</code> on the rail</td>
+        <td>Remove it, with <code>createBlockedReason</code>. Nothing about making a benchmark is
+          blocked by residency, so the <code>+</code> in the BENCHMARKS header stops being disabled too.</td>
+      </tr>
+      <tr>
+        <td>Run assumes its lanes' models are loadable</td>
+        <td>Unchanged in substance — but <b>Run all</b> is disabled while any lane has no model, with
+          the reason on the lane rather than the button.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <p class="caption">
+    The rail's small <code>+</code> <b>stays</b>. It is the shortcut for someone who already knows
+    what a benchmark is and is looking straight at the group; the menu is for everyone else. Both
+    now do exactly the same thing.
+  </p>
+</section>
+
+<!-- ═══════════════════════════════ 05 ═══════════════════════════════ -->
+<section class="sec" id="preflight">
+  <div class="num">05</div>
+  <h2>Before Run — the one memory question worth asking</h2>
+  <p class="why">
+    Lanes run <b>one at a time</b>: lane 1's model loads, answers every prompt, and is only then
+    replaced by lane 2's. So two big lanes never have to coexist, and “A and B together won't fit”
+    is not a state this feature can reach.
+  </p>
+  <p class="why">
+    What <em>can</em> collide is the model you were already chatting to. If <b>Y</b> is resident and
+    a lane's model isn't Y, both are in memory at that moment — Y still held, the lane's weights
+    loading beside it. That pair is the check, and it is a <b>pairwise</b> one, taken lane by lane.
+  </p>
+
+  <div class="formula">
+    <em>for each lane L, at the moment L loads:</em><br />
+    &nbsp;&nbsp;L.model === Y.tag &nbsp;→&nbsp; <b>reuse</b> <em>— already resident, nothing loads</em><br />
+    &nbsp;&nbsp;otherwise &nbsp;→&nbsp; Y<em>.measured</em> + L<em>.predicted</em> &gt; <b>usable</b> &nbsp;?&nbsp; <em>collision</em><br />
+    <br />
+    <em>never</em> &nbsp;&nbsp;A<em>.predicted</em> + B<em>.predicted</em> &nbsp;<em>— lanes are sequential (run.ts rule 2)</em>
+  </div>
+  <p class="caption">
+    Note the asymmetry: <b>Y is measured, not predicted</b>. It is resident, so <code>/api/ps</code>
+    reports its real <code>size</code> and <code>size_vram</code> — a fact, not an estimate. Only the
+    lane about to load needs <code>predictFit</code>. That makes half of every comparison exact.
+  </p>
+
+  <h3 class="sub">The prompt, when a lane collides with Y</h3>
+  <p class="why">
+    It names the model, the lane that provoked it, and the arithmetic. The primary action does the
+    obvious thing; <b>Run anyway</b> stays, because a prediction is a prediction and the user may
+    know something the estimator doesn't.
+  </p>
+
+  <div class="grid2 align">
+    <div class="frame">
+      <div class="fh"><span class="pill now">collision</span> asked before anything loads</div>
+      <div class="fb" style="padding:14px">
+        <div class="sheet" style="max-width:400px">
+          <div class="sheet-h">
+            <b>Unload qwen2.5:7b to run this?</b>
+            <p>It's holding 5.1 GB from your chat. Lane 2 needs more than what's left.</p>
+          </div>
+          <div class="sheet-b" style="padding:10px">
+            <div class="membar">
+              <i class="res"  style="width:16.5%"></i>
+              <i class="lane" style="width:70.6%"></i>
+              <i class="over" style="width:8.7%"></i>
+              <span class="memcap" style="left:87.1%"><span>27.0 GB usable</span></span>
+            </div>
+            <div class="memkey">
+              <span><i style="background:var(--muted)"></i>qwen2.5:7b 5.1 GB</span>
+              <span><i style="background:var(--ember)"></i>lane 2 24.6 GB</span>
+              <span><i style="background:var(--crit)"></i>over by 2.7 GB</span>
+            </div>
+            <div style="height:11px"></div>
+            <div class="chk ok">
+              <span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+              <span class="col">
+                <span class="ct">Lane 1 · qwen2.5:7b · Original</span>
+                <span class="cs">Already in memory — <b>reused</b>, nothing loads.</span>
+              </span>
+            </div>
+            <div class="chk bad">
+              <span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18M6 6l12 12"/></svg></span>
+              <span class="col">
+                <span class="ct">Lane 2 · gemma3:27b-q4_K_M · Original</span>
+                <span class="cs">24.6 GB beside qwen2.5:7b's 5.1 GB is <b>29.7 GB</b> against 27.0 GB usable.</span>
+              </span>
+            </div>
+          </div>
+          <p class="evict" style="margin:0 10px 10px">
+            qwen2.5:7b is <b>pinned</b> — unloading clears the pin. Your chat is untouched; its next
+            message loads the model again.
+          </p>
+          <div class="sheet-f">
+            <button class="btn sm ghost">Run anyway</button>
+            <span class="spacer"></span>
+            <button class="btn sm">Cancel</button>
+            <button class="btn sm primary">Unload and run</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame">
+      <div class="fh"><span class="pill next">no collision</span> never shown</div>
+      <div class="fb" style="padding:14px">
+        <div class="sheet" style="max-width:400px">
+          <div class="sheet-h">
+            <b>Run all · 12 prompts</b>
+            <p>Shown here only to say what the check concluded. In the app this dialog does not open — Run just runs.</p>
+          </div>
+          <div class="sheet-b" style="padding:10px">
+            <div class="membar">
+              <i class="res"  style="width:16.5%"></i>
+              <i class="lane" style="width:45.0%"></i>
+              <span class="memcap" style="left:87.1%"><span>27.0 GB usable</span></span>
+            </div>
+            <div class="memkey">
+              <span><i style="background:var(--muted)"></i>qwen2.5:7b 5.1 GB</span>
+              <span><i style="background:var(--ember)"></i>largest lane 13.9 GB</span>
+            </div>
+            <div style="height:11px"></div>
+            <div class="chk ok">
+              <span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+              <span class="col">
+                <span class="ct">Lane 1 · qwen2.5:7b · terse-v2</span>
+                <span class="cs">Same weights as the resident model — <b>reused</b>.</span>
+              </span>
+            </div>
+            <div class="chk ok">
+              <span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+              <span class="col">
+                <span class="ct">Lane 2 · mistral-nemo:12b · Original</span>
+                <span class="cs">13.9 GB + 5.1 GB = <b>19.0 GB</b>, inside 27.0 GB.</span>
+              </span>
+            </div>
+          </div>
+          <div class="sheet-f">
+            <span class="note">no unload needed</span>
+            <span class="spacer"></span>
+            <button class="btn sm primary">Run all</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    <b>A variant counts as the same weights.</b> Lane 1 on the right is <code>terse-v2</code>, a
+    Modelfile over <code>qwen2.5:7b</code> — a different <em>lane</em>, the same load. Comparing
+    Modelfiles on one model, which <code>LaneEditor</code> calls the usual pair, therefore never
+    collides with a chat on that model at all.
+  </p>
+
+  <h3 class="sub">The same check, as a lane-row hint</h3>
+  <p class="why">
+    Because the architecture fields come back on a request Remuda already makes, the warning can sit
+    on the lane the moment you pick the model — before Run, before the dialog. The dialog then stops
+    being a surprise and becomes a confirmation of something already on screen.
+  </p>
+
+  <div class="frame" style="margin-top:14px">
+    <div class="fh"><span class="pill next">while editing</span> zero extra requests</div>
+    <div class="fb" style="padding:0;display:block">
+      <div class="laneedit" style="padding:14px 16px">
+        <div class="lrow">
+          <span class="ln">1</span>
+          <span class="lsel">qwen2.5:7b <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          <span class="lsep">·</span>
+          <span class="lsel">Original <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          <span class="spacer" style="flex:1"></span>
+          <span class="lhint ok">in memory</span>
+        </div>
+        <div class="lrow" style="border-color:color-mix(in srgb,var(--crit) 38%,transparent)">
+          <span class="ln">2</span>
+          <span class="lsel">gemma3:27b-q4_K_M <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          <span class="lsep">·</span>
+          <span class="lsel">Original <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></span>
+          <span class="spacer" style="flex:1"></span>
+          <span class="lhint bad">needs qwen2.5:7b unloaded</span>
+        </div>
+        <div class="runnote">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4l3 2"/></svg>
+          <b>Run all</b> still asks. The hint can be scrolled past; a wasted five-minute load cannot.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    This costs one field on <code>Model</code>. <code>listGroups</code> is already calling
+    <code>/api/show</code> per model and parsing the response — it keeps <code>capabilities</code>
+    and <code>contextLength</code> from it and drops <code>archParams</code>, which is the one thing
+    <code>predictFit</code> needs.
+  </p>
+
+  <h3 class="sub">When the check can't be made</h3>
+  <p class="why">
+    <code>predictFit</code> refuses to invent numbers, and it refuses in three real situations: no
+    host-memory reading (no Tauri bridge), a discrete GPU (where system RAM says nothing about VRAM,
+    so <code>usableVramFromHostMemory</code> returns <code>null</code>), or a server whose
+    <code>model_info</code> omits the architecture fields. All three are ordinary, not edge cases.
+  </p>
+
+  <div class="frame" style="margin-top:14px">
+    <div class="fh"><span class="pill now">unpredictable</span> say so, don't block</div>
+    <div class="fb" style="padding:14px;display:block">
+      <div style="max-width:560px;margin:0 auto">
+        <div class="chk unk">
+          <span class="st"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 17h.01M12 13a2.5 2.5 0 1 0-2.5-2.9"/></svg></span>
+          <span class="col">
+            <span class="ct">Memory check skipped</span>
+            <span class="cs">This machine has a discrete GPU, so Remuda can't tell how much VRAM is free. The run will load each lane and report whatever the server says.</span>
+          </span>
+        </div>
+        <div class="runnote" style="margin-top:10px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>
+          <b>Run all</b> is not disabled by an unknown. An absent prediction is not a failed one.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="caption">
+    This follows the rule the fit predictor already sets for itself: no prediction is a first-class
+    result, never a fabricated number. Blocking Run on a figure Remuda couldn't compute would make
+    the feature worse than not having it.
+  </p>
+
+  <h3 class="sub">Every outcome</h3>
+  <table>
+    <thead><tr><th style="width:26%">Situation</th><th style="width:40%">What Remuda does</th><th>Why</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><b>Lane model === Y</b></td>
+        <td>Nothing. No dialog, no load.</td>
+        <td>Already resident — including variants, which share the base's weights.</td>
+      </tr>
+      <tr>
+        <td><b>Y + lane fits</b></td>
+        <td>Nothing. Run starts.</td>
+        <td>A dialog that only ever says “fine” trains people to dismiss it unread.</td>
+      </tr>
+      <tr>
+        <td><b>Y + lane doesn't fit</b></td>
+        <td>The dialog. <b>Unload and run</b> / <b>Run anyway</b> / <b>Cancel</b>.</td>
+        <td>Y is the removable half — the lanes are what you asked to measure.</td>
+      </tr>
+      <tr>
+        <td><b>Y is pinned</b> (<code>keep_alive: -1</code>)</td>
+        <td>Same dialog, with the wording changed to note Y is pinned and unloading clears the pin.</td>
+        <td>Ollama won't evict a pinned model to make room, so this is the case where saying nothing actually strands the run.</td>
+      </tr>
+      <tr>
+        <td><b>A lane doesn't fit even alone</b></td>
+        <td>Flagged on the lane in the same dialog. Unloading Y won't save it, so <b>Unload and run</b> isn't offered as the fix.</td>
+        <td>Honest: the problem isn't Y, and pretending it is wastes an unload.</td>
+      </tr>
+      <tr>
+        <td><b>Run anyway, and it fails</b></td>
+        <td>That lane's cells carry the server's error verbatim; the run continues to the next lane.</td>
+        <td><code>run.ts</code> rule 3 already: a failed lane is a result, not the end of the run.</td>
+      </tr>
+      <tr>
+        <td><b>Can't predict</b></td>
+        <td>One line saying the check was skipped, and why. Run is not blocked.</td>
+        <td>An absent prediction is not a failed one.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="decided">
+    <h3>Decided</h3>
+    <p>Both calls settled, and the second one changed on the evidence.</p>
+    <dl>
+      <dt><span class="v">decided</span> “Unload and run” does <b>not</b> reload Y afterwards</dt>
+      <dd>
+        It matches Eject, which Remuda already ships: unloading hands the memory back, and the next
+        message warms it again. A surprise 5.1 GB load landing after a multi-minute run — while you
+        are reading the results — is an action nobody asked for.
+        <b>One addition:</b> when Y is pinned (<code>keep_alive: -1</code>), unloading clears the pin,
+        and the dialog says so in those words. The pin was deliberate, so removing it has to be an
+        informed choice rather than a side effect.
+      </dd>
+      <dt><span class="v">decided</span> Both — Run is the gate, the lane row is a free hint</dt>
+      <dd>
+        I said this “wants a cache before it wants a UI”. It turns out the cache is already paid for:
+        <code>listGroups</code> calls <code>/api/show</code> for <b>every installed model</b> on every
+        refresh, and throws <code>model_info</code>'s architecture fields away —
+        <code>Model</code> keeps <code>capabilities</code> and <code>contextLength</code> but not
+        <code>archParams</code>. Retain that one field and the lane-row check costs <b>zero extra
+        requests</b>.
+        So: a passive warning sits on the lane as you edit it, and <b>Run all</b> keeps the blocking
+        dialog — because the lane hint can be scrolled past and a five-minute wasted load cannot.
+      </dd>
+    </dl>
+  </div>
+</section>
+
+<!-- ═══════════════════════════════ 06 ═══════════════════════════════ -->
+<section class="sec" id="notes">
+  <div class="num">06</div>
+  <h2>Behaviour worth pinning down before anyone builds it</h2>
+
+  <table>
+    <thead><tr><th style="width:24%">Thing</th><th>Behaviour</th></tr></thead>
+    <tbody>
+      <tr><td><b>Dismiss</b></td><td><code>Esc</code> closes the menu and returns focus to <b>+ New</b>. Click-outside closes it. The sheet's <code>Esc</code> cancels the whole action — it does not step back to the menu.</td></tr>
+      <tr><td><b>Keyboard</b></td><td>Menu opens on <code>Enter</code>/<code>Space</code>/<code>↓</code> with the first item focused; <code>↑↓</code> move, <code>Enter</code> picks. In the sheet, <code>↑↓</code> move the selection and <code>Enter</code> is the primary button — so “+ New, Enter, Enter” is the fast path with several models loaded.</td></tr>
+      <tr><td><b>Unsaved Modelfile</b></td><td>Both branches are navigations, so both pass through <code>confirmUnsavedChanges()</code> exactly as <code>newChat</code> does today. The gate fires when the item is <em>chosen</em>, not when the menu opens.</td></tr>
+      <tr><td><b>Loading is still explicit</b></td><td>SPEC §5.1's rule holds — nothing loads until a button is pressed. For chat that press is the sheet's primary button; for a benchmark it is <b>Run all</b> — and §05's memory check runs before any of it. Opening the sheet loads nothing, and neither does creating a benchmark.</td></tr>
+      <tr><td><b>Benchmark, nothing resident</b></td><td>Nothing special happens: the page opens with lane 1's model select unset. <code>laneChoices</code> is built from installed models, so every lane is configurable with an empty <code>/api/ps</code>.</td></tr>
+      <tr><td><b>Load failure</b></td><td>The sheet stays open with the error on the row that failed, rather than dumping you back to an empty chat that cannot send.</td></tr>
+      <tr><td><b>No models installed at all</b></td><td>The chat sheet's body becomes a single line — “No models installed” — and the primary button becomes <b>Get Models</b>, routing to the pull view. A benchmark still opens, but with no lane choices the editor is disabled and points at the same place. This is the one case where <em>installed</em>, not <em>resident</em>, is the real blocker.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="decided">
+    <h3>Decided</h3>
+    <p>The three calls, made. Each one is reversible if it reads wrong in the hand.</p>
+    <dl>
+      <dt><span class="v">decided</span> Chat first</dt>
+      <dd>
+        Frequency wins. The discoverability problem is solved by the menu <em>existing</em> — today
+        the word “benchmark” appears only in a rail header and a disabled <code>+</code>. Second of
+        two, with a description and a <code>⌘B</code> beside it, is not hidden. Making the common
+        action the second item taxes every chat forever to fix a first-run problem.
+      </dd>
+      <dt><span class="v">decided</span> Keep the one-resident shortcut</dt>
+      <dd>
+        It reproduces today's <code>newChat</code> exactly, so it is not a regression, and with one
+        model resident there is precisely one answer — a sheet would be asking a question with no
+        second option. The predictability worry is real but already answered elsewhere: the bound
+        model is spelled out in the rail row and the top chip, and the new chat's first screen names
+        it (<b>“Chatting with qwen2.5:7b”</b>). It is never a secret, just never a question.
+      </dd>
+      <dt><span class="v">decided</span> Keep “Load a different model…”, and state the eviction plainly</dt>
+      <dd>
+        Removing it puts “I want a chat with a model that isn't loaded” back at a dead end one level
+        down — the exact thing this redesign exists to remove. So it stays.
+        But Remuda <b>cannot predict</b> which model gets evicted: no endpoint reports
+        <code>OLLAMA_MAX_LOADED_MODELS</code>, and the constant appears in this codebase only in
+        comments. So the sheet states the general fact and claims no number — the same rule
+        <code>predictFit</code> holds itself to.
+      </dd>
+    </dl>
+  </div>
+</section>
+
+</div>
+
+<script>
+(function () {
+  var MODELS = [
+    { tag: "qwen2.5:7b",         gl: "QW", size: "4.7 GB",  fit: "fits in VRAM", ttl: "4m 12s" },
+    { tag: "llama3.1:8b",        gl: "LL", size: "4.9 GB",  fit: "fits in VRAM", ttl: "1m 03s" },
+    { tag: "gemma3:27b-q4_K_M",  gl: "GE", size: "17.4 GB", fit: "spills ~2 GB to RAM", warn: true, ttl: "never" },
+    { tag: "mistral-nemo:12b",   gl: "MI", size: "7.1 GB",  fit: "fits in VRAM" },
+    { tag: "deepseek-r1:14b",    gl: "DE", size: "9.0 GB",  fit: "fits in VRAM" }
+  ];
+  var RESIDENT = { none: 0, one: 1, many: 3 };
+  var HINTS = {
+    none: "Nothing loaded — New chat asks which to load; New benchmark still goes straight to the page.",
+    one:  "One loaded — New chat starts immediately, no question asked.",
+    many: "Three loaded — New chat asks which one; the active model is preselected."
+  };
+
+  var scn = "one", pending = null, choice = 0, browsingAll = false;
+  var $ = function (id) { return document.getElementById(id); };
+
+  var newbtn = $("newbtn"), nmenu = $("nmenu"), scrim = $("scrim"), sheetB = $("sheet-b");
+
+  function loadedCount() { return RESIDENT[scn]; }
+  function loadedModels() { return MODELS.slice(0, loadedCount()); }
+  function listed() { return (loadedCount() > 0 && !browsingAll) ? loadedModels() : MODELS; }
+
+  /* ---------- rail + top chip ---------- */
+  function renderRail() {
+    var n = loadedCount();
+    $("topchip").textContent = n === 0 ? "nothing loaded"
+      : n === 1 ? MODELS[0].tag + " · 4m 12s"
+      : MODELS[0].tag + " +" + (n - 1) + " more";
+    $("hint").textContent = HINTS[scn];
+  }
+
+  var sessions = [];
+  function renderSessions() {
+    var el = $("sesslist");
+    if (!sessions.length) {
+      el.innerHTML = '<p class="empty-note">No chats yet. Start one with + New.</p>';
+      return;
+    }
+    el.innerHTML = sessions.map(function (s, i) {
+      return '<div class="sess' + (i === 0 ? ' active' : '') + '">' +
+        '<div class="sess-open"><div class="strow"><span class="sdot"></span>' +
+        '<span class="stitle">' + s.title + '</span><span class="stime">now</span></div>' +
+        (i === 0 ? '<div class="smodel">' + s.model + '</div>' : '') + '</div></div>';
+    }).join("");
+  }
+
+  var benches = [];
+  function renderBenches() {
+    var el = $("benchlist");
+    if (!benches.length) {
+      el.innerHTML = '<p class="empty-note">A benchmark runs one set of prompts through several models side by side.</p>';
+      return;
+    }
+    el.innerHTML = benches.map(function (b, i) {
+      return '<div class="sess' + (i === 0 ? ' active' : '') + '">' +
+        '<div class="sess-open"><div class="strow"><span class="sdot"></span>' +
+        '<span class="stitle">' + b.name + '</span><span class="stime">now</span></div></div></div>';
+    }).join("");
+  }
+
+  /* ---------- menu ---------- */
+  function openMenu() {
+    nmenu.hidden = false;
+    nmenu.setAttribute("data-anim", "");
+    newbtn.setAttribute("aria-expanded", "true");
+    nmenu.querySelector(".nmi").focus();
+  }
+  function closeMenu() {
+    nmenu.hidden = true;
+    nmenu.removeAttribute("data-anim");
+    newbtn.setAttribute("aria-expanded", "false");
+  }
+
+  newbtn.addEventListener("click", function (e) {
+    e.stopPropagation();
+    nmenu.hidden ? openMenu() : closeMenu();
+  });
+  document.addEventListener("click", function (e) {
+    if (!nmenu.hidden && !nmenu.contains(e.target)) closeMenu();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key !== "Escape") return;
+    if (!nmenu.hidden) { closeMenu(); newbtn.focus(); }
+    else if (!scrim.hidden) closeSheet();
+  });
+
+  nmenu.addEventListener("click", function (e) {
+    var item = e.target.closest(".nmi");
+    if (!item) return;
+    closeMenu();
+    choose(item.getAttribute("data-act"));
+  });
+
+  /* ---------- the branch ---------- */
+  function choose(act) {
+    pending = act;
+    browsingAll = false;
+    choice = 0;
+    // Benchmark never asks. A lane is model + Modelfile, chosen on the page,
+    // and the weights are Run's problem — so there is nothing to ask here.
+    if (act === "bench") return openBench(loadedCount() ? MODELS[0] : null);
+    if (loadedCount() === 1) return startChat(MODELS[0]);
+    openSheet();
+  }
+
+  /* ---------- sheet ---------- */
+  function openSheet() {
+    // Only the chat branch ever reaches here.
+    var n = loadedCount();
+    var askingToLoad = n === 0 || browsingAll;
+
+    $("sheet-title").textContent = askingToLoad ? "Load a model" : "Which model?";
+    $("sheet-sub").textContent = askingToLoad
+      ? "Nothing is in memory yet. Pick one to load — this chat will be bound to it."
+      : n + " models are in memory. Pick the one this chat talks to.";
+    $("sheet-go").textContent = askingToLoad ? "Load and start chat" : "Start chat";
+    $("sheet-note").textContent = askingToLoad ? "≈8 s to load" : "";
+
+    renderSheet();
+    scrim.hidden = false;
+  }
+
+  function renderSheet() {
+    var rows = listed(), askingToLoad = loadedCount() === 0 || browsingAll;
+    var head = askingToLoad ? "Installed" : "In memory";
+    var html = '<div class="mgroup">' + head + '<span class="rule"></span></div>';
+
+    html += rows.map(function (m, i) {
+      var meta = askingToLoad
+        ? m.size + " · " + (m.warn ? '<span class="warn">' + m.fit + "</span>" : m.fit)
+        : '<span class="dot"></span>' + m.size + " · " +
+          (m.ttl === "never" ? "pinned, never expires" : "expires in " + (m.ttl || "4m"));
+      return '<button class="mrow" role="radio" aria-checked="' + (i === choice) + '" data-i="' + i + '">' +
+        '<span class="gl">' + m.gl + "</span>" +
+        '<span class="col"><span class="mtag">' + m.tag + '</span><span class="sub">' + meta + "</span></span>" +
+        '<span class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>' +
+        "</button>";
+    }).join("");
+
+    if (askingToLoad && loadedCount() > 0) {
+      // No endpoint reports OLLAMA_MAX_LOADED_MODELS, so this states the fact
+      // and claims no number — same rule predictFit holds itself to.
+      html += '<p class="evict">Loading another may evict a model already in memory. ' +
+        "Ollama decides which, and doesn't report its limit.</p>";
+    }
+    if (!askingToLoad) {
+      html += '<div class="mgroup" style="margin-top:2px">Not in memory<span class="rule"></span></div>' +
+        '<button class="morelink" data-more="1">' +
+        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>' +
+        "Load a different model…</button>";
+    }
+    sheetB.innerHTML = html;
+  }
+
+  sheetB.addEventListener("click", function (e) {
+    if (e.target.closest("[data-more]")) { browsingAll = true; choice = 0; openSheet(); return; }
+    var row = e.target.closest(".mrow");
+    if (!row) return;
+    choice = +row.getAttribute("data-i");
+    renderSheet();
+  });
+
+  function closeSheet() { scrim.hidden = true; }
+  $("sheet-cancel").addEventListener("click", closeSheet);
+  $("sheet-go").addEventListener("click", function () {
+    var m = listed()[choice];
+    closeSheet();
+    startChat(m);
+  });
+
+  /* ---------- destinations ---------- */
+  function showPane(which) {
+    $("pane-chat").hidden = which !== "chat";
+    $("pane-bench").hidden = which !== "bench";
+    $("tab-chat").classList.toggle("active", which === "chat");
+    $("tab-bench").classList.toggle("active", which === "bench");
+    $("tab-bench").hidden = !benches.length;
+  }
+
+  function startChat(m) {
+    sessions.unshift({ title: "New chat", model: m.tag });
+    renderSessions();
+    $("blank-t").textContent = "Chatting with " + m.tag;
+    $("blank-p").innerHTML = "Bound to this model for the life of the chat. Type below to begin.";
+    $("composer-ph").textContent = "Message " + m.tag + "…";
+    showPane("chat");
+  }
+
+  function openBench(m) {
+    var name = m ? m.tag + " — 29 Aug" : "Untitled benchmark";
+    benches.unshift({ name: name });
+    renderBenches();
+    $("bench-name").textContent = name;
+    // Lane 1 is seeded from the active model when there is one, and simply
+    // starts unset when there isn't. Neither case blocks the page.
+    $("bench-lane").innerHTML = m
+      ? '<span class="dot"></span> ' + m.tag
+      : '<span class="unset">Choose a model</span>';
+    $("bench-lane").className = m ? "lane" : "lane pick";
+    showPane("bench");
+  }
+
+  /* ---------- scenario switch ---------- */
+  $("scenario").addEventListener("click", function (e) {
+    var b = e.target.closest("button[data-scn]");
+    if (!b) return;
+    scn = b.getAttribute("data-scn");
+    [].forEach.call(this.querySelectorAll("button"), function (x) { x.classList.toggle("on", x === b); });
+    closeMenu(); closeSheet();
+    renderRail();
+  });
+
+  renderRail(); renderSessions(); renderBenches(); showPane("chat");
+})();
+</script>
+</body>
+</html>

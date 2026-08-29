@@ -1,4 +1,5 @@
 import "./test/localStorage";
+import { startNewChat, untilModelResident } from "../ui/test/newMenu";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { ChatView } from "./ChatView";
@@ -49,7 +50,7 @@ function renderChat(client: FakeClient) {
 
 /** Wait for the first health check to populate the model list. */
 async function untilLoaded() {
-  await waitFor(() => expect(screen.getByRole("button", { name: "New chat" })).toBeEnabled());
+  await untilModelResident();
 }
 
 /** Render, wait for the model list, and open the seeded session. */
@@ -62,7 +63,7 @@ async function openSeeded(client: FakeClient, title = "Explain this regex") {
 async function startChatAndSend(client: FakeClient, text: string) {
   renderChat(client);
   await untilLoaded();
-  fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+  await startNewChat();
   fireEvent.change(screen.getByLabelText("Message"), { target: { value: text } });
   fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
   // Let sendMessage reach its first await on the stream.
@@ -83,7 +84,7 @@ describe("ChatView", () => {
     const client = new FakeClient({ models: fixtureModels() });
     renderChat(client);
     await untilLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    await startNewChat();
 
     // Fresh-session empty state names the model it will test.
     const main = screen.getByText("Send a message to test", { exact: false });
@@ -101,16 +102,39 @@ describe("ChatView", () => {
     );
   });
 
-  it("disables New chat with a hint while nothing is loaded", async () => {
+  // The old button was disabled here, which is the dead end this replaced:
+  // "Load a model first" named the problem and offered nothing to click.
+  it("offers New chat with nothing loaded, and asks which model to load", async () => {
     const client = new FakeClient({ models: [makeModel({ tag: "llama3.1:8b" })] });
     renderChat(client);
-    // Give the health check time to land; the button must stay disabled.
-    await screen.findByText("No chats yet. Load a model, then start one.");
-    const button = screen.getByRole("button", { name: "New chat" });
-    expect(button).toBeDisabled();
-    expect(button).toHaveAttribute("title", "Load a model first");
+    await screen.findByText("No chats yet. Start one with + New.");
+
+    const button = screen.getByRole("button", { name: "New" });
+    expect(button).toBeEnabled();
     fireEvent.click(button);
+    expect(screen.getByText("Pick a model to load")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("menuitem", { name: /New chat/ }));
+    // The question, not a session: nothing is bound until a model is chosen.
+    expect(screen.getByRole("dialog", { name: "Load a model" })).toBeInTheDocument();
     expect(window.localStorage.getItem(SESSIONS_STORAGE_KEY) ?? "[]").toBe("[]");
+  });
+
+  it("loads the chosen model, then binds the new chat to it", async () => {
+    const client = new FakeClient({ models: [makeModel({ tag: "llama3.1:8b" })] });
+    renderChat(client);
+    await screen.findByText("No chats yet. Start one with + New.");
+    fireEvent.click(screen.getByRole("button", { name: "New" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: /New chat/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Load and start chat" }));
+
+    // The load is a real round trip through the store, so wait for the
+    // session it produces rather than guessing at a number of flushes.
+    await waitFor(() => {
+      const stored = JSON.parse(window.localStorage.getItem(SESSIONS_STORAGE_KEY) ?? "[]");
+      expect(stored).toHaveLength(1);
+      expect(stored[0].model).toBe("llama3.1:8b");
+    });
   });
 
   it("streams chunks into the assistant bubble, warming first, tok/s after", async () => {
@@ -163,7 +187,7 @@ describe("ChatView", () => {
     const client = new FakeClient({ models: fixtureModels() });
     renderChat(client);
     await untilLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    await startNewChat();
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "line one" } });
     fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter", shiftKey: true });
     await act(async () => {});
@@ -205,7 +229,7 @@ describe("ChatView", () => {
     await waitFor(() => expect(screen.queryByText("Once upon")).not.toBeInTheDocument());
 
     // Guard cleared: a fresh session can stream again immediately.
-    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    await startNewChat();
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "again" } });
     fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
     await act(async () => {});
@@ -604,7 +628,7 @@ describe("ChatView", () => {
     const client = new FakeClient({ models: capableModels(["completion", "vision"]) });
     renderChat(client);
     await untilLoaded();
-    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    await startNewChat();
 
     const file = new File(["tiny-png-bytes"], "shot.png", { type: "image/png" });
     await act(async () => {

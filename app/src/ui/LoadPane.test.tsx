@@ -1,4 +1,5 @@
 import "../chat/test/localStorage";
+import { startNewChat } from "./test/newMenu";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoadPane } from "./LoadPane";
@@ -450,7 +451,7 @@ describe("LoadPane", () => {
     fireEvent.click(screen.getByRole("button", { name: "Load model" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument(), { timeout: 2000 });
 
-    fireEvent.click(screen.getByRole("button", { name: "New chat" }));
+    await startNewChat();
     fireEvent.change(screen.getByLabelText("Message"), { target: { value: "hello" } });
     fireEvent.keyDown(screen.getByLabelText("Message"), { key: "Enter" });
     await act(async () => {});
