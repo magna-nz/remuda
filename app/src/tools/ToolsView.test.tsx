@@ -326,7 +326,7 @@ describe("layer 2 — pane help (R5)", () => {
     const toggle = screen.getByRole("button", { name: "About the tool playground" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(
-      screen.getByRole("region", { name: "About Tools — see what the model actually calls" }),
+      screen.getByRole("region", { name: "About Tools. See what the model actually calls" }),
     ).toBeInTheDocument();
   });
 
@@ -336,7 +336,7 @@ describe("layer 2 — pane help (R5)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Close help for Tools/ }));
     expect(
-      screen.queryByRole("region", { name: "About Tools — see what the model actually calls" }),
+      screen.queryByRole("region", { name: "About Tools. See what the model actually calls" }),
     ).not.toBeInTheDocument();
     expect(window.localStorage.getItem("remuda.help.v1")).toContain("tools");
   });

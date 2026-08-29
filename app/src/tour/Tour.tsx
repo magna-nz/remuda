@@ -317,8 +317,8 @@ function TourRun() {
           <ul className="tour-missed">
             {missed.map((s) => (
               <li key={s.id}>
-                <b>{s.title.split(" — ")[0]}</b>
-                {s.missingNote === undefined ? null : ` — ${s.missingNote}`}
+                <b>{s.title.split(", ")[0]}</b>
+                {s.missingNote === undefined ? null : `, ${s.missingNote}`}
               </li>
             ))}
           </ul>

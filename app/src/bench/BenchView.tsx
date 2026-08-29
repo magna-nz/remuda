@@ -40,6 +40,7 @@ import { diffWords, newSide, oldSide, type WordChunk } from "./words";
 import { shortTag } from "../chat/sessions";
 import { useRemuda } from "../ui/state";
 import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
+import { Term } from "../help/Term";
 import type { ModelfileSnapshot } from "../editor/history";
 
 /** "14:22" — the run bar's time, in the user's own locale. */
@@ -251,7 +252,7 @@ export function BenchView() {
   const parts = tallyParts(counts);
 
   const currentHead =
-    live !== null ? "this run" : chosen === null ? "" : runLabel(bench, chosen.id);
+    live !== null ? "this run" : chosen === null ? "—" : runLabel(bench, chosen.id);
   const previousHead = before === null ? null : runLabel(bench, before.id);
 
   return (
@@ -306,7 +307,7 @@ export function BenchView() {
               bench.prompts.length === 0
                 ? "Add a prompt first"
                 : elsewhereBusy
-                  ? "Something else is generating — Remuda runs one at a time"
+                  ? "Something else is generating. Remuda runs one at a time"
                   : undefined
             }
             onClick={() => void startBenchRun(bench.id)}
@@ -317,27 +318,32 @@ export function BenchView() {
         <PaneHelpToggle paneId="bench" label="About benches" />
       </div>
       {/* Always reachable, unlike the empty state, which disappears the
-          moment a bench has a prompt in it — and "bench" is exactly the word
+          moment a bench has a prompt in it. And "bench" is exactly the word
           a new user will not know. */}
       <PaneHelp
         paneId="bench"
-        title="Bench — re-run your prompts after a change"
+        title={
+          <>
+            <Term name="bench">Bench</Term>, re-run your prompts after a change
+          </>
+        }
         what="A saved set of prompts, replayed against the current model on one click, with each answer diffed against what it returned last run."
         why="Every edit to a Modelfile changes all of a model's behaviour, not just the part you were working on. A bench is how you notice what else moved."
         steps={[
           <>
-            Add prompts from any chat — the <b>⌄</b> under a message, then{" "}
+            Add prompts from any chat. The <b>⌄</b> under a message, then{" "}
             <b>Add to bench</b>. It is on the reply as well as the prompt.
           </>,
           <>
-            Press <b>Run all</b> after saving a Modelfile. Every prompt runs on one pinned
-            seed, so you are reading the change and not the randomness.
+            Press <b>Run all</b> after saving a Modelfile. Every prompt runs on one pinned{" "}
+            <Term name="seed">seed</Term>, so you are reading the change and not the
+            randomness.
           </>,
           <>
             Read the rows badged <b>Changed</b>; expand one to see both answers word-diffed.
           </>,
         ]}
-        note="Same or changed is a diff, not a verdict — Remuda never says one answer is better than another."
+        note="Same or changed is a diff, not a verdict. Remuda never says one answer is better than another."
       />
 
       {bench.prompts.length === 0 ? (
@@ -346,13 +352,13 @@ export function BenchView() {
         <>
           <div className="runbar">
             {chosen === null ? (
-              <span>Never run. Press Run all — every prompt goes on one pinned seed.</span>
+              <span>Never run. Press Run all. Every prompt goes on one pinned seed.</span>
             ) : (
               <span>
                 {live !== null
                   ? `running ${benchProgress?.done ?? 0} of ${benchProgress?.total ?? 0}`
                   : currentHead}{" "}
-                · seed {chosen.seed}
+                · <Term name="seed">seed</Term> {chosen.seed}
                 {/* "against X" only when there IS an X. Rendering the absence
                     in the same accented style as a snapshot name made
                     "no saved Modelfile" read as the name of one. */}

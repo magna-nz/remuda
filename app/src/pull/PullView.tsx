@@ -164,7 +164,7 @@ export function PullView() {
       </div>
       <PaneHelp
         paneId="pull"
-        title="Get models — download one to run"
+        title="Get models. Download one to run"
         what="Fetches a model from Ollama's library onto this machine. Nothing here talks to anything but Ollama, and the download is Ollama's, not Remuda's."
         why="Remuda runs models, it does not ship any. This is where you get one to tune."
         steps={[
@@ -199,8 +199,8 @@ export function PullView() {
         </button>
       </div>
       <div className="note-strip">
-        Filters the list as you type. Pull anything by name — <code>llama3.2</code>,{" "}
-        <code>gemma2:9b</code>, or a full URL — even if it isn’t listed below.
+        Filters the list as you type. Pull anything by name, <code>llama3.2</code>,{" "}
+        <code>gemma2:9b</code>, or a full URL. Even if it isn’t listed below.
       </div>
       {probe !== null && (probe.kind === "found" || probe.kind === "missing") && (
         <div className={`probe${probe.kind === "missing" ? " miss" : ""}`} role="status">
@@ -272,7 +272,7 @@ export function PullView() {
         {results.length === 0 ? (
           <div className="noresults">
             Nothing in the bundled catalog matches “{tagInput.trim()}”. If it’s a newer model,
-            the name still pulls — the catalog ships with the app and doesn’t know about it yet.
+            the name still pulls. The catalog ships with the app and doesn’t know about it yet.
           </div>
         ) : (
           results.map((m) => <CatalogRow key={m.name} model={m} models={models} disabled={disableStart} onPull={startPull} />)

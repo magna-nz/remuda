@@ -33,7 +33,7 @@ export function BenchEmpty() {
       <p>
         Every edit to a Modelfile changes <em>all</em> of a model&rsquo;s behaviour, not just the
         part you were working on. A bench replays your saved prompts against the new version and
-        shows you which answers moved — so you notice the thing you weren&rsquo;t looking at.
+        shows you which answers moved. So you notice the thing you weren&rsquo;t looking at.
       </p>
       <ol className="ef-how">
         <li>

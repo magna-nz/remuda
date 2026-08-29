@@ -202,7 +202,7 @@ export function EditorView() {
         <span className="spacer" />
         {/* Form · Raw · Prompt · History (SPEC-tuning T1, SPEC-round-two R3).
             History and Prompt replace the two columns; Form and Raw give one
-            of them the room — and, when the window is too narrow for SPEC
+            of them the room. And, when the window is too narrow for SPEC
             §5.4's two columns, decide which one is on screen. */}
         <div className="seg" role="group" aria-label="Editor view" ref={segRef}>
           {segment("form", "Form")}
@@ -214,7 +214,7 @@ export function EditorView() {
       </div>
       <PaneHelp
         paneId="modelfile"
-        title="Modelfile — the recipe this model runs on"
+        title="Modelfile. The recipe this model runs on"
         what="Which model it starts from, its system prompt, and the settings baked in beside it. Saving one rebuilds the model through Ollama and reloads it, so your next message uses the change."
         why="This is the loop the app exists for: change one thing, save, ask the same question again, and see what moved."
         steps={[
@@ -241,12 +241,12 @@ export function EditorView() {
             <span className="eyebrow">Settings</span>
             <span className="hint">friendly editor</span>
           </div>
-          {/* Freeze all editing while a save is in flight — edits made
+          {/* Freeze all editing while a save is in flight. Edits made
               mid-save would be overwritten when the saved doc lands. */}
           <fieldset className="form-scroll" disabled={saving}>
             <div className="field">
               <label htmlFor="ed-from">
-                Base model — <span className="kwhint">FROM</span>
+                Base model, <span className="kwhint">FROM</span>
               </label>
               <select
                 id="ed-from"
@@ -263,7 +263,7 @@ export function EditorView() {
             </div>
             <div className="field">
               <label htmlFor="ed-system">
-                System prompt — <span className="kwhint">SYSTEM</span>
+                System prompt, <span className="kwhint">SYSTEM</span>
               </label>
               <textarea
                 id="ed-system"
@@ -308,7 +308,7 @@ export function EditorView() {
             </div>
             <div className="field">
               <label htmlFor="ed-ctx">
-                Context length — <span className="kwhint">num_ctx</span>
+                Context length, <span className="kwhint">num_ctx</span>
               </label>
               <div className="slider-row">
                 <input
@@ -324,13 +324,13 @@ export function EditorView() {
               </div>
               {overNumCtx && (
                 <div className="warn-hint">
-                  Exceeds {baseTag}'s trained context ({baseModel?.contextLength?.toLocaleString()}) — allowed, but may degrade quality.
+                  Exceeds {baseTag}'s trained context ({baseModel?.contextLength?.toLocaleString()}). Allowed, but may degrade quality.
                 </div>
               )}
             </div>
             <div className="field">
               <label htmlFor="ed-stop">
-                Stop sequences — <span className="kwhint">stop</span>
+                Stop sequences, <span className="kwhint">stop</span>
               </label>
               <div className="chips" id="ed-stop">
                 {stops.map((s, i) => (
@@ -404,7 +404,7 @@ export function EditorView() {
             className="btn sm"
             onClick={() => void saveDraft()}
             disabled={saving || !editorDraft.targetTag}
-            title={editorDraft.targetTag ? undefined : "New Modelfile — use Save as… to name it"}
+            title={editorDraft.targetTag ? undefined : "New Modelfile. Use Save as… to name it"}
           >
             {saving ? "Saving…" : "Save"}
           </button>

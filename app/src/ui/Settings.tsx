@@ -208,7 +208,7 @@ export function Settings() {
           <div className="st">
             <b>Pane explainers</b>
             <div>
-              The <code>?</code> panel at the top of each pane. Closing one keeps it closed —
+              The <code>?</code> panel at the top of each pane. Closing one keeps it closed 
               this brings them all back.
             </div>
           </div>

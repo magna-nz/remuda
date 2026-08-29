@@ -46,28 +46,28 @@ export interface TourStep {
 export const TOUR_STEPS: readonly TourStep[] = [
   {
     id: "model-control",
-    title: "Start here — pick a model and load it",
+    title: "Start here. Pick a model and load it",
     body:
       "Everything else in Remuda runs against a model held in memory. This control chooses one and loads it, and the chips beside it then say where the weights sit and how much of the context window is gone. If Ollama isn’t running yet, this is where it tells you.",
     view: "chat",
   },
   {
     id: "modelfile",
-    title: "The Modelfile — the loop this app exists for",
+    title: "The Modelfile. The loop this app exists for",
     body:
       "A Modelfile is the model’s own configuration: its system prompt, its sampling parameters, its template. Open it beside the chat, change one thing, save it as a new variant, and ask the same question again.",
     view: "chat",
   },
   {
     id: "bench",
-    title: "Benches — your re-run list",
+    title: "Benches. Your re-run list",
     body:
       "When you change a Modelfile you change everything the model does, not just the bit you were fixing. A bench is a handful of prompts you keep, replay after each save, and check for answers that moved. Add one from any chat message.",
     view: "chat",
   },
   {
     id: "format",
-    title: "Format — make the reply a shape",
+    title: "Format. Make the reply a shape",
     body:
       "Give Remuda a JSON schema and the model is only ever allowed to produce text that fits it. Useful when you want data back rather than prose, and it saves you writing “reply in JSON like this…” into your system prompt, where it drifts.",
     view: "chat",
@@ -75,9 +75,9 @@ export const TOUR_STEPS: readonly TourStep[] = [
   },
   {
     id: "prompt",
-    title: "Prompt — see what the model is actually sent",
+    title: "Prompt. See what the model is actually sent",
     body:
-      "Your system prompt doesn’t reach the model as you typed it; Ollama wraps it in the model’s own template first. If a system prompt ever seems to be ignored, look here — you’ll see whether it arrived at all.",
+      "Your system prompt doesn’t reach the model as you typed it; Ollama wraps it in the model’s own template first. If a system prompt ever seems to be ignored, look here. You’ll see whether it arrived at all.",
     view: "modelfile",
     missingNote: "Prompt is part of the Modelfile editor, so it needs a model loaded.",
     editorPane: "prompt",

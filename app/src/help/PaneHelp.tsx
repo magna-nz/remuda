@@ -99,7 +99,7 @@ export interface PaneHelpProps {
   /** Stable across renders and releases — it is the persistence key. */
   paneId: string;
   /** The strip's heading, e.g. "Format — force the reply into a shape". */
-  title: string;
+  title: ReactNode;
   /** Beat one: what this pane is. */
   what: ReactNode;
   /** Beat two: why you would use it. */

@@ -250,7 +250,7 @@ describe("ChatView", () => {
 
     const banner = screen.getByRole("status");
     expect(banner).toHaveTextContent(
-      "mistral:7b isn’t loaded — in memory: llama3.1:8b. Load it to continue this chat.",
+      "mistral:7b isn’t loaded. In memory: llama3.1:8b. Load it to continue this chat.",
     );
 
     fireEvent.click(within(banner).getByRole("button", { name: "Load now" }));
@@ -269,7 +269,7 @@ describe("ChatView", () => {
     renderChat(client);
     await screen.findByText("Explain this regex");
     fireEvent.click(screen.getByText("Explain this regex"));
-    expect(screen.getByRole("status")).toHaveTextContent("in memory: nothing");
+    expect(screen.getByRole("status")).toHaveTextContent("In memory: nothing");
   });
 
   it("sending while unloaded is allowed; the banner clears once the model registers as loaded", async () => {
@@ -447,7 +447,7 @@ describe("ChatView", () => {
     // that is where you are when the reload actually happens.
     fireEvent.click(screen.getByRole("button", { name: "Close run controls" }));
     expect(screen.queryByRole("dialog", { name: "Run controls" })).not.toBeInTheDocument();
-    expect(screen.getByText(/num_ctx 16 384 — the next message reloads the model/)).toBeInTheDocument();
+    expect(screen.getByText(/num_ctx 16 384. The next message reloads the model/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Run controls · 1 overridden" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset Context length" }));

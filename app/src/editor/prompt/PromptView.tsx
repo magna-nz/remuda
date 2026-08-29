@@ -187,7 +187,7 @@ export function PromptView() {
       <div className="promptview empty">
         <p>
           This Modelfile has no <code>TEMPLATE</code>, so there is nothing to render. Ollama
-          falls back to the base model's own template — open the base model's Modelfile to
+          falls back to the base model's own template. Open the base model's Modelfile to
           see it.
         </p>
       </div>
@@ -200,7 +200,7 @@ export function PromptView() {
         <span className="hint">
           rendering:{" "}
           {session === null ? (
-            <b>no chats yet — only the system prompt is substituted</b>
+            <b>no chats yet. Only the system prompt is substituted</b>
           ) : (
             <>
               <b>{session.title}</b> · {messages.length}{" "}
@@ -214,14 +214,14 @@ export function PromptView() {
 
       <PaneHelp
         paneId="prompt"
-        title="Prompt — the exact text the model receives"
-        what="Your SYSTEM and your messages don’t reach the model as you wrote them — Ollama pours them into the model’s own template, which adds the control tokens that family expects."
+        title="Prompt. The exact text the model receives"
+        what="Your SYSTEM and your messages don’t reach the model as you wrote them, Ollama pours them into the model’s own template, which adds the control tokens that family expects."
         why="This pane shows the result, so a system prompt that never reaches the model is obvious here instead of invisible from the chat window."
         steps={[
           "Left is the template Ollama reports; the highlighted words are its slots.",
           "Right is the same template with your current chat filled in.",
           <>
-            Watch the <b>references .System</b> check — if it goes red, your system prompt is
+            Watch the <b>references .System</b> check. If it goes red, your system prompt is
             being dropped before the model ever sees it.
           </>,
         ]}
@@ -238,17 +238,17 @@ export function PromptView() {
             {/* The indicator is a Go-template question. A Jinja template
                 addresses the system prompt through its `messages` array and
                 never writes `.System`, so a red flag here would be a false
-                alarm on every model that ships one — which is most modern
+                alarm on every model that ships one. Which is most modern
                 ones. Absent, not red: a figure that can't be read honestly
                 is not rendered at all. */}
             {renderer !== null ? (
               <span className="hint">
-                <code>RENDERER {renderer}</code> builds the prompt —{" "}
+                <code>RENDERER {renderer}</code> builds the prompt {" "}
                 <code>.System</code> does not apply
               </span>
             ) : analysis.dialect === "jinja" ? (
               <span className="hint">
-                Jinja template — <code>.System</code> does not apply
+                Jinja template, <code>.System</code> does not apply
               </span>
             ) : analysis.referencesSystem ? (
               <span className="ok">
@@ -256,7 +256,7 @@ export function PromptView() {
               </span>
             ) : (
               <span className="bad" role="status">
-                ✕ does not reference <code>.System</code> — your system prompt never reaches
+                ✕ does not reference <code>.System</code>. Your system prompt never reaches
                 the model
               </span>
             )}
@@ -282,7 +282,7 @@ export function PromptView() {
           {renderer !== null && result.ok && (
             <div className="render-refused" role="status">
               <code>RENDERER {renderer}</code> assembles this model's prompt inside Ollama.
-              What follows is only the <code>TEMPLATE</code> executed — not what the model
+              What follows is only the <code>TEMPLATE</code> executed. Not what the model
               receives.
             </div>
           )}
@@ -291,7 +291,7 @@ export function PromptView() {
           ) : (
             <>
               {/* Two different refusals, and conflating them misleads. A
-                  Jinja template isn't an unsupported *action* — it is a
+                  Jinja template isn't an unsupported *action*. It is a
                   different language, and saying "unsupported action" would
                   send someone hunting for a construct to remove. */}
               <div className="render-refused" role="status">
@@ -312,9 +312,9 @@ export function PromptView() {
                 ) : (
                   <>
                     {result.message} Remuda renders a documented subset of Go{" "}
-                    <code>text/template</code> — <code>if</code>, <code>range</code>,{" "}
+                    <code>text/template</code>, <code>if</code>, <code>range</code>,{" "}
                     <code>.System</code>, <code>.Prompt</code>, <code>.Messages</code>,{" "}
-                    <code>.Role</code>, <code>.Content</code>, <code>.Tools</code> — and shows
+                    <code>.Role</code>, <code>.Content</code>, <code>.Tools</code>. And shows
                     the raw template rather than guessing at the rest.
                   </>
                 )}
@@ -332,7 +332,7 @@ export function PromptView() {
             >
               {copied ? "Copied" : "Copy"}
             </button>
-            {/* TODO (R3, deferred): "Send as raw…" — post this text through
+            {/* TODO (R3, deferred): "Send as raw…". Post this text through
                 /api/generate with `raw: true`, which bypasses templating, so
                 a raw send and a normal send agreeing proves the render right.
                 It needs a `generate()` on the API client and a store action,

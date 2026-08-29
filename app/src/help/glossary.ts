@@ -30,13 +30,13 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   num_ctx: {
     term: "num_ctx",
     definition:
-      "How much text the model can hold at once, counted in tokens — the conversation so far plus the reply it is about to write. Raising it uses more memory, and Ollama has to reload the model to change it.",
+      "How much text the model can hold at once, counted in tokens. The conversation so far plus the reply it is about to write. Raising it uses more memory, and Ollama has to reload the model to change it.",
     extra: "A token is roughly ¾ of a word.",
   },
   num_gpu: {
     term: "num_gpu",
     definition:
-      "How many of the model's layers Ollama puts on the graphics card. Whatever is left over runs on the CPU, which is far slower — so lowering this is how you get a model to load at all when it doesn't quite fit.",
+      "How many of the model's layers Ollama puts on the graphics card. Whatever is left over runs on the CPU, which is far slower. So lowering this is how you get a model to load at all when it doesn't quite fit.",
     extra: "Set as the model loads, like num_ctx. Changing it reloads the model.",
   },
   "kv cache": {
@@ -47,17 +47,23 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   quantise: {
     term: "quantise",
     definition:
-      "Storing the model's numbers at lower precision so it takes less memory and runs faster. You give up a little accuracy for a lot of room — q4 is the usual trade. Remuda can quantise a variant as you save it.",
+      "Storing the model's numbers at lower precision so it takes less memory and runs faster. You give up a little accuracy for a lot of room, and q4 is the usual trade. Remuda can quantise a variant as you save it.",
   },
   keep_alive: {
     term: "keep_alive",
     definition:
       "How long Ollama keeps the model in memory after your last message. Until it runs out the next reply starts immediately; after that the model is unloaded and the one after it waits for a fresh load.",
   },
+  bench: {
+    term: "bench",
+    definition:
+      "A saved set of prompts you re-run after changing a Modelfile. Each answer is compared with what the same prompt returned last time, so you can see what else moved.",
+    extra: "Add one from the menu under any chat message.",
+  },
   seed: {
     term: "seed",
     definition:
-      "Fixes the random choices the model makes, so the same prompt comes back with the same answer every time. Pin it while you are comparing two Modelfiles — otherwise you cannot tell a real change from ordinary randomness.",
+      "Fixes the random choices the model makes, so the same prompt comes back with the same answer every time. Pin it while you are comparing two Modelfiles. Otherwise you cannot tell a real change from ordinary randomness.",
   },
   temperature: {
     term: "temperature",
@@ -72,7 +78,7 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
   "tokens/s": {
     term: "tokens/s",
     definition:
-      "How fast the reply is being written, in tokens per second. It is the number to watch when a model spills out of the graphics card — running partly on the CPU can drop it tenfold.",
+      "How fast the reply is being written, in tokens per second. It is the number to watch when a model spills out of the graphics card. Running partly on the CPU can drop it tenfold.",
   },
   modelfile: {
     term: "Modelfile",

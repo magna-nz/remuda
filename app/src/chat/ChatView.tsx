@@ -21,6 +21,7 @@ import { useEffect, useState, type ClipboardEvent, type DragEvent, type Keyboard
 import "./ChatView.css";
 import { useRemuda, type LastStats } from "../ui/state";
 import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
+import { Term } from "../help/Term";
 import { pasteChord } from "../ui/platform";
 import type { Model, ThinkLevel } from "../api/types";
 import { shortTag, type ChatSession, type Lane, type Message } from "./sessions";
@@ -107,7 +108,7 @@ function UnloadedBanner({ session }: { session: ChatSession }) {
         <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
       </svg>
       <div className="bt">
-        <b>{session.model}</b> isn’t loaded — in memory:{" "}
+        <b>{session.model}</b> isn’t loaded. In memory:{" "}
         {residents.length === 0 ? (
           <code>nothing</code>
         ) : (
@@ -150,7 +151,7 @@ function EmbeddingGate({ tag }: { tag: string }) {
           <b>{tag} is an embedding model.</b>
           <p>
             It has no <code>completion</code> capability, so it can’t hold a chat. It’s still
-            loadable — Remuda just won’t offer you a composer for it.
+            loadable, Remuda just won’t offer you a composer for it.
           </p>
         </div>
       </div>
@@ -675,7 +676,7 @@ export function ChatView() {
           </div>
         )}
         <div className="col">
-          {/* Reasoning sits outside the bubble — machinery, not the
+          {/* Reasoning sits outside the bubble. Machinery, not the
               answer, and not part of a copied reply. */}
           {m.role === "assistant" && m.thinking !== undefined && m.thinking !== "" && (
             <ThinkingBlock
@@ -714,7 +715,7 @@ export function ChatView() {
               />
               {overrideCount > 0 && (
                 <div className="runnote">
-                  {describeOverrides(overrides)} — set for this chat
+                  {describeOverrides(overrides)}. Set for this chat
                 </div>
               )}
             </>
@@ -828,7 +829,7 @@ export function ChatView() {
     >
       {canChat && (
         <div className="chathead">
-          {/* No session title here on purpose — the sidebar already names the
+          {/* No session title here on purpose. The sidebar already names the
               chat, and a second copy in the main column is a second thing to
               keep in sync for no gain. */}
           <span className="spacer" />
@@ -854,7 +855,7 @@ export function ChatView() {
       )}
       <PaneHelp
         paneId="chat"
-        title="Chat — where you test the model"
+        title="Chat. Where you test the model"
         what="A conversation with the model that is loaded right now. Each chat remembers which model it ran on, so an old one still tells you what produced it."
         why="This is where a Modelfile change becomes something you can feel. Edit the Modelfile beside it, save, and ask the same question again."
         steps={[
@@ -867,7 +868,8 @@ export function ChatView() {
           </>,
           <>
             The <b>⌄</b> under any message re-rolls it, copies the exact request, or adds the
-            prompt to a <b>bench</b> so you can re-run it after your next save.
+            prompt to a <Term name="bench">bench</Term> so you can re-run it after your next
+            save.
           </>,
         ]}
       />
@@ -1088,7 +1090,7 @@ export function ChatView() {
                   streaming
                     ? "Another chat is still generating"
                     : formatBroken
-                      ? "The response schema doesn’t parse — fix it in the Format pane, or switch it off"
+                      ? "The response schema doesn’t parse. Fix it in the Format pane, or switch it off"
                       : "Send"
                 }
                 aria-label="Send"
@@ -1150,7 +1152,7 @@ export function ChatView() {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
                 </svg>
-                num_ctx {groupDigits(overrides.numCtx)} — the next message reloads the model
+                num_ctx {groupDigits(overrides.numCtx)}. The next message reloads the model
               </span>
             )}
             {canSee && <span className="hint">drop an image in the log, or {pasteChord()}</span>}

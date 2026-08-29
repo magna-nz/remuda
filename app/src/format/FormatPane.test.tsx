@@ -158,7 +158,7 @@ describe("layer 2 — pane help (R5)", () => {
     const toggle = within(pane).getByRole("button", { name: "About Format" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(
-      within(pane).getByRole("region", { name: "About Format — force the reply into a shape" }),
+      within(pane).getByRole("region", { name: "About Format. Force the reply into a shape" }),
     ).toBeInTheDocument();
   });
 
@@ -169,7 +169,7 @@ describe("layer 2 — pane help (R5)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Close help for Format/ }));
     expect(
-      screen.queryByRole("region", { name: "About Format — force the reply into a shape" }),
+      screen.queryByRole("region", { name: "About Format. Force the reply into a shape" }),
     ).not.toBeInTheDocument();
     expect(window.localStorage.getItem("remuda.help.v1")).toContain("format");
   });

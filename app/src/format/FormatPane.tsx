@@ -120,15 +120,15 @@ export function FormatPane({
 
       <PaneHelp
         paneId="format"
-        title="Format — force the reply into a shape"
+        title="Format. Force the reply into a shape"
         what="Ollama restricts what the model is allowed to say next so that the answer always fits the JSON Schema you write here."
-        why="It isn’t an instruction the model can ignore and it isn’t a retry — a malformed reply is simply unreachable."
+        why="It isn’t an instruction the model can ignore and it isn’t a retry. A malformed reply is simply unreachable."
         steps={[
           "Write or paste a JSON Schema below.",
-          "Switch to Schema — every reply now comes back in that shape.",
+          "Switch to Schema. Every reply now comes back in that shape.",
           "The card under each reply checks it field by field against your schema.",
         ]}
-        note="This chat only — there’s no setting for it on a saved model, so there’s nothing to bake in."
+        note="This chat only. There’s no setting for it on a saved model, so there’s nothing to bake in."
       />
 
       <textarea
@@ -158,8 +158,8 @@ export function FormatPane({
           {config.mode === "schema"
             ? "constrains decoding"
             : config.mode === "json"
-              ? "json — valid JSON, any shape"
-              : "off — no format sent"}
+              ? "json. Valid JSON, any shape"
+              : "off. No format sent"}
         </span>
       </div>
 
@@ -169,7 +169,7 @@ export function FormatPane({
         </p>
       )}
 
-      {/* Layer 1 — the empty state (R5). Nothing is turned on yet, so the
+      {/* Layer 1. The empty state (R5). Nothing is turned on yet, so the
           pane explains itself before asking the user to discover the mode
           switch above on their own. */}
       {config.mode === "off" && (
@@ -195,7 +195,7 @@ export function FormatPane({
           <ol className="ef-how">
             <li>
               <b>1</b>
-              <span>Write or paste a JSON Schema below — a working example is already there.</span>
+              <span>Write or paste a JSON Schema below. A working example is already there.</span>
             </li>
             <li>
               <b>2</b>

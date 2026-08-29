@@ -241,15 +241,15 @@ export function ToolsView() {
 
         <PaneHelp
           paneId="tools"
-          title="Tools — see what the model actually calls"
-          what="Every call the model makes here is checked against the schema you wrote for it — argument by argument, not just whether the reply parsed."
+          title="Tools. See what the model actually calls"
+          what="Every call the model makes here is checked against the schema you wrote for it. Argument by argument, not just whether the reply parsed."
           why="It turns “the model got the arguments wrong” from a guess into a badge on the exact key that was wrong, or missing."
           steps={[
             "Pick a tool set on the left, or write your own schema.",
-            "Ask for something that needs one — the model’s call appears as a card.",
+            "Ask for something that needs one. The model’s call appears as a card.",
             "Read the badges: matched, valid arguments, anything missing.",
           ]}
-          note="Nothing here is saved — this transcript is a scratch pad, not a chat."
+          note="Nothing here is saved. This transcript is a scratch pad, not a chat."
         />
 
         <div className="toolscroll">
@@ -271,7 +271,7 @@ export function ToolsView() {
               <h3>See exactly what the model calls, and whether it got it right</h3>
               <p>
                 A model that lists tools can call one instead of answering in prose. This is
-                where you check the call it made against the schema you wrote — argument by
+                where you check the call it made against the schema you wrote. Argument by
                 argument, not just whether the JSON parsed.
               </p>
               <ol className="ef-how">
@@ -281,7 +281,7 @@ export function ToolsView() {
                 </li>
                 <li>
                   <b>2</b>
-                  <span>Ask for something that needs one — the model’s call appears as a card.</span>
+                  <span>Ask for something that needs one. The model’s call appears as a card.</span>
                 </li>
                 <li>
                   <b>3</b>
@@ -444,7 +444,7 @@ function ToolCallCard({
         {verdict.missing.map((key) => (
           <div className="argrow missrow" key={`missing-${key}`}>
             <span className="ak">&quot;{key}&quot;</span>
-            <span className="av">: —</span>
+            <span className="av">: </span>
             <span className="note">missing · required</span>
           </div>
         ))}

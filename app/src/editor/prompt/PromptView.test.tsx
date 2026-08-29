@@ -169,7 +169,7 @@ describe("PromptView — layer 2 pane help (R5)", () => {
     const toggle = screen.getByRole("button", { name: "About the rendered prompt" });
     expect(toggle).toHaveAttribute("aria-expanded", "true");
     expect(
-      screen.getByRole("region", { name: "About Prompt — the exact text the model receives" }),
+      screen.getByRole("region", { name: "About Prompt. The exact text the model receives" }),
     ).toBeInTheDocument();
   });
 
@@ -178,7 +178,7 @@ describe("PromptView — layer 2 pane help (R5)", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /^Close help for Prompt/ }));
     expect(
-      screen.queryByRole("region", { name: "About Prompt — the exact text the model receives" }),
+      screen.queryByRole("region", { name: "About Prompt. The exact text the model receives" }),
     ).not.toBeInTheDocument();
     expect(window.localStorage.getItem("remuda.help.v1")).toContain("prompt");
   });

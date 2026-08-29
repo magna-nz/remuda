@@ -248,7 +248,10 @@ describe("the run table", () => {
     expect(screen.getByText("1 same")).toBeInTheDocument();
     expect(screen.getByText("1 error")).toBeInTheDocument();
 
-    const rows = screen.getAllByRole("button", { expanded: false });
+    // Scoped to the run table: the pane's `?` toggle is an aria-expanded
+    // button too, and it sorts ahead of the rows in document order.
+    const table = document.querySelector(".bench") as HTMLElement;
+    const rows = within(table).getAllByRole("button", { expanded: false });
     expect(rows[0]!.textContent).toContain("Rewrite this loop to bail early.");
     expect(rows[0]!.textContent).toContain("Changed");
     // A failure is a row, kept with its cause — not a dropped result.
@@ -265,11 +268,18 @@ describe("the run table", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Run all" }));
     });
-    await waitFor(() => expect(screen.getByText(/seed \d+/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect((document.querySelector(".runbar") as HTMLElement).textContent).toMatch(
+        /seed \d+/,
+      ),
+    );
     expect(client.seeds).toHaveLength(3);
     expect(new Set(client.seeds).size).toBe(1);
     expect(client.seeds[0]).toEqual(expect.any(Number));
-    expect(screen.getByText(new RegExp(`seed ${String(client.seeds[0])}`))).toBeInTheDocument();
+    // `seed` is a <Term> now, so the word and the number are separate nodes.
+    expect((document.querySelector(".runbar") as HTMLElement).textContent).toContain(
+      `seed ${String(client.seeds[0])}`,
+    );
   });
 
   it("rows are collapsed until asked, and expand to the two answers word-diffed", async () => {
@@ -288,7 +298,9 @@ describe("the run table", () => {
 
     // Collapsed by default: no answer column is on screen.
     expect(document.querySelector(".bcol")).toBeNull();
-    fireEvent.click(screen.getAllByRole("button", { expanded: false })[0]!);
+    // Scoped: the pane's `?` toggle is an aria-expanded button too.
+    const table = document.querySelector(".bench") as HTMLElement;
+    fireEvent.click(within(table).getAllByRole("button", { expanded: false })[0]!);
 
     const columns = document.querySelectorAll(".bcol");
     expect(columns).toHaveLength(2);
