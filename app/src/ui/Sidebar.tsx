@@ -8,10 +8,20 @@
  * screen-reader text so the dot is never the only carrier of the state.
  * "+ New chat" binds a session to the active resident model, so it needs one
  * loaded. Search filters by title substring.
+ *
+ * Two groups, not one: **Benches** (T5) sits above **Recent**, because a
+ * bench is a thing you reach for from wherever you are — most often from
+ * inside the Modelfile editor, having just saved a change.
  */
 import { useState } from "react";
 import "./Sidebar.css";
 import { relativeTime, shortTag, type ChatSession } from "../chat/sessions";
+// T5 / R4 — the Benches group. It lives in app/src/bench/ so the rail's own
+// file keeps to one job; the group is above Recent because the rail persists
+// across every surface, which is what makes a bench reachable from inside
+// the Modelfile editor.
+import { BenchmarkRail } from "../benchmark/BenchmarkRail";
+import { useTourTarget } from "../tour/registry";
 import { useRemuda } from "./state";
 
 function SessionRow({ session, active }: { session: ChatSession; active: boolean }) {
@@ -28,7 +38,7 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
         className="sess-open"
         onClick={() => openSession(session.id)}
         aria-current={active || undefined}
-        title={`${tag} — ${state}`}
+        title={`${tag}, ${state}`}
       >
         <div className="strow">
           <span className={isLoaded ? "sdot" : "sdot off"} aria-hidden="true" />
@@ -61,7 +71,22 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
 }
 
 export function Sidebar() {
-  const { view, setView, sessions, activeSessionId, activeModel, newChat } = useRemuda();
+  const {
+    view,
+    setView,
+    sessions,
+    activeSessionId,
+    activeModel,
+    newChat,
+    benchmarks,
+    activeBenchmarkId,
+    openBenchmark,
+    createBenchmark,
+    deleteBenchmark,
+  } = useRemuda();
+  // R6 step 3 rings the BENCHMARKS header; the rail takes the ref rather
+  // than registering it, so tour/steps.ts stays this side of the boundary.
+  const benchmarksRef = useTourTarget("benchmark");
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();
@@ -98,12 +123,23 @@ export function Sidebar() {
           New chat
         </button>
       </div>
+      <BenchmarkRail
+        benchmarks={benchmarks}
+        activeBenchmarkId={activeBenchmarkId}
+        paneVisible={view === "benchmark"}
+        canCreate={activeModel !== null}
+        createBlockedReason="Load a model first"
+        onOpen={openBenchmark}
+        onCreate={() => void createBenchmark()}
+        onDelete={deleteBenchmark}
+        headerRef={benchmarksRef}
+      />
       <div className="side-label">Recent</div>
       <div className="sesslist">
         {filtered.length === 0 ? (
           <p className="empty-note">
             {sessions.length === 0
-              ? "No chats yet — load a model, then start one."
+              ? "No chats yet. Load a model, then start one."
               : "No chats match."}
           </p>
         ) : (

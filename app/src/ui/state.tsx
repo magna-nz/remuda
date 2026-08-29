@@ -22,6 +22,7 @@ import {
 } from "react";
 import { createClient } from "../api/client";
 import type {
+  ChatFormat,
   ChatMessage,
   KeepAlive,
   Model,
@@ -41,10 +42,14 @@ import {
   sortSessions,
   titleFor,
   type ChatSession,
+  type FormatConfig,
   type Lane,
   type LaneConfig,
   type Message,
 } from "../chat/sessions";
+// R2 — constrained output (docs/SPEC-round-two.md). The pure parts live in
+// app/src/format/; this file owns only the send.
+import { wireFormat } from "../format/format";
 // T2 — A/B compare (docs/SPEC-tuning.md). The pure parts live next door in
 // chat/compare.ts; this file owns only the run itself.
 import {
@@ -79,7 +84,26 @@ import {
   type ModelfileSnapshot,
 } from "../editor/history";
 
-export type View = "chat" | "modelfile" | "tools" | "pull" | "settings";
+// T5 / R4 — Bench. The data model, its persistence and the replay loop all
+// live in app/src/bench/; this file owns only the wiring: which bench is
+// open, and the one run that may be in flight (SPEC §8).
+import {
+  addLane as addLaneTo,
+  addPrompt,
+  appendRun,
+  createBenchmark as makeBenchmark,
+  defaultBenchmarkName,
+  loadBenchmarks,
+  migrateBenches,
+  removeLane as removeLaneFrom,
+  removePrompt,
+  saveBenchmarks,
+  updateLane as updateLaneIn,
+} from "../benchmark/benchmarks";
+import { runBenchmark, type BenchmarkProgress } from "../benchmark/run";
+import type { Benchmark, Cell, Lane as BenchmarkLane } from "../benchmark/types";
+
+export type View = "chat" | "modelfile" | "tools" | "benchmark" | "pull" | "settings";
 
 /** Settings persisted across restarts (SPEC §5.6), separate from chat sessions. */
 const SETTINGS_STORAGE_KEY = "remuda.settings.v1";
@@ -142,7 +166,12 @@ export interface EditorDraft {
 }
 
 /** Which pane the Modelfile editor is showing (SPEC-tuning T1). */
-export type EditorPane = "form" | "raw" | "history";
+/**
+ * `prompt` is a full member rather than a flag beside this union so that
+ * anything able to switch panes can reach it — the guided tour's step on the
+ * rendered prompt (R6) opens it the same way the segment buttons do.
+ */
+export type EditorPane = "form" | "raw" | "prompt" | "history";
 
 export type ReloadPhase = "creating" | "stopping" | "reloading" | "done";
 
@@ -222,6 +251,11 @@ export interface RunGenerationArgs {
   options?: RunOptions;
   think?: ThinkLevel;
   /**
+   * Constrained output for this request (R2). Per-chat, so both A/B lanes
+   * carry the same one; undefined omits `format` from the body.
+   */
+  format?: ChatFormat;
+  /**
    * Cancels this run. A/B passes one signal to both lanes so a single
    * Cancel stops the pair; the stream map still tracks each lane on its own.
    */
@@ -266,7 +300,13 @@ export interface RemudaContextValue {
   /** Re-fetch the installed model list. */
   refreshModels: () => Promise<void>;
   /** Load a model with the configured keep_alive, then refresh the model list. */
-  load: (tag: string, numCtx?: number) => Promise<void>;
+  /**
+   * `numCtx` and `numGpu` are both load-time: they size the KV cache and the
+   * GPU layer split the runner allocates, so neither can be changed without
+   * a reload. Unset means Ollama's own choice — and for `numGpu`, unset is
+   * not the same as `0`, which asks for no layers on the GPU at all.
+   */
+  load: (tag: string, numCtx?: number, numGpu?: number) => Promise<void>;
   /** Free one model's weights (keep_alive: 0), then refresh the list. */
   unload: (tag: string) => Promise<void>;
   /** Free every resident model, then refresh the list once. */
@@ -345,6 +385,12 @@ export interface RemudaContextValue {
   setSessionOptions: (sessionId: string, options: RunOptions) => void;
   /** Per-session reasoning effort; "off" omits `think` from the request. */
   setSessionThink: (sessionId: string, level: ThinkLevel) => void;
+  /**
+   * Per-session constrained output (R2): the mode and the raw schema text,
+   * stored verbatim so a half-typed schema survives. Never a Modelfile
+   * setting — Ollama has no `PARAMETER format`.
+   */
+  setSessionFormat: (sessionId: string, format: FormatConfig) => void;
 
   // ---- A/B compare (docs/SPEC-tuning.md T2) ----
   /**
@@ -464,6 +510,65 @@ export interface RemudaContextValue {
    * created and nothing is saved; no-op when no model is loaded.
    */
   promoteToSystem: (text: string) => Promise<void>;
+
+  // ---- Benchmark (docs/SPEC-round-two.md R7) ----
+  /** Every saved benchmark, newest-touched first. */
+  benchmarks: Benchmark[];
+  /** The benchmark the main area is showing; null when none is open. */
+  activeBenchmarkId: string | null;
+  /**
+   * The run in flight, or null. Its cells accumulate here rather than in
+   * `benchmarks`, so a half-finished run is never persisted: the finished
+   * `BenchmarkRun` is appended in one write when the loop ends, cancelled or
+   * not.
+   */
+  benchmarkProgress: BenchmarkRunState | null;
+  /** Create a benchmark with one lane on the given model (default: active). */
+  createBenchmark: (name?: string, model?: string) => string | null;
+  openBenchmark: (id: string) => void;
+  /** Under the existing §8 confirm toggle, like deleting a model. */
+  deleteBenchmark: (id: string) => void;
+  renameBenchmark: (id: string, name: string) => void;
+  /**
+   * Capture: put one prompt in a benchmark, with no form in the way.
+   *
+   * Targets the open benchmark when one of its lanes runs this model, else
+   * the first benchmark with such a lane, else it creates one named after the
+   * model. Returns the benchmark id, or null when there is no model to bind
+   * one to. Adding text already present is a no-op.
+   */
+  addToBenchmark: (text: string, model?: string) => string | null;
+  removeBenchmarkPrompt: (benchmarkId: string, promptId: string) => void;
+  /** Add a lane, up to MAX_LANES. Returns false when already at the cap. */
+  addLane: (benchmarkId: string, model: string, modelfile: string | null) => boolean;
+  removeLane: (benchmarkId: string, laneId: string) => void;
+  updateLane: (
+    benchmarkId: string,
+    laneId: string,
+    patch: Partial<Omit<BenchmarkLane, "id">>,
+  ) => void;
+  /** Run every prompt against every lane, grouped by lane, on one pinned seed. */
+  startBenchmarkRun: (benchmarkId: string) => Promise<void>;
+  /** Keeps the finished cells and marks the run partial. */
+  cancelBenchmarkRun: () => void;
+}
+
+/**
+ * A benchmark run in flight (R7).
+ *
+ * `progress` is the loop's own report, which carries the *loading* phase —
+ * R7 asks for a lane switch to be visible rather than looking hung, and on a
+ * 20 GB model that wait is the honest cost of the feature.
+ */
+export interface BenchmarkRunState {
+  benchmarkId: string;
+  /** Pinned across every lane and every prompt of this run. */
+  seed: number;
+  done: number;
+  total: number;
+  /** Cells settled so far, in the order they finished. */
+  cells: Cell[];
+  progress: BenchmarkProgress | null;
 }
 
 const RemudaContext = createContext<RemudaContextValue | null>(null);
@@ -617,6 +722,41 @@ export function RemudaProvider({
   historyRef.current = modelfileHistory;
   const [editorPane, setEditorPane] = useState<EditorPane>("form");
 
+  // R7 — Benchmark. Loaded once from localStorage and written back on every
+  // mutation; there is no per-token churn to debounce, because a run commits
+  // once, at the end.
+  //
+  // R4's benches are migrated on the way in — one lane each, prompts and runs
+  // intact — and the legacy key is left where it is, so a downgrade still
+  // finds its data. `migrateBenches` returns the same reference when there is
+  // nothing to add, which is what makes the write below conditional.
+  const [benchmarks, setBenchmarks] = useState<Benchmark[]>(() => {
+    const stored = loadBenchmarks();
+    const migrated = migrateBenches(stored);
+    if (migrated !== stored) saveBenchmarks(migrated);
+    return migrated;
+  });
+  const benchmarksRef = useRef(benchmarks);
+  benchmarksRef.current = benchmarks;
+  const [activeBenchmarkId, setActiveBenchmarkId] = useState<string | null>(null);
+  const activeBenchmarkIdRef = useRef<string | null>(null);
+  activeBenchmarkIdRef.current = activeBenchmarkId;
+  const [benchmarkProgress, setBenchmarkProgress] = useState<BenchmarkRunState | null>(null);
+  /**
+   * The run in flight, and the §8 guard for it. A benchmark run is a
+   * generation like any other: it may not start beside a chat or a compare,
+   * and neither may start beside it.
+   */
+  const benchmarkRunRef = useRef<{ controller: AbortController; benchmarkId: string } | null>(
+    null,
+  );
+
+  const commitBenchmarks = useCallback((next: Benchmark[]) => {
+    benchmarksRef.current = next;
+    setBenchmarks(next);
+    saveBenchmarks(next);
+  }, []);
+
   /** SPEC §8: unsaved editor changes prompt before navigating away. */
   const confirmUnsavedChanges = useCallback((): boolean => {
     if (!editorDraftRef.current?.dirty) return true;
@@ -625,6 +765,10 @@ export function RemudaProvider({
 
   const [sessions, setSessions] = useState<ChatSession[]>(() => loadSessions());
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  // Read at call time by addToBench, which must not re-identify on every
+  // session switch.
+  const activeSessionIdRef = useRef<string | null>(null);
+  activeSessionIdRef.current = activeSessionId;
   const [streamingSessionId, setStreamingSessionId] = useState<string | null>(null);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [errorsByMessage, setErrorsByMessage] = useState<Record<string, string>>({});
@@ -788,8 +932,8 @@ export function RemudaProvider({
   }, [checkHealth, pollIntervalMs]);
 
   const load = useCallback(
-    async (tag: string, numCtx?: number) => {
-      await client.load(tag, keepAlive, undefined, numCtx);
+    async (tag: string, numCtx?: number, numGpu?: number) => {
+      await client.load(tag, keepAlive, undefined, numCtx, numGpu);
       await refreshModels();
     },
     [client, keepAlive, refreshModels],
@@ -930,6 +1074,9 @@ export function RemudaProvider({
     // one start on a run the user just cancelled. Cancel cancels both lanes
     // and keeps whatever streamed (SPEC-tuning T2).
     compareRunRef.current?.controller.abort();
+    // Same for a bench replay: it keeps its finished rows and is recorded
+    // partial rather than discarded (T5).
+    benchmarkRunRef.current?.controller.abort();
     for (const entry of streamsRef.current.values()) {
       entry.controller.abort();
     }
@@ -956,6 +1103,7 @@ export function RemudaProvider({
       messages,
       options,
       think,
+      format,
       signal,
     }: RunGenerationArgs) => {
       // Own controller, chained to the caller's signal. The caller's signal
@@ -986,6 +1134,7 @@ export function RemudaProvider({
           signal: controller.signal,
           think,
           options,
+          format,
         })) {
           const thinking = chunk.thinking ?? "";
           if (chunk.content !== "" || thinking !== "") {
@@ -1073,11 +1222,26 @@ export function RemudaProvider({
         (trimmed === "" && !hasImages) ||
         sessionId === null ||
         streamsRef.current.size > 0 ||
-        compareRunRef.current !== null
+        compareRunRef.current !== null ||
+        // A bench replay is a generation too (T5): it holds the slot for as
+        // long as it runs, and a send that slipped past here would put two
+        // requests on one runner.
+        benchmarkRunRef.current !== null
       )
         return;
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) return;
+      // R2: a schema that doesn't parse refuses the send. Going ahead
+      // without it would produce unconstrained output that reads as a model
+      // ignoring the shape, when in fact nothing ever asked for one — the
+      // one outcome worse than an error. The composer disables Send and
+      // opens the pane on the error; this is the backstop for every other
+      // way in (Enter, and anything that reaches the store directly).
+      const format = wireFormat(session.format);
+      if (format.error !== null) {
+        setStreamError(format.error);
+        return;
+      }
 
       const userMessage: Message = { id: newMessageId(), role: "user", content: trimmed };
       if (hasImages) {
@@ -1102,7 +1266,15 @@ export function RemudaProvider({
         messages: [
           ...s.messages,
           userMessage,
-          { id: targetMessageId, role: "assistant", content: "" },
+          // `constrained` records that a schema was in force for THIS reply,
+          // so the conformance card never appears under an older prose reply
+          // that was generated before the schema was switched on (R2).
+          {
+            id: targetMessageId,
+            role: "assistant",
+            content: "",
+            ...(format.format !== undefined ? { constrained: true } : {}),
+          },
         ],
         updatedAt: new Date().toISOString(),
       }));
@@ -1115,6 +1287,7 @@ export function RemudaProvider({
         // Per-session, sent on every request for that session.
         options: session.options,
         think: session.think,
+        format: format.format,
         signal: send.signal,
       });
     },
@@ -1136,6 +1309,19 @@ export function RemudaProvider({
   const setSessionThink = useCallback(
     (sessionId: string, level: ThinkLevel) => {
       updateSession(sessionId, (s) => ({ ...s, think: level }));
+    },
+    [updateSession],
+  );
+
+  /**
+   * Constrained output for one chat (R2). Like the two above it this is a
+   * setting, not activity, so it leaves `updatedAt` alone — and like them it
+   * is stored on the session, which is what makes the raw schema text
+   * survive a reload.
+   */
+  const setSessionFormat = useCallback(
+    (sessionId: string, format: FormatConfig) => {
+      updateSession(sessionId, (s) => ({ ...s, format }));
     },
     [updateSession],
   );
@@ -1224,6 +1410,13 @@ export function RemudaProvider({
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session || session.compare === undefined) return;
       const compare = session.compare;
+      // R2: same refusal as sendMessage. `format` is per-chat, not per-lane,
+      // so a broken schema breaks the pair rather than one side of it.
+      const format = wireFormat(session.format);
+      if (format.error !== null) {
+        setStreamError(format.error);
+        return;
+      }
 
       // Stored once, with no lane: it is one prompt. Two copies would show
       // the user asking the same question twice and would be re-sent as two
@@ -1251,8 +1444,12 @@ export function RemudaProvider({
         messages: [
           ...s.messages,
           userMessage,
-          { id: targets.a, role: "assistant", content: "", lane: "a" },
-          { id: targets.b, role: "assistant", content: "", lane: "b" },
+          // Both lanes share the chat's one format config, so they are
+          // constrained together or not at all (see `constrained` above).
+          { id: targets.a, role: "assistant", content: "", lane: "a",
+            ...(format.format !== undefined ? { constrained: true } : {}) },
+          { id: targets.b, role: "assistant", content: "", lane: "b",
+            ...(format.format !== undefined ? { constrained: true } : {}) },
         ],
         updatedAt: new Date().toISOString(),
       }));
@@ -1272,6 +1469,9 @@ export function RemudaProvider({
             messages: historyForLane(history, lane).map(forWire),
             options: effectiveLaneOptions(compare, lane),
             think: config.think,
+            // Per-chat: both lanes are decoded under the same constraint,
+            // so the difference between them stays the thing being compared.
+            format: format.format,
             signal: controller.signal,
           });
         }
@@ -1329,6 +1529,13 @@ export function RemudaProvider({
       if (index === -1) return;
       const target = session.messages[index];
       if (target.role !== "assistant") return;
+      // R2: a re-roll under a broken schema would come back unconstrained
+      // and look like the model having changed its mind about the shape.
+      const format = wireFormat(session.format);
+      if (format.error !== null) {
+        setStreamError(format.error);
+        return;
+      }
 
       // Everything before it — and, for a lane reply, only that lane's half
       // of it. Re-sending the other lane's answer as context would re-roll
@@ -1356,8 +1563,16 @@ export function RemudaProvider({
         const i = s.messages.findIndex((m) => m.id === messageId);
         if (i === -1) return s;
         const messages = [...s.messages];
-        const { thinking: _thinking, ...rest } = messages[i];
-        messages[i] = { ...rest, content: "" };
+        const { thinking: _thinking, constrained: _was, ...rest } = messages[i];
+        // Re-stamped from the schema in force *now*, not the one that
+        // produced the reply being replaced — a re-roll after switching
+        // format off must stop being judged, and one after switching it on
+        // must start (R2).
+        messages[i] = {
+          ...rest,
+          content: "",
+          ...(format.format !== undefined ? { constrained: true } : {}),
+        };
         return { ...s, messages };
       });
       setLastStats((prev) => (prev?.messageId === messageId ? null : prev));
@@ -1374,6 +1589,7 @@ export function RemudaProvider({
         messages: history.map(forWire),
         options,
         think,
+        format: format.format,
         signal: new AbortController().signal,
       });
     },
@@ -1569,6 +1785,202 @@ export function RemudaProvider({
     [client, confirmUnsavedChanges],
   );
 
+  /* ------------------------------------- Bench (SPEC-tuning T5 / R4) ---- */
+
+  const createBenchmark = useCallback(
+    (name?: string, model?: string): string | null => {
+      const tag = model ?? activeModelRef.current?.variant ?? null;
+      // A benchmark with no lane has nothing to run against, so there is no
+      // honest empty state for one. Same rule as "+ New chat".
+      if (tag === null) return null;
+      const chosen = name?.trim() === "" || name === undefined ? defaultBenchmarkName(tag) : name;
+      const benchmark = makeBenchmark(chosen, tag);
+      commitBenchmarks([benchmark, ...benchmarksRef.current]);
+      return benchmark.id;
+    },
+    [commitBenchmarks],
+  );
+
+  const openBenchmark = useCallback(
+    (id: string) => {
+      if (!confirmUnsavedChanges()) return;
+      setActiveBenchmarkId(id);
+      activeBenchmarkIdRef.current = id;
+      setViewState("benchmark");
+    },
+    [confirmUnsavedChanges],
+  );
+
+  const deleteBenchmark = useCallback(
+    (id: string) => {
+      const benchmark = benchmarksRef.current.find((b) => b.id === id);
+      if (benchmark === undefined) return;
+      if (
+        confirmDeleteModel &&
+        !window.confirm(`Delete the benchmark "${benchmark.name}" and its runs?`)
+      ) {
+        return;
+      }
+      if (benchmarkRunRef.current?.benchmarkId === id) {
+        benchmarkRunRef.current.controller.abort();
+      }
+      commitBenchmarks(benchmarksRef.current.filter((b) => b.id !== id));
+      setActiveBenchmarkId((prev) => (prev === id ? null : prev));
+    },
+    [commitBenchmarks, confirmDeleteModel],
+  );
+
+  const renameBenchmark = useCallback(
+    (id: string, name: string) => {
+      const trimmed = name.trim();
+      if (trimmed === "") return;
+      commitBenchmarks(
+        benchmarksRef.current.map((b) => (b.id === id ? { ...b, name: trimmed } : b)),
+      );
+    },
+    [commitBenchmarks],
+  );
+
+  const addToBenchmark = useCallback(
+    (text: string, model?: string): string | null => {
+      const trimmed = text.trim();
+      if (trimmed === "") return null;
+      const session = sessionsRef.current.find((s) => s.id === activeSessionIdRef.current);
+      const tag = model ?? session?.model ?? activeModelRef.current?.variant ?? null;
+      if (tag === null) return null;
+      const all = benchmarksRef.current;
+      // The open benchmark first, so repeated captures land where the user is
+      // looking; then any benchmark with a lane on this model; else a new one.
+      const runsTag = (b: Benchmark) => b.lanes.some((l) => l.model === tag);
+      const open = all.find((b) => b.id === activeBenchmarkIdRef.current && runsTag(b));
+      const target = open ?? all.find(runsTag) ?? null;
+      if (target === null) {
+        const created = addPrompt(makeBenchmark(defaultBenchmarkName(tag), tag), trimmed);
+        commitBenchmarks([created, ...all]);
+        return created.id;
+      }
+      const next = addPrompt(target, trimmed);
+      // Content-addressed: the same prompt twice changes nothing, and
+      // rewriting storage for a no-op would be a lie in the file.
+      if (next !== target) {
+        commitBenchmarks(all.map((b) => (b.id === target.id ? next : b)));
+      }
+      return target.id;
+    },
+    [commitBenchmarks],
+  );
+
+  const removeBenchmarkPrompt = useCallback(
+    (benchmarkId: string, promptId: string) => {
+      commitBenchmarks(
+        benchmarksRef.current.map((b) => (b.id === benchmarkId ? removePrompt(b, promptId) : b)),
+      );
+    },
+    [commitBenchmarks],
+  );
+
+  const addLane = useCallback(
+    (benchmarkId: string, model: string, modelfile: string | null): boolean => {
+      const target = benchmarksRef.current.find((b) => b.id === benchmarkId);
+      if (target === undefined) return false;
+      const next = addLaneTo(target, model, modelfile);
+      // At the cap `addLaneTo` returns the same reference; say so rather than
+      // silently doing nothing, so the UI can explain the ceiling.
+      if (next === target) return false;
+      commitBenchmarks(benchmarksRef.current.map((b) => (b.id === benchmarkId ? next : b)));
+      return true;
+    },
+    [commitBenchmarks],
+  );
+
+  const removeLane = useCallback(
+    (benchmarkId: string, laneId: string) => {
+      commitBenchmarks(
+        benchmarksRef.current.map((b) => (b.id === benchmarkId ? removeLaneFrom(b, laneId) : b)),
+      );
+    },
+    [commitBenchmarks],
+  );
+
+  const updateLane = useCallback(
+    (benchmarkId: string, laneId: string, patch: Partial<Omit<BenchmarkLane, "id">>) => {
+      commitBenchmarks(
+        benchmarksRef.current.map((b) =>
+          b.id === benchmarkId ? updateLaneIn(b, laneId, patch) : b,
+        ),
+      );
+    },
+    [commitBenchmarks],
+  );
+
+  const cancelBenchmarkRun = useCallback(() => {
+    benchmarkRunRef.current?.controller.abort();
+  }, []);
+
+  const startBenchmarkRun = useCallback(
+    async (benchmarkId: string) => {
+      const benchmark = benchmarksRef.current.find((b) => b.id === benchmarkId);
+      if (benchmark === undefined) return;
+      if (benchmark.prompts.length === 0 || benchmark.lanes.length === 0) return;
+      // SPEC §8, one generation at a time, app-wide: chat, compare and
+      // benchmark all queue behind each other rather than racing.
+      if (
+        benchmarkRunRef.current !== null ||
+        streamsRef.current.size > 0 ||
+        compareRunRef.current !== null
+      ) {
+        return;
+      }
+      const controller = new AbortController();
+      benchmarkRunRef.current = { controller, benchmarkId };
+      // One seed, drawn once, held across every lane and every prompt (R7).
+      const seed = randomSeed();
+      const total = benchmark.prompts.length * benchmark.lanes.length;
+      setBenchmarkProgress({ benchmarkId, seed, done: 0, total, cells: [], progress: null });
+      try {
+        const run = await runBenchmark({
+          benchmark,
+          seed,
+          signal: controller.signal,
+          // Grouped by lane, so this fires once per lane rather than once per
+          // prompt. keep_alive is the user's setting: the next lane's load
+          // replaces this model anyway.
+          load: (model, signal) => client.load(model, keepAlive, signal),
+          chat: (model, messages, opts) =>
+            client.chat(model, messages, {
+              keepAlive,
+              signal: opts.signal,
+              // The pinned seed is the whole point; nothing else is
+              // overridden, so a lane measures the configuration as saved.
+              options: { seed: opts.seed },
+            }),
+          onProgress: (progress) => {
+            setBenchmarkProgress((prev) =>
+              prev === null || prev.benchmarkId !== benchmarkId ? prev : { ...prev, progress },
+            );
+          },
+          onCell: (cell, done, cellTotal) => {
+            setBenchmarkProgress((prev) =>
+              prev === null || prev.benchmarkId !== benchmarkId
+                ? prev
+                : { ...prev, done, total: cellTotal, cells: [...prev.cells, cell] },
+            );
+          },
+        });
+        // One write, at the end: a cancelled run still records the cells it
+        // finished, marked partial.
+        commitBenchmarks(
+          benchmarksRef.current.map((b) => (b.id === benchmarkId ? appendRun(b, run) : b)),
+        );
+        void syncModels().catch(() => {});
+      } finally {
+        benchmarkRunRef.current = null;
+        setBenchmarkProgress(null);
+      }
+    },
+    [client, commitBenchmarks, keepAlive, syncModels],
+  );
+
   const saveDraft = useCallback(
     async (asName?: string, quantize?: string) => {
       const draft = editorDraftRef.current;
@@ -1676,6 +2088,7 @@ export function RemudaProvider({
     runGeneration,
     setSessionOptions,
     setSessionThink,
+    setSessionFormat,
     toggleCompare,
     setLaneConfig,
     setPinnedSeed,
@@ -1701,6 +2114,20 @@ export function RemudaProvider({
     setEditorPane,
     restoreSnapshot,
     promoteToSystem,
+    benchmarks,
+    activeBenchmarkId,
+    benchmarkProgress,
+    createBenchmark,
+    openBenchmark,
+    deleteBenchmark,
+    renameBenchmark,
+    addToBenchmark,
+    removeBenchmarkPrompt,
+    addLane,
+    removeLane,
+    updateLane,
+    startBenchmarkRun,
+    cancelBenchmarkRun,
   }), [
     client, status, checked, models, groups, running, loaded, activeModel, keepAlive,
     confirmDeleteModel, setConfirmDeleteModel, view, setView, loadPaneOpen,
@@ -1709,12 +2136,16 @@ export function RemudaProvider({
     activeSessionId, streamingSessionId, streamError, errorsByMessage, lastStats, statsByMessage,
     compareRun, newChat,
     openSession, deleteSession, sendMessage, runGeneration, setSessionOptions, setSessionThink,
+    setSessionFormat,
     toggleCompare, setLaneConfig, setPinnedSeed, sendCompare, keepLane, regenerateReply,
     bakeOptionsIntoEditor, cancelGeneration, editorDraft,
     editorLoading, editorError, openEditor, openEditorForNew, setEditorDoc,
     revertEditor, saving, saveError, reloadToast, saveDraft,
     modelfileHistory, historyForTag, editorPane, setEditorPane, restoreSnapshot,
     promoteToSystem,
+    benchmarks, activeBenchmarkId, benchmarkProgress, createBenchmark, openBenchmark,
+    deleteBenchmark, renameBenchmark, addToBenchmark, removeBenchmarkPrompt,
+    addLane, removeLane, updateLane, startBenchmarkRun, cancelBenchmarkRun,
   ]);
 
   return <RemudaContext.Provider value={value}>{children}</RemudaContext.Provider>;

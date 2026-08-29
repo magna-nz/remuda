@@ -32,6 +32,16 @@ export interface Message extends ChatMessage {
    * replies are lane-bound.
    */
   lane?: Lane;
+  /**
+   * True when this reply was generated with constrained output on (R2).
+   *
+   * Persisted, because the conformance card is judged on render and would
+   * otherwise appear under *older* replies the moment a schema is switched
+   * on — a red "not valid JSON" verdict on prose that was never asked to be
+   * JSON. Absent means unconstrained, which is every reply written before
+   * the field existed.
+   */
+  constrained?: boolean;
 }
 
 /** The two A/B lanes (SPEC-tuning T2). */
@@ -67,6 +77,26 @@ export function newMessageId(): string {
   return `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** The three states of constrained output (docs/SPEC-round-two.md R2). */
+export type FormatMode = "off" | "json" | "schema";
+
+/**
+ * Constrained output for one chat — Ollama's `format` on /api/chat (R2).
+ *
+ * Per-chat and only per-chat: there is no `PARAMETER format`, so unlike run
+ * options this never has a Modelfile to be baked into.
+ *
+ * `text` is the user's raw schema JSON, held verbatim and *independently of
+ * the mode*, for the same reason tools/toolsets.ts holds its text that way:
+ * a half-typed schema must survive a reload, and a schema must survive being
+ * switched to `json` and back. The parsed schema is derived from it
+ * (format/format.ts `parseSchema`), never stored.
+ */
+export interface FormatConfig {
+  mode: FormatMode;
+  text: string;
+}
+
 export interface ChatSession {
   id: string;
   title: string;
@@ -84,6 +114,11 @@ export interface ChatSession {
    * every session written before this field existed.
    */
   compare?: CompareConfig;
+  /**
+   * Constrained output for this chat (R2). Absent means off, which is every
+   * session written before the field existed.
+   */
+  format?: FormatConfig;
 }
 
 /**
@@ -161,6 +196,11 @@ function coerceMessage(value: unknown): Message | null {
   // also what a session written before compare mode looks like.
   if (m.lane === "a" || m.lane === "b") {
     message.lane = m.lane;
+  }
+  // Same optional tier: anything other than `true` reads as unconstrained,
+  // which is also what every session written before R2 looks like.
+  if (m.constrained === true) {
+    message.constrained = true;
   }
   if (typeof m.thinking === "string") {
     message.thinking = m.thinking;
@@ -248,6 +288,23 @@ function coerceCompare(value: unknown): CompareConfig | undefined {
   return { seed, lanes: [a, b] };
 }
 
+/**
+ * Constrained output off a stored payload (R2). Optional-tier, like
+ * `options` and `think`.
+ *
+ * The text is taken verbatim — **including text that doesn't parse**, which
+ * is the entire reason the session stores text rather than a schema. A
+ * missing or non-string text degrades to empty rather than dropping the
+ * mode: a chat that was set to `json` keeps constraining its replies even if
+ * whatever wrote the payload lost the editor contents.
+ */
+function coerceFormat(value: unknown): FormatConfig | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (raw.mode !== "off" && raw.mode !== "json" && raw.mode !== "schema") return undefined;
+  return { mode: raw.mode, text: typeof raw.text === "string" ? raw.text : "" };
+}
+
 function coerceSession(value: unknown): ChatSession | null {
   if (typeof value !== "object" || value === null) return null;
   const s = value as Record<string, unknown>;
@@ -284,6 +341,10 @@ function coerceSession(value: unknown): ChatSession | null {
   const compare = coerceCompare(s.compare);
   if (compare !== undefined) {
     session.compare = compare;
+  }
+  const format = coerceFormat(s.format);
+  if (format !== undefined) {
+    session.format = format;
   }
   return session;
 }

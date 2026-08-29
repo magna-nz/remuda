@@ -16,7 +16,10 @@ import { useRemuda } from "../ui/state";
 import type { EditorPane } from "../ui/state";
 import { SaveAsDialog } from "./SaveAsDialog";
 import { HistoryView } from "./HistoryView";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
+import { PromptView } from "./prompt/PromptView";
 import { passthroughKinds } from "./passthrough";
+import { useTourTarget } from "../tour/registry";
 import {
   from,
   parameters,
@@ -69,7 +72,12 @@ export function EditorView() {
   const [saveAsOpen, setSaveAsOpen] = useState(false);
   const [addingStop, setAddingStop] = useState(false);
   const [stopDraft, setStopDraft] = useState("");
-
+  /**
+   * R6 step 5's target — the Form · Raw · Prompt · History group, which only
+   * exists once a draft is open. With no model there is no draft, so the tour
+   * skips the step instead of ringing an empty pane.
+   */
+  const segRef = useTourTarget("prompt");
   // Resync the raw pane from the doc only at "external" moments — opening a
   // model, opening a new one, reverting, or a completed save — all of which
   // replace `savedDoc`. Ordinary form edits update `rawText` directly (see
@@ -173,46 +181,72 @@ export function EditorView() {
     applyDocUpdate((d) => setStops(d, stops.filter((_, i) => i !== index)));
   }
 
-  const segment = (pane: EditorPane, label: string) => (
-    <button
-      type="button"
-      className={editorPane === pane ? "on" : undefined}
-      aria-pressed={editorPane === pane}
-      onClick={() => setEditorPane(pane)}
-    >
-      {label}
-    </button>
-  );
+  const segment = (pane: EditorPane, label: string) => {
+    const on = editorPane === pane;
+    return (
+      <button
+        type="button"
+        className={on ? "on" : undefined}
+        aria-pressed={on}
+        onClick={() => setEditorPane(pane)}
+      >
+        {label}
+      </button>
+    );
+  };
 
   return (
     <div className="editorview">
       <div className="mfhead">
         <span className="mft">{(editorDraft.targetTag ?? "new") + ".Modelfile"}</span>
         <span className="spacer" />
-        {/* Form · Raw · History (SPEC-tuning T1). History replaces the two
-            columns; Form and Raw give one of them the room — and, when the
-            window is too narrow for SPEC §5.4's two columns, decide which
-            one is on screen. */}
-        <div className="seg" role="group" aria-label="Editor view">
+        {/* Form · Raw · Prompt · History (SPEC-tuning T1, SPEC-round-two R3).
+            History and Prompt replace the two columns; Form and Raw give one
+            of them the room. And, when the window is too narrow for SPEC
+            §5.4's two columns, decide which one is on screen. */}
+        <div className="seg" role="group" aria-label="Editor view" ref={segRef}>
           {segment("form", "Form")}
           {segment("raw", "Raw")}
+          {segment("prompt", "Prompt")}
           {segment("history", "History")}
         </div>
+        <PaneHelpToggle paneId="modelfile" label="About the Modelfile editor" />
       </div>
+      <PaneHelp
+        paneId="modelfile"
+        title="Modelfile. The recipe this model runs on"
+        what="Which model it starts from, its system prompt, and the settings baked in beside it. Saving one rebuilds the model through Ollama and reloads it, so your next message uses the change."
+        why="This is the loop the app exists for: change one thing, save, ask the same question again, and see what moved."
+        steps={[
+          <>
+            <b>Form</b> edits the parts most people change; <b>Raw</b> is the same file as
+            text, and the two stay in sync.
+          </>,
+          <>
+            <b>Prompt</b> shows the exact text the model is sent. <b>History</b> is every
+            save you have made, with a diff.
+          </>,
+          <>
+            <b>Save</b> overwrites this Modelfile; <b>Save as…</b> forks a new variant and
+            leaves the original alone.
+          </>,
+        ]}
+      />
+      {editorPane === "prompt" && <PromptView />}
       {editorPane === "history" && <HistoryView rawText={rawText} />}
-      {editorPane !== "history" && (
+      {editorPane !== "history" && editorPane !== "prompt" && (
       <div className={`split pane-${editorPane}`}>
         <div className="col form">
           <div className="col-h">
             <span className="eyebrow">Settings</span>
             <span className="hint">friendly editor</span>
           </div>
-          {/* Freeze all editing while a save is in flight — edits made
+          {/* Freeze all editing while a save is in flight. Edits made
               mid-save would be overwritten when the saved doc lands. */}
           <fieldset className="form-scroll" disabled={saving}>
             <div className="field">
               <label htmlFor="ed-from">
-                Base model — <span className="kwhint">FROM</span>
+                Base model, <span className="kwhint">FROM</span>
               </label>
               <select
                 id="ed-from"
@@ -229,7 +263,7 @@ export function EditorView() {
             </div>
             <div className="field">
               <label htmlFor="ed-system">
-                System prompt — <span className="kwhint">SYSTEM</span>
+                System prompt, <span className="kwhint">SYSTEM</span>
               </label>
               <textarea
                 id="ed-system"
@@ -274,7 +308,7 @@ export function EditorView() {
             </div>
             <div className="field">
               <label htmlFor="ed-ctx">
-                Context length — <span className="kwhint">num_ctx</span>
+                Context length, <span className="kwhint">num_ctx</span>
               </label>
               <div className="slider-row">
                 <input
@@ -290,13 +324,13 @@ export function EditorView() {
               </div>
               {overNumCtx && (
                 <div className="warn-hint">
-                  Exceeds {baseTag}'s trained context ({baseModel?.contextLength?.toLocaleString()}) — allowed, but may degrade quality.
+                  Exceeds {baseTag}'s trained context ({baseModel?.contextLength?.toLocaleString()}). Allowed, but may degrade quality.
                 </div>
               )}
             </div>
             <div className="field">
               <label htmlFor="ed-stop">
-                Stop sequences — <span className="kwhint">stop</span>
+                Stop sequences, <span className="kwhint">stop</span>
               </label>
               <div className="chips" id="ed-stop">
                 {stops.map((s, i) => (
@@ -370,7 +404,7 @@ export function EditorView() {
             className="btn sm"
             onClick={() => void saveDraft()}
             disabled={saving || !editorDraft.targetTag}
-            title={editorDraft.targetTag ? undefined : "New Modelfile — use Save as… to name it"}
+            title={editorDraft.targetTag ? undefined : "New Modelfile. Use Save as… to name it"}
           >
             {saving ? "Saving…" : "Save"}
           </button>

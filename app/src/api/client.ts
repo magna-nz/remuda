@@ -6,6 +6,7 @@
 import type {
   ArchParams,
   ChatChunk,
+  ChatFormat,
   ChatMessage,
   CreateRequest,
   CreateStatus,
@@ -566,6 +567,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       keepAlive: KeepAlive,
       signal?: AbortSignal,
       numCtx?: number,
+      numGpu?: number,
     ): Promise<void> {
       const body: Record<string, unknown> = {
         model: tag,
@@ -576,8 +578,18 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       // Omitted rather than sent as null when unset, matching wireOptions —
       // an explicit num_ctx overrides the Modelfile's PARAMETER, so sending
       // one the user didn't choose would silently override their own file.
+      const options: Record<string, number> = {};
       if (typeof numCtx === "number" && numCtx > 0) {
-        body.options = { num_ctx: numCtx };
+        options.num_ctx = numCtx;
+      }
+      // Unlike num_ctx, 0 is a real, distinct instruction here ("no layers on
+      // the GPU") — so the guard is `typeof`, not truthiness, and the caller
+      // is trusted for range (0..blockCount is the UI's job to enforce).
+      if (typeof numGpu === "number") {
+        options.num_gpu = numGpu;
+      }
+      if (Object.keys(options).length > 0) {
+        body.options = options;
       }
       const res = await send("POST", "/api/generate", body, signal);
       await res.text();
@@ -602,6 +614,7 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
         think?: ThinkLevel;
         options?: RunOptions;
         tools?: unknown[];
+        format?: ChatFormat;
       },
     ): AsyncIterable<ChatChunk> {
       const requestBody: Record<string, unknown> = {
@@ -620,6 +633,11 @@ export function createClient(baseUrl: string = DEFAULT_BASE_URL): OllamaClient {
       }
       if (opts.tools !== undefined && opts.tools.length > 0) {
         requestBody.tools = opts.tools;
+      }
+      // Constrained output (R2). Undefined omits the key: "off" is the
+      // absence of `format`, not an empty one — see ChatFormat in types.ts.
+      if (opts.format !== undefined) {
+        requestBody.format = opts.format;
       }
       const res = await send("POST", "/api/chat", requestBody, opts.signal);
       const body = requireBody(res, "/api/chat");

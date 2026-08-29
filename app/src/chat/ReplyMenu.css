@@ -83,3 +83,12 @@
   background: var(--border);
   margin: 4px 6px;
 }
+
+/* Pinned to the button's LEFT edge, so the dropdown grows rightward.
+   Assistant rows put their button at the left of the column, where the
+   default right-anchoring would send the menu out of the transcript's scroll
+   container and clip it to a sliver. */
+.replymenu .menu.left {
+  right: auto;
+  left: 0;
+}

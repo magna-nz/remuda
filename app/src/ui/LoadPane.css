@@ -973,3 +973,14 @@
   font-size: 10.5px;
   color: var(--faint);
 }
+
+/* GPU layers (R1) — same muted register as .fitread .r3, since this is the
+   same kind of "here's what that number means" line, not a prediction. */
+.gpuhint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 10.5px;
+  color: var(--faint);
+}

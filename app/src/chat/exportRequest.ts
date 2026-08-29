@@ -12,7 +12,7 @@
  * guard against. If client.ts's wire mapping changes, this file needs the
  * matching change.
  */
-import type { ChatMessage, KeepAlive, RunOptions, ThinkLevel } from "../api/types";
+import type { ChatFormat, ChatMessage, KeepAlive, RunOptions, ThinkLevel } from "../api/types";
 import { DEFAULT_BASE_URL, RUN_OPTION_KEYS } from "../api/types";
 
 /** Same argument shape as `chat()` on `OllamaClient`, minus `signal` (there is
@@ -34,6 +34,10 @@ export interface ExportInput {
   think?: ThinkLevel;
   /** keep_alive to include in the exported body; omitted when unknown. */
   keepAlive?: KeepAlive;
+  /** Constrained output (docs/SPEC-round-two.md R2): a JSON Schema object or
+   * the literal "json". Undefined omits `format`, which is what "off" is —
+   * the same three states client.ts's `chat()` has. */
+  format?: ChatFormat;
 }
 
 /* ── Wire mapping, mirrored from api/client.ts ─────────────────────────── */
@@ -120,6 +124,9 @@ function buildRequestBody(input: ExportInput): Record<string, unknown> {
   if (options !== null) {
     body.options = options;
   }
+  if (input.format !== undefined) {
+    body.format = input.format;
+  }
   return body;
 }
 
@@ -164,14 +171,24 @@ export function asOllamaRun(input: ExportInput): string {
 
   if (input.think !== undefined) {
     lines.push(
-      `# think: ${input.think} can't be reproduced here — it's an /api/chat request field, not a PARAMETER 'ollama run' understands`,
+      `# think: ${input.think} can't be reproduced here. It's an /api/chat request field, not a PARAMETER 'ollama run' understands`,
+    );
+  }
+
+  if (input.format !== undefined) {
+    // Same limit as `think`, and worth naming for the same reason: there is
+    // no `PARAMETER format`, so a pasted `ollama run` cannot constrain
+    // decoding at all. A command that dropped it silently would produce
+    // unconstrained output while looking like a faithful reproduction.
+    lines.push(
+      "# format: constrained output can't be reproduced here. It's an /api/chat request field, and there is no PARAMETER format",
     );
   }
 
   const hasImages = input.messages.some((m) => m.images !== undefined && m.images.length > 0);
   if (hasImages) {
     lines.push(
-      "# one or more messages attached images — 'ollama run' takes a local file path, not embedded image data, so they are not reproduced here",
+      "# one or more messages attached images. 'ollama run' takes a local file path, not embedded image data, so they are not reproduced here",
     );
   }
 
@@ -180,7 +197,7 @@ export function asOllamaRun(input: ExportInput): string {
     userMessages.length > 1 || input.messages.some((m) => m.role === "assistant" || m.role === "system");
   if (hasEarlierTurns) {
     lines.push(
-      "# only the final prompt is shown below — 'ollama run' can't replay a full multi-turn conversation in one command",
+      "# only the final prompt is shown below. 'ollama run' can't replay a full multi-turn conversation in one command",
     );
   }
 

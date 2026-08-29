@@ -168,7 +168,7 @@ export function AttachButton({
       <button
         type="button"
         className="attach"
-        title={`Attach an image — ${modelTag} supports vision`}
+        title={`Attach an image. ${modelTag} supports vision`}
         aria-label="Attach an image"
         disabled={disabled}
         onClick={() => inputRef.current?.click()}
@@ -244,7 +244,7 @@ export function MessageAttachments({ thumbs, full }: { thumbs: string[]; full: b
   return (
     <div className="att" aria-label="Attached images">
       {thumbs.map((thumb, i) => (
-        <div className={`thumb${full ? "" : " gone"}`} key={i} title={full ? undefined : "Thumbnail only — the full image wasn’t saved with this chat"}>
+        <div className={`thumb${full ? "" : " gone"}`} key={i} title={full ? undefined : "Thumbnail only. The full image wasn’t saved with this chat"}>
           {thumb === "" ? <PictureIcon /> : <img src={thumb} alt={`Attachment ${i + 1}`} />}
           {!full && <span className="tag">thumbnail only</span>}
         </div>

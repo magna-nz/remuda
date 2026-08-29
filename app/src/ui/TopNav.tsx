@@ -10,6 +10,7 @@ import { RuntimePopover } from "./RuntimePopover";
 import { displayKey, groupByModel, type ModelEntry } from "../models/grouping";
 import type { RunningModel } from "../api/types";
 import type { LoadedSelection } from "./state";
+import { useTourTarget } from "../tour/registry";
 
 function shortTag(tag: string): string {
   return tag.endsWith(":latest") ? tag.slice(0, -":latest".length) : tag;
@@ -145,6 +146,9 @@ export function TopNav() {
   const contextWindow = runningEntry?.contextLength ?? null;
 
   const [popoverOpen, setPopoverOpen] = useState(false);
+  // R6 step 1's target. The tour reads the live element off the registry;
+  // this is the whole of the registration.
+  const modelCtlRef = useTourTarget("model-control");
 
   // Context occupancy belongs to the active session's last reply (SPEC-tuning
   // T7) — a different session's `lastStats` (or none yet) means "unknown",
@@ -177,6 +181,7 @@ export function TopNav() {
       <button
         type="button"
         className="modelctl"
+        ref={modelCtlRef}
         title="Choose and load a model"
         aria-haspopup="dialog"
         aria-expanded={loadPaneOpen}

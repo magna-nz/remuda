@@ -67,14 +67,14 @@ describe("Sidebar session list", () => {
     // A closed row is one line — the tag rides the tooltip and the
     // screen-reader line, so the dot is never the only carrier of the state.
     expect(loadedRow.querySelector(".smodel")).toBeNull();
-    expect(loadedRow.querySelector(".sess-open")).toHaveAttribute("title", "llama3.1:8b — loaded");
+    expect(loadedRow.querySelector(".sess-open")).toHaveAttribute("title", "llama3.1:8b, loaded");
     expect(within(loadedRow).getByText("llama3.1:8b, loaded")).toHaveClass("sr-only");
 
     const unloadedRow = rowFor("Explain this regex");
     expect(unloadedRow.querySelector(".sdot")).toHaveClass("off");
     expect(within(unloadedRow).getByText("2d")).toBeInTheDocument();
     // ":latest" is dropped in the narrow row, like the mockup.
-    expect(unloadedRow.querySelector(".sess-open")).toHaveAttribute("title", "regex-helper — not loaded");
+    expect(unloadedRow.querySelector(".sess-open")).toHaveAttribute("title", "regex-helper, not loaded");
     expect(within(unloadedRow).getByText("regex-helper, not loaded")).toHaveClass("sr-only");
 
     // Most-recent first.

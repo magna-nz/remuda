@@ -27,6 +27,7 @@
 import "./ToolsView.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChatMessage, ToolCall } from "../api/types";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
 import { useRemuda } from "../ui/state";
 import { toolCapableModel } from "./gate";
 import { loadToolSets, parseTools, saveToolSets, type ToolSet } from "./toolsets";
@@ -235,13 +236,59 @@ export function ToolsView() {
           <button type="button" className="btn sm ghost" onClick={reset}>
             Reset
           </button>
+          <PaneHelpToggle paneId="tools" label="About the tool playground" />
         </div>
+
+        <PaneHelp
+          paneId="tools"
+          title="Tools. See what the model actually calls"
+          what="Every call the model makes here is checked against the schema you wrote for it. Argument by argument, not just whether the reply parsed."
+          why="It turns “the model got the arguments wrong” from a guess into a badge on the exact key that was wrong, or missing."
+          steps={[
+            "Pick a tool set on the left, or write your own schema.",
+            "Ask for something that needs one. The model’s call appears as a card.",
+            "Read the badges: matched, valid arguments, anything missing.",
+          ]}
+          note="Nothing here is saved. This transcript is a scratch pad, not a chat."
+        />
 
         <div className="toolscroll">
           {messages.length === 0 && (
-            <p className="tool-empty">
-              Ask for something the schema covers, and see what comes back.
-            </p>
+            <div className="toolempty">
+              <span className="ef-ic">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.8}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z" />
+                </svg>
+              </span>
+              <h3>See exactly what the model calls, and whether it got it right</h3>
+              <p>
+                A model that lists tools can call one instead of answering in prose. This is
+                where you check the call it made against the schema you wrote. Argument by
+                argument, not just whether the JSON parsed.
+              </p>
+              <ol className="ef-how">
+                <li>
+                  <b>1</b>
+                  <span>Pick a tool set on the left, or write your own schema.</span>
+                </li>
+                <li>
+                  <b>2</b>
+                  <span>Ask for something that needs one. The model’s call appears as a card.</span>
+                </li>
+                <li>
+                  <b>3</b>
+                  <span>Read the badges: matched, valid arguments, anything missing.</span>
+                </li>
+              </ol>
+            </div>
           )}
           {messages.map((m) => {
             if (m.role === "user") {
@@ -397,7 +444,7 @@ function ToolCallCard({
         {verdict.missing.map((key) => (
           <div className="argrow missrow" key={`missing-${key}`}>
             <span className="ak">&quot;{key}&quot;</span>
-            <span className="av">: —</span>
+            <span className="av">: </span>
             <span className="note">missing · required</span>
           </div>
         ))}

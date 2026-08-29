@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Comparing configurations — Remuda</title>
-<meta name="description" content="The A/B run: two lanes, sequential execution, and why the seed is pinned.">
+<meta name="description" content="The A/B run and Benchmark: lanes, sequential execution, and why the seed is pinned.">
 <link rel="icon" href="assets/mark.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,7 +32,8 @@
 <main>
   <div class="eyebrow">Guide</div>
   <h1>Comparing configurations</h1>
-  <p class="lede">Send one message to two configurations at once and read the replies side by side.</p>
+  <p class="lede">Send one message to two configurations at once and read the replies side by side —
+  then do the same for a whole set of prompts.</p>
 
   <h2>Two lanes</h2>
   <p>A compare turn runs on two lanes, A and B. Each lane can carry its own sampling overrides —
@@ -54,6 +55,36 @@
   intentional per-lane difference and unpins the pair.</p>
   <p><b>Regenerate · same seed</b> reruns both lanes on the seed that was pinned for them. It's
   disabled when no seed was ever pinned — Remuda won't invent one just to offer the button.</p>
+
+  <h2>Benchmark: one prompt set, several lanes</h2>
+  <p>A compare answers "which of these is better for <i>this</i> prompt". A <b>benchmark</b> asks it
+  of a whole set of prompts at once. You keep the prompts, define a <b>lane</b> for each
+  configuration you want to test — a model plus a Modelfile — and press <b>Run all</b>. The
+  result is a table: one row per prompt, one column per lane.</p>
+  <p>Two lanes on two different models put those models against each other. Two lanes on the
+  <i>same</i> model with different Modelfiles is just as normal, and it is how you read what a
+  Modelfile actually changed across more than one example.</p>
+  <p>Build a benchmark from the <b>BENCHMARKS</b> group in the sidebar, or send a prompt straight to
+  one with <b>Add to benchmark</b> in the menu under any chat message.</p>
+
+  <h3>One model load per lane</h3>
+  <p>A run is grouped by lane, not by prompt: Remuda loads lane 1's model, answers every prompt with
+  it, and only then loads lane 2. Interleaving would mean a full model load per prompt, which on a
+  20&nbsp;GB model is the difference between two loads and twenty. The run bar names the model it is
+  loading and which lane it belongs to, because that wait is real and a progress bar that hides it
+  just looks hung.</p>
+
+  <h3>One seed for the entire run</h3>
+  <p>The same pinned seed covers every lane <i>and</i> every prompt in a run, for the reason above:
+  two lanes on two seeds would measure sampling noise instead of the configurations. The seed is
+  shown beside the run so you can see which one produced the table.</p>
+
+  <h3>Different is a difference, not a verdict</h3>
+  <p>Expand a row and Remuda word-diffs each lane against the first, so you can see exactly where the
+  answers parted company. That is as far as it goes. No lane is scored, no lane is called the winner,
+  and the table is never sorted by anything but the order of your prompts — judging the answers is
+  your job, and a tool that guessed at it would be one whose verdicts you had to check. A cell that
+  failed stays in the table with its error, because that is a result too.</p>
 
   <div class="pager">
     <a href="modelfile-editor.html">&larr; The Modelfile editor</a>

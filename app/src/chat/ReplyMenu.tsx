@@ -1,10 +1,16 @@
 /**
- * The reply overflow menu (docs/SPEC-tuning.md T6 items 1–3, mockup-tuning
- * `#t6` card 2).
+ * The message overflow menu (docs/SPEC-tuning.md T6 items 1–3, mockup-tuning
+ * `#t6` card 2; T5 capture).
  *
- * Everything that acts on *one* reply lives here rather than as a row of
- * buttons under every bubble: promote it to `SYSTEM`, re-roll it, or leave
- * with the exact request that produced it.
+ * Everything that acts on *one* message lives here rather than as a row of
+ * buttons under every bubble: promote a reply to `SYSTEM`, re-roll it, leave
+ * with the exact request that produced it — or, on a *user* message, keep
+ * the prompt in a bench.
+ *
+ * Every item is optional and renders only when its handler is passed, which
+ * is what lets the same menu serve both sides of the transcript. A user
+ * message gets `onAddToBench` and nothing else, because nothing else here
+ * says anything about a prompt.
  *
  * Two Regenerate items, not one. Holding the seed constant re-rolls the
  * *configuration*; changing it re-rolls the *sampling*. That distinction is
@@ -51,34 +57,61 @@ export async function copyText(text: string): Promise<boolean> {
 export interface ReplyMenuProps {
   /** Distinguishes this menu from every other one on screen, e.g. "for lane A, turn 1". */
   name: string;
+  /**
+   * The accessible-name prefix, so a menu on a *user* message can say
+   * "Prompt actions" rather than claiming to act on a reply. Defaults to the
+   * reply wording every existing call site already uses.
+   */
+  label?: string;
   open: boolean;
   onToggle: () => void;
   onClose: () => void;
   /** The seed the reply's configuration names; null when nothing pinned one. */
-  seed: number | null;
+  seed?: number | null;
   /** Disabled while anything is generating — SPEC §8 is one run at a time. */
-  busy: boolean;
-  onPromote: () => void;
+  busy?: boolean;
+  onPromote?: () => void;
   /** Re-roll holding the configured seed — the config changes, the sampling doesn't. */
-  onRegenerateSameSeed: () => void;
+  onRegenerateSameSeed?: () => void;
   /** Re-roll on a fresh seed — the sampling changes, the config doesn't. */
-  onRegenerateNewSeed: () => void;
-  onCopyCurl: () => void;
-  onCopyOllamaRun: () => void;
+  onRegenerateNewSeed?: () => void;
+  onCopyCurl?: () => void;
+  onCopyOllamaRun?: () => void;
+  /**
+   * Capture into a bench (docs/SPEC-tuning.md T5). One item, no dialog, no
+   * name to type: a bench that costs a form to populate does not get
+   * populated. It targets the bench already open on this model, or makes
+   * one — see `addToBench` in ui/state.tsx.
+   */
+  onAddToBench?: () => void;
+  /**
+   * Which edge the dropdown is pinned to.
+   *
+   * Default `"right"` suits a button at the right of its row — a user
+   * message, which is right-aligned. An **assistant** row puts the button at
+   * the far left of the column, and a right-anchored dropdown then grows
+   * leftward, straight out of the transcript's scroll container, which clips
+   * it: the menu appears as a sliver with its labels cut in half. Those call
+   * sites pass `"left"`.
+   */
+  align?: "left" | "right";
 }
 
 export function ReplyMenu({
   name,
+  label = "Reply actions",
+  align = "right",
   open,
   onToggle,
   onClose,
-  seed,
-  busy,
+  seed = null,
+  busy = false,
   onPromote,
   onRegenerateSameSeed,
   onRegenerateNewSeed,
   onCopyCurl,
   onCopyOllamaRun,
+  onAddToBench,
 }: ReplyMenuProps) {
   const wrap = useRef<HTMLDivElement>(null);
 
@@ -109,7 +142,7 @@ export function ReplyMenu({
       <button
         type="button"
         className="iconbtn"
-        aria-label={`Reply actions ${name}`}
+        aria-label={`${label} ${name}`}
         aria-expanded={open}
         onClick={onToggle}
       >
@@ -118,59 +151,82 @@ export function ReplyMenu({
         </svg>
       </button>
       {open && (
-        <div className="menu" role="menu" aria-label={`Reply actions ${name}`}>
-          <button type="button" role="menuitem" className="mi" onClick={run(onPromote)}>
-            <span className="ic" aria-hidden="true">
-              ⤴
-            </span>
-            Promote to SYSTEM
-          </button>
-          <div className="msep" />
-          <button
-            type="button"
-            role="menuitem"
-            className="mi"
-            disabled={busy || seed === null}
-            title={
-              seed === null
-                ? "No seed is set for this reply, so there is nothing to hold constant"
-                : `Re-roll the configuration, holding seed ${seed}`
-            }
-            onClick={run(onRegenerateSameSeed)}
-          >
-            <span className="ic" aria-hidden="true">
-              ↻
-            </span>
-            Regenerate
-            <span className="kbd">{seed === null ? "no seed set" : `seed ${seed}`}</span>
-          </button>
-          <button
-            type="button"
-            role="menuitem"
-            className="mi"
-            disabled={busy}
-            title="Re-roll the sampling on a fresh seed"
-            onClick={run(onRegenerateNewSeed)}
-          >
-            <span className="ic" aria-hidden="true">
-              ↻
-            </span>
-            Regenerate
-            <span className="kbd">new seed</span>
-          </button>
-          <div className="msep" />
-          <button type="button" role="menuitem" className="mi" onClick={run(onCopyCurl)}>
-            <span className="ic" aria-hidden="true">
-              ⧉
-            </span>
-            Copy as curl
-          </button>
-          <button type="button" role="menuitem" className="mi" onClick={run(onCopyOllamaRun)}>
-            <span className="ic" aria-hidden="true">
-              ⧉
-            </span>
-            Copy as ollama run
-          </button>
+        <div
+          className={align === "left" ? "menu left" : "menu"}
+          role="menu"
+          aria-label={`${label} ${name}`}
+        >
+          {onAddToBench !== undefined && (
+            <button type="button" role="menuitem" className="mi" onClick={run(onAddToBench)}>
+              <span className="ic" aria-hidden="true">
+                ≡
+              </span>
+              Add to benchmark
+            </button>
+          )}
+          {onPromote !== undefined && (
+            <button type="button" role="menuitem" className="mi" onClick={run(onPromote)}>
+              <span className="ic" aria-hidden="true">
+                ⤴
+              </span>
+              Promote to SYSTEM
+            </button>
+          )}
+          {onRegenerateSameSeed !== undefined && (
+            <>
+              <div className="msep" />
+              <button
+                type="button"
+                role="menuitem"
+                className="mi"
+                disabled={busy || seed === null}
+                title={
+                  seed === null
+                    ? "No seed is set for this reply, so there is nothing to hold constant"
+                    : `Re-roll the configuration, holding seed ${seed}`
+                }
+                onClick={run(onRegenerateSameSeed)}
+              >
+                <span className="ic" aria-hidden="true">
+                  ↻
+                </span>
+                Regenerate · same seed
+                <span className="kbd">{seed === null ? "none set" : `${seed}`}</span>
+              </button>
+            </>
+          )}
+          {onRegenerateNewSeed !== undefined && (
+            <button
+              type="button"
+              role="menuitem"
+              className="mi"
+              disabled={busy}
+              title="Re-roll the sampling on a fresh seed"
+              onClick={run(onRegenerateNewSeed)}
+            >
+              <span className="ic" aria-hidden="true">
+                ↻
+              </span>
+              Regenerate · new seed
+            </button>
+          )}
+          {onCopyCurl !== undefined && <div className="msep" />}
+          {onCopyCurl !== undefined && (
+            <button type="button" role="menuitem" className="mi" onClick={run(onCopyCurl)}>
+              <span className="ic" aria-hidden="true">
+                ⧉
+              </span>
+              Copy as curl
+            </button>
+          )}
+          {onCopyOllamaRun !== undefined && (
+            <button type="button" role="menuitem" className="mi" onClick={run(onCopyOllamaRun)}>
+              <span className="ic" aria-hidden="true">
+                ⧉
+              </span>
+              Copy as ollama run
+            </button>
+          )}
         </div>
       )}
     </div>

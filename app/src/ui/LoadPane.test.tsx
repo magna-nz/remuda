@@ -896,3 +896,96 @@ describe("LoadPane fit predictor (SPEC-tuning.md T4)", () => {
     ).toBeInTheDocument();
   });
 });
+
+describe("LoadPane GPU layer offload (R1)", () => {
+  it("does not render a GPU layers control when archParams is null — there is no range to offer", async () => {
+    // fixtureModels() ships no archParamsByTag entries at all.
+    const client = new FakeClient({ models: fixtureModels() });
+    await openDetail(client);
+
+    // Wait for the (archParams-null) fit predictor to settle first, so the
+    // absence below isn't just "hasn't rendered yet".
+    await screen.findByText("No prediction available");
+    expect(screen.queryByLabelText("GPU layers")).not.toBeInTheDocument();
+  });
+
+  it("defaults to Auto and sends no num_gpu unless the user actually chooses a layer count", async () => {
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    expect(await screen.findByLabelText("GPU layers")).toBeInTheDocument();
+    expect(screen.getByText("Auto")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+
+    await waitFor(() => expect(client.loadCalls).toHaveLength(1));
+    // Absent, not undefined — an explicit num_gpu: 0 is a real, different
+    // instruction ("no layers on the GPU") from never having chosen one.
+    expect(client.loadCalls[0]).not.toHaveProperty("numGpu");
+  });
+
+  it("sends the chosen num_gpu once the slider has been moved, including a deliberate 0", async () => {
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    const slider = await screen.findByLabelText("GPU layers");
+    fireEvent.change(slider, { target: { value: "0" } });
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+
+    await waitFor(() => expect(client.loadCalls).toHaveLength(1));
+    expect(client.loadCalls[0]?.numGpu).toBe(0);
+  });
+
+  it("caps the range at archParams.blockCount and reports the chosen split", async () => {
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    const slider = (await screen.findByLabelText("GPU layers")) as HTMLInputElement;
+    expect(slider.max).toBe(String(LLAMA_8B_ARCH.blockCount));
+    fireEvent.change(slider, { target: { value: "16" } });
+
+    expect(await screen.findByText("16 / 32")).toBeInTheDocument();
+  });
+
+  it("Reset to auto clears a chosen layer count back to unset", async () => {
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    const slider = await screen.findByLabelText("GPU layers");
+    fireEvent.change(slider, { target: { value: "16" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Reset to auto" }));
+    expect(screen.getByText("Auto")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+
+    await waitFor(() => expect(client.loadCalls).toHaveLength(1));
+    expect(client.loadCalls[0]).not.toHaveProperty("numGpu");
+  });
+
+  it("carries num_ctx and num_gpu together on one load", async () => {
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    fireEvent.change(screen.getByLabelText("Context length"), { target: { value: "8192" } });
+    fireEvent.change(await screen.findByLabelText("GPU layers"), { target: { value: "20" } });
+    fireEvent.click(screen.getByRole("button", { name: "Load model" }));
+
+    await waitFor(() => expect(client.loadCalls).toHaveLength(1));
+    expect(client.loadCalls[0]).toMatchObject({ numCtx: 8192, numGpu: 20 });
+  });
+});

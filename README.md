@@ -51,6 +51,9 @@ Nothing leaves your machine — Remuda is a client for the Ollama you already ru
   than rebuilding behind your back; outside edits show up as drift.
 * 🔀 **Compare (A/B)** — one prompt, two configurations, run sequentially on a pinned seed so you're
   reading the change and not sampling noise.
+* 🏁 **Benchmark** — keep a set of prompts and run them against several configurations at once: two
+  models against each other, or one model under two Modelfiles. One row per prompt, one column per
+  lane, every answer on the same pinned seed. It shows you what differs and never scores a lane.
 * 🧰 **Tool playground** — for models that claim `tools`: write schemas and see every `tool_call`
   validated field by field.
 * 🎛️ **Per-chat parameters** — temperature, seed and the rest for the current chat only, with **Bake
@@ -141,8 +144,12 @@ cd ../src-tauri && cargo tauri dev
 4. Not the behaviour you wanted? Click the pencil, edit the system prompt, **Save**. The model
    reloads and your next message uses it.
 5. Happy with it? **Save as…** keeps it as a named variant, original left alone.
+6. Sure it's better? Put the variant and the original in a **benchmark** as two lanes and run your
+   prompts through both. One good answer is luck; a column of them is a reason.
 
 No models installed yet? The load pane offers **Pull your first model**.
+
+First run offers a five-step tour, and every pane has a **?** if you'd rather read one later.
 
 ## 📚 Documentation
 
@@ -150,6 +157,8 @@ No models installed yet? The load pane offers **Pull your first model**.
 * [`SPEC.md`](SPEC.md) — full product spec: every surface, the Ollama calls behind it, the
   Modelfile sync contract.
 * [`docs/SPEC-tuning.md`](docs/SPEC-tuning.md) — the tuning loop, with the build log at the end.
+* [`docs/SPEC-round-two.md`](docs/SPEC-round-two.md) — layer offload, constrained output, the
+  rendered prompt, the help layer and Benchmark, with that round's build log.
 * [`docs/mockup.html`](docs/mockup.html) — the design mockup the app is built to.
 * [`packaging/homebrew/`](packaging/homebrew/README.md) — release and tap mechanics.
 

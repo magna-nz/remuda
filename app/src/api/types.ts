@@ -213,6 +213,12 @@ export interface RunOptions {
    * with a different memory footprint. The UI warns before applying it.
    */
   numCtx?: number;
+  /**
+   * Load-time, not sampling, like `numCtx`: caps how many transformer layers
+   * the runner offloads to the GPU, so it can only be set as the model
+   * loads. Belongs in the load pane, not the per-chat run controls.
+   */
+  numGpu?: number;
 }
 
 /**
@@ -229,6 +235,7 @@ export const RUN_OPTION_KEYS: Array<[keyof RunOptions, string]> = [
   ["numPredict", "num_predict"],
   ["repeatPenalty", "repeat_penalty"],
   ["numCtx", "num_ctx"],
+  ["numGpu", "num_gpu"],
 ];
 
 /** One streamed progress event from POST /api/pull. */
@@ -271,6 +278,25 @@ export interface CreateRequest {
   rawModelfile: string;
 }
 
+/**
+ * Constrained output: `format` on POST /api/chat (docs/SPEC-round-two.md R2).
+ *
+ * Two values plus a third state that is the *absence* of the field:
+ *
+ *   Record<string, unknown> → a JSON Schema. Ollama constrains decoding to
+ *                             it, so a reply that doesn't fit is unreachable.
+ *   "json"                  → the older mode: valid JSON, no shape.
+ *   undefined               → omit `format` from the body entirely.
+ *
+ * `off` is the omitted key and never `""` or `null`. Ollama reads an empty
+ * string as a format it must honour, so sending one for "off" would be a
+ * different instruction rather than the absence of one.
+ *
+ * Per-chat only. There is no `PARAMETER format`, so this never appears in a
+ * Modelfile and is not part of RunOptions.
+ */
+export type ChatFormat = "json" | Record<string, unknown>;
+
 /** keep_alive values Remuda exposes (SPEC §5.6). */
 export type KeepAlive = "5m" | "30m" | -1;
 
@@ -299,15 +325,19 @@ export interface OllamaClient {
    * and the configured keep_alive. Resolves when the model is loaded.
    */
   /**
-   * `numCtx` is a load-time parameter, not a sampling one: it sizes the KV
-   * cache the runner allocates, so it can only be set as the model is loaded
-   * (SPEC §8). Omitted ⇒ Ollama's own default for the model.
+   * `numCtx` and `numGpu` are load-time parameters, not sampling ones: the
+   * first sizes the KV cache the runner allocates, the second caps how many
+   * transformer layers it offloads to the GPU, so both can only be set as
+   * the model is loaded (SPEC §8). Omitted ⇒ Ollama's own default for the
+   * model — for `numGpu` that means Ollama's own layer-fit heuristic, not
+   * "zero layers", which is why unset must never be sent as `0`.
    */
   load(
     tag: string,
     keepAlive: KeepAlive,
     signal?: AbortSignal,
     numCtx?: number,
+    numGpu?: number,
   ): Promise<void>;
   /** Unload: POST /api/generate with keep_alive: 0. */
   unload(tag: string): Promise<void>;
@@ -328,6 +358,9 @@ export interface OllamaClient {
       /** Raw tool definitions, passed through verbatim; omitted from the
        * request body entirely when empty/unset rather than sent as `[]`. */
       tools?: unknown[];
+      /** Constrained output (R2). A schema object or "json"; undefined
+       * omits `format` entirely — never `""`, never `null`. */
+      format?: ChatFormat;
     },
   ): AsyncIterable<ChatChunk>;
   /** POST /api/create with stream: true — structured body first, legacy

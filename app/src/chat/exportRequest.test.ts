@@ -69,6 +69,16 @@ describe("asCurl", () => {
     expect(bodyFromCurl(command).options).toEqual({ temperature: 0.4, seed: 4417 });
   });
 
+  // R1: num_gpu is load-time, so the UI never actually populates it on a
+  // captured chat reply's options — but the wire mapping is generic over
+  // RUN_OPTION_KEYS (api/types.ts), same as client.ts's wireOptions, so it
+  // has to carry num_gpu correctly if it's ever present. 0 is the case that
+  // matters: it must not be dropped as if it were unset.
+  it("carries num_gpu:0 through as a real value, not as unset", () => {
+    const command = asCurl(fixture({ options: { numGpu: 0 } }));
+    expect(bodyFromCurl(command).options).toEqual({ num_gpu: 0 });
+  });
+
   it("carries images on the message but never emits thinking", () => {
     const command = asCurl(
       fixture({
@@ -102,6 +112,15 @@ describe("asCurl", () => {
     expect(withoutKeepAlive).not.toHaveProperty("keep_alive");
   });
 
+  it("mirrors `format`: the schema object, the string, or no key at all (R2)", () => {
+    // The wire mapping here is a hand-mirror of client.ts, so "Copy as curl"
+    // drifts from what was sent unless this is asserted.
+    const schema = { type: "object", properties: { ok: { type: "boolean" } } };
+    expect(bodyFromCurl(asCurl(fixture({ format: schema }))).format).toEqual(schema);
+    expect(bodyFromCurl(asCurl(fixture({ format: "json" }))).format).toBe("json");
+    expect(bodyFromCurl(asCurl(fixture()))).not.toHaveProperty("format");
+  });
+
   it("pretty-prints the JSON body", () => {
     const command = asCurl(fixture());
     expect(command).toContain("\n");
@@ -121,9 +140,23 @@ describe("asOllamaRun", () => {
     expect(command).toContain("/set parameter seed 4417");
   });
 
+  it("says plainly that constrained output can't be reproduced (R2)", () => {
+    // There is no PARAMETER format and no /set for it, so a command that
+    // dropped the constraint silently would look faithful and lie.
+    const command = asOllamaRun(fixture({ format: "json" }));
+    expect(command).toContain("# format:");
+    expect(command).not.toContain("/set parameter format");
+    expect(asOllamaRun(fixture())).not.toContain("# format:");
+  });
+
   it("emits no /set parameter lines when no options are set", () => {
     const command = asOllamaRun(fixture());
     expect(command).not.toContain("/set parameter");
+  });
+
+  it("emits /set parameter num_gpu 0 rather than dropping a deliberate 0", () => {
+    const command = asOllamaRun(fixture({ options: { numGpu: 0 } }));
+    expect(command).toContain("/set parameter num_gpu 0");
   });
 
   it("annotates think as not reproducible instead of dropping it silently", () => {

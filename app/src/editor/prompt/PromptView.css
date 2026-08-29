@@ -1,0 +1,164 @@
+/* The rendered prompt pane (SPEC-round-two.md R3,
+   docs/mockup-proposals-2.html §03 `.split` / `.code` / `.slot` / `.slotfill`).
+
+   Reuses the editor's `.split`, `.col` and `.col-h` from EditorView.css —
+   this is the same two-column surface as Form · Raw, with different columns
+   in it. */
+
+.promptview {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.promptview.empty {
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  padding: 30px;
+  text-align: center;
+}
+
+.promptview.empty p {
+  max-width: 46ch;
+  line-height: 1.6;
+}
+
+.promptview.empty code {
+  font-family: var(--mono);
+  color: var(--ink-2);
+}
+
+/* Which chat is being rendered — the mockup's header hint. */
+.prompt-h {
+  display: flex;
+  align-items: center;
+  padding: 8px 18px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex: 0 0 auto;
+}
+
+.prompt-h .hint {
+  font-size: 11.5px;
+  color: var(--faint);
+}
+
+.prompt-h .spacer {
+  flex: 1;
+}
+
+.prompt-h .hint b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.split.prompt-split {
+  grid-template-columns: 1fr 1fr;
+}
+
+.promptview .col + .col {
+  border-left: 1px solid var(--border);
+}
+
+/* Template and rendered text share one code surface, so the two columns line
+   up character for character. `pre-wrap` rather than the mockup's `pre`: a
+   system prompt is prose and horizontal scrolling would hide the very thing
+   the pane is here to show. */
+.promptview .code {
+  flex: 1;
+  overflow: auto;
+  padding: 12px 14px;
+  margin: 0;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: var(--bg);
+}
+
+.promptview .code .act {
+  color: var(--muted);
+}
+
+.promptview .code .slot {
+  background: var(--ember-tint);
+  border: 1px solid color-mix(in srgb, var(--ember) 45%, transparent);
+  border-radius: 4px;
+  padding: 0 3px;
+  color: var(--ember-ink);
+}
+
+.promptview .code .act.unsupported {
+  background: var(--crit-tint);
+  border: 1px solid color-mix(in srgb, var(--crit) 45%, transparent);
+  border-radius: 4px;
+  padding: 0 3px;
+  color: var(--crit);
+}
+
+.promptview .code .slotfill {
+  background: var(--good-tint);
+  border: 1px solid color-mix(in srgb, var(--good) 35%, transparent);
+  border-radius: 4px;
+  padding: 0 3px;
+  color: #b6dd93;
+}
+
+/* Why the right column is showing a template instead of a prompt. */
+.render-refused {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--warn-tint);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.render-refused code {
+  font-family: var(--mono);
+  color: var(--warn);
+}
+
+.prompt-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  font-size: 11.5px;
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+
+.prompt-foot .spacer {
+  flex: 1;
+}
+
+.prompt-foot code {
+  font-family: var(--mono);
+}
+
+/* The check the pane exists for. */
+.prompt-foot .ok {
+  color: var(--good);
+}
+
+.prompt-foot .bad {
+  color: var(--crit);
+}
+
+.prompt-foot .legend {
+  color: var(--faint);
+}
+
+@media (max-width: 900px) {
+  .split.prompt-split {
+    grid-template-columns: 1fr;
+  }
+}

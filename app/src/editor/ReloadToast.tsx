@@ -13,7 +13,7 @@ function textFor(
 ): string {
   switch (toast.phase) {
     case "creating":
-      return toast.detail ? `Creating ${toast.newTag} — ${toast.detail}…` : `Creating ${toast.newTag}…`;
+      return toast.detail ? `Creating ${toast.newTag}: ${toast.detail}…` : `Creating ${toast.newTag}…`;
     case "stopping":
       return `Stopping ${toast.oldTag ?? "the running model"}…`;
     case "reloading":

@@ -20,6 +20,8 @@
 import { useEffect, useState, type ClipboardEvent, type DragEvent, type KeyboardEvent } from "react";
 import "./ChatView.css";
 import { useRemuda, type LastStats } from "../ui/state";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
+import { Term } from "../help/Term";
 import { pasteChord } from "../ui/platform";
 import type { Model, ThinkLevel } from "../api/types";
 import { shortTag, type ChatSession, type Lane, type Message } from "./sessions";
@@ -45,6 +47,10 @@ import {
 // T6 items 1–3 — the reply overflow menu (mockup-tuning #t6, card 2).
 import { ReplyMenu, copyText } from "./ReplyMenu";
 import { asCurl, asOllamaRun, type ExportInput } from "./exportRequest";
+// R2 — constrained output (docs/SPEC-round-two.md, mockup-proposals-2 §02).
+import { FormatPane, FormatPill } from "../format/FormatPane";
+import { ConformanceCard } from "../format/ConformanceCard";
+import { defaultFormat, parseSchema, wireFormat } from "../format/format";
 import {
   AttachButton,
   MessageAttachments,
@@ -102,7 +108,7 @@ function UnloadedBanner({ session }: { session: ChatSession }) {
         <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
       </svg>
       <div className="bt">
-        <b>{session.model}</b> isn’t loaded — in memory:{" "}
+        <b>{session.model}</b> isn’t loaded. In memory:{" "}
         {residents.length === 0 ? (
           <code>nothing</code>
         ) : (
@@ -145,7 +151,7 @@ function EmbeddingGate({ tag }: { tag: string }) {
           <b>{tag} is an embedding model.</b>
           <p>
             It has no <code>completion</code> capability, so it can’t hold a chat. It’s still
-            loadable — Remuda just won’t offer you a composer for it.
+            loadable, Remuda just won’t offer you a composer for it.
           </p>
         </div>
       </div>
@@ -341,10 +347,12 @@ export function ChatView() {
     lastStats,
     statsByMessage,
     compareRun,
+    benchmarkProgress,
     sendMessage,
     cancelGeneration,
     setSessionOptions,
     setSessionThink,
+    setSessionFormat,
     bakeOptionsIntoEditor,
     toggleCompare,
     setLaneConfig,
@@ -353,10 +361,14 @@ export function ChatView() {
     keepLane,
     regenerateReply,
     promoteToSystem,
+    addToBenchmark,
   } = useRemuda();
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingImage[]>([]);
   const [runOpen, setRunOpen] = useState(false);
+  // The Format pane (R2). Open/closed is per view, like the run popover;
+  // what it edits is per *session* and persisted there.
+  const [formatOpen, setFormatOpen] = useState(false);
   // Per lane, not per turn: a lane's overrides are one set of values, and the
   // popover that edits them is anchored to the composer like the single-lane
   // one. Both may be open at once — comparing two knob panels side by side is
@@ -373,6 +385,7 @@ export function ChatView() {
   useEffect(() => {
     setPending([]);
     setRunOpen(false);
+    setFormatOpen(false);
     setLaneRunOpen({ a: false, b: false });
     setMenuFor(null);
     setDropping(false);
@@ -393,7 +406,12 @@ export function ChatView() {
   const compareHere = compareRun !== null && compareRun.sessionId === session.id;
   // A compare run holds the app-wide guard across the gap between its lanes,
   // so "something is generating" is the union of the two.
-  const streaming = streamingSessionId !== null || compareRun !== null;
+  // A bench replay is a generation like any other, and SPEC §8's "one at a
+  // time" is enforced app-wide in the store. Leaving it out here left Send
+  // enabled through a replay that can run for minutes: the store refused the
+  // send and the composer said nothing, so the message just sat there.
+  const streaming =
+    streamingSessionId !== null || compareRun !== null || benchmarkProgress !== null;
   const streamingHere = streamingSessionId === session.id;
   const busyHere = streamingHere || compareHere;
   const last = session.messages[session.messages.length - 1];
@@ -404,6 +422,13 @@ export function ChatView() {
   const overrides = session.options ?? {};
   const overrideCount = countOverrides(overrides);
   const think: ThinkLevel = session.think ?? "off";
+  // R2 — constrained output. Everything about it is derived on render from
+  // the session's raw text: the schema the card judges against, and whether
+  // the send can happen at all. Nothing is cached, so fixing the schema
+  // re-judges every reply already on screen.
+  const format = session.format ?? defaultFormat();
+  const formatSchema = format.mode === "schema" ? parseSchema(format.text).schema : null;
+  const formatBroken = wireFormat(session.format).error !== null;
   // num_ctx is load-time, not sampling (SPEC §5.1): once it is overridden the
   // warning follows the composer, not just the popover it was set in.
   //
@@ -425,6 +450,14 @@ export function ChatView() {
     // An image is a message. Requiring text as well made "attach a
     // screenshot and hit send" a silent no-op with the button still enabled.
     if (streaming || !hasSomethingToSend) return;
+    // R2: refuse rather than send unconstrained — and refuse *before* the
+    // draft is cleared, so a broken schema costs the user the send and not
+    // what they typed. The pane opens on the error, which is where it can
+    // be fixed; ui/state.tsx refuses again as the backstop.
+    if (formatBroken) {
+      setFormatOpen(true);
+      return;
+    }
     const text = draft;
     const images = pending.map((p) => p.base64);
     const thumbs = pending.map((p) => p.thumb);
@@ -501,6 +534,8 @@ export function ChatView() {
         options: effectiveLaneOptions(compare, lane),
         think: config.think,
         keepAlive,
+        // Per-chat, so a lane's exported request carries it too.
+        format: wireFormat(session.format).format,
       };
     }
     return {
@@ -512,7 +547,26 @@ export function ChatView() {
       options: session.options,
       think: session.think,
       keepAlive,
+      format: wireFormat(session.format).format,
     };
+  };
+
+  /**
+   * The conformance card under one reply (R2).
+   *
+   * Only for a finished reply: mid-stream the text is a prefix of the
+   * object, which is indistinguishable from the truncation the card exists
+   * to report — it would say "cut off" about every reply, right up until it
+   * wasn't. `off` has nothing to judge against and shows nothing.
+   */
+  const formatCard = (text: string, finished: boolean, constrained: boolean) => {
+    // `constrained` is recorded on the message when it was generated, so
+    // switching a schema on does not retroactively put a red "not valid
+    // JSON" verdict under prose that was never asked to be JSON.
+    if (!finished || !constrained || format.mode === "off" || text.trim() === "") return null;
+    return (
+      <ConformanceCard text={text} schema={formatSchema} numPredict={overrides.numPredict} />
+    );
   };
 
   /** The overflow menu for one reply (T6 items 1–3). */
@@ -523,6 +577,8 @@ export function ChatView() {
     return (
       <ReplyMenu
         name={name}
+        // Assistant rows anchor their button at the left of the column.
+        align="left"
         open={menuFor !== null && menuFor === id}
         onToggle={() => setMenuFor((prev) => (prev === id ? null : (id ?? null)))}
         onClose={() => setMenuFor(null)}
@@ -539,6 +595,54 @@ export function ChatView() {
         }}
         onCopyCurl={() => void copyText(asCurl(input))}
         onCopyOllamaRun={() => void copyText(asOllamaRun(input))}
+        // Capture from the *reply*, not just the prompt. A bench stores
+        // prompts, so this adds the user message that produced this answer —
+        // because you decide a prompt is worth keeping after reading what it
+        // got you, and the answer is where you are looking when you decide.
+        onAddToBench={
+          promptBefore(index) === null
+            ? undefined
+            : () => {
+                addToBenchmark(promptBefore(index) ?? "");
+                setMenuFor(null);
+              }
+        }
+      />
+    );
+  };
+
+  /** The user message a given reply is answering, or null if there isn't one. */
+  function promptBefore(index: number): string | null {
+    const messages = session?.messages ?? [];
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const m = messages[i];
+      if (m !== undefined && m.role === "user") return m.content;
+    }
+    return null;
+  }
+
+  /**
+   * The menu on a *user* message (T5 capture).
+   *
+   * Deliberately its own thing rather than a widened `replyMenu`: none of
+   * that menu's items mean anything on a prompt — there is no reply to
+   * re-roll, promote or export — so it carries the one item that does, and
+   * says "Prompt actions" rather than claiming to act on a reply.
+   */
+  const promptMenu = (message: Message, index: number) => {
+    const id = message.id ?? `u-${index}`;
+    return (
+      <ReplyMenu
+        name={`for prompt ${index + 1}`}
+        label="Prompt actions"
+        open={menuFor === id}
+        onToggle={() => setMenuFor((prev) => (prev === id ? null : id))}
+        onClose={() => setMenuFor(null)}
+        busy={streaming}
+        onAddToBench={() => {
+          addToBenchmark(message.content);
+          setMenuFor(null);
+        }}
       />
     );
   };
@@ -572,7 +676,7 @@ export function ChatView() {
           </div>
         )}
         <div className="col">
-          {/* Reasoning sits outside the bubble — machinery, not the
+          {/* Reasoning sits outside the bubble. Machinery, not the
               answer, and not part of a copied reply. */}
           {m.role === "assistant" && m.thinking !== undefined && m.thinking !== "" && (
             <ThinkingBlock
@@ -594,9 +698,12 @@ export function ChatView() {
               <span className="caret" aria-hidden="true" />
             )}
           </div>
+          {m.role === "assistant" &&
+            formatCard(m.content, !(isLast && streamingHere), m.constrained === true)}
           {m.role === "assistant" && (
             <div className="msgfoot">{replyMenu(m, i, `for message ${i + 1}`)}</div>
           )}
+          {m.role === "user" && <div className="msgfoot">{promptMenu(m, i)}</div>}
           {m.role === "assistant" && isLast && stats !== null && (
             <>
               <StatsStrip
@@ -608,7 +715,7 @@ export function ChatView() {
               />
               {overrideCount > 0 && (
                 <div className="runnote">
-                  {describeOverrides(overrides)} — set for this chat
+                  {describeOverrides(overrides)}. Set for this chat
                 </div>
               )}
             </>
@@ -684,6 +791,9 @@ export function ChatView() {
                 {laneError}
               </p>
             )}
+            {/* `format` is per-chat, so both lanes were decoded under the
+                same constraint and both are judged against it. */}
+            {formatCard(content, !generating, message?.constrained === true)}
           </div>
         )}
         <LaneStats lane={lane} stats={laneStats} wins={wins} />
@@ -710,7 +820,7 @@ export function ChatView() {
   const rows = compare === undefined ? null : toRows(session.messages);
   let turn = 0;
 
-  return (
+  const body = (
     <div
       className={`chatmain${dropping ? " dropping" : ""}`}
       onDragOver={onDragOver}
@@ -719,10 +829,11 @@ export function ChatView() {
     >
       {canChat && (
         <div className="chathead">
-          {/* No session title here on purpose — the sidebar already names the
+          {/* No session title here on purpose. The sidebar already names the
               chat, and a second copy in the main column is a second thing to
               keep in sync for no gain. */}
           <span className="spacer" />
+          <PaneHelpToggle paneId="chat" label="About the chat" />
           <button
             type="button"
             className={`cmpbtn${compare === undefined ? "" : " on"}`}
@@ -742,6 +853,26 @@ export function ChatView() {
           </button>
         </div>
       )}
+      <PaneHelp
+        paneId="chat"
+        title="Chat. Where you test the model"
+        what="A conversation with the model that is loaded right now. Each chat remembers which model it ran on, so an old one still tells you what produced it."
+        why="This is where a Modelfile change becomes something you can feel. Edit the Modelfile beside it, save, and ask the same question again."
+        steps={[
+          <>
+            Type a message and press <b>Enter</b>. <b>⇧Enter</b> makes a new line.
+          </>,
+          <>
+            <b>Run controls</b> changes settings for this chat only; <b>Format</b> makes the
+            reply fit a JSON shape you give it.
+          </>,
+          <>
+            The <b>⌄</b> under any message re-rolls it, copies the exact request, or adds the
+            prompt to a <Term name="benchmark">benchmark</Term> so you can re-run it after your next
+            save.
+          </>,
+        ]}
+      />
       {!modelIsLoaded && <UnloadedBanner session={session} />}
       {!canChat && <EmbeddingGate tag={session.model} />}
 
@@ -955,10 +1086,18 @@ export function ChatView() {
               <button
                 type="button"
                 className="send"
-                title={streaming ? "Another chat is still generating" : "Send"}
+                title={
+                  streaming
+                    ? "Another chat is still generating"
+                    : formatBroken
+                      ? "The response schema doesn’t parse. Fix it in the Format pane, or switch it off"
+                      : "Send"
+                }
                 aria-label="Send"
                 onClick={submit}
-                disabled={streaming}
+                // R2: an unparseable schema refuses the send. The alternative
+                // is a request without the constraint the user asked for.
+                disabled={streaming || formatBroken}
               >
                 <svg
                   viewBox="0 0 24 24"
@@ -1001,18 +1140,40 @@ export function ChatView() {
                 onToggle={() => setRunOpen((v) => !v)}
               />
             )}
+            {/* Shown in compare mode too, unlike Run controls: `format` is
+                per-chat and not per-lane, so it is not a lane's to own. */}
+            <FormatPill
+              config={session.format}
+              open={formatOpen}
+              onToggle={() => setFormatOpen((v) => !v)}
+            />
             {compare === undefined && ctxReloads && overrides.numCtx !== undefined && (
               <span className="ctx-chip" title="Context length is applied at load time">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z" />
                 </svg>
-                num_ctx {groupDigits(overrides.numCtx)} — the next message reloads the model
+                num_ctx {groupDigits(overrides.numCtx)}. The next message reloads the model
               </span>
             )}
             {canSee && <span className="hint">drop an image in the log, or {pasteChord()}</span>}
           </div>
         </div>
       )}
+    </div>
+  );
+
+  // The pane sits beside the chat rather than over it (mockup §02): a
+  // schema you are editing to fix a reply has to stay visible next to the
+  // reply. Closed, it adds no wrapper at all.
+  if (!formatOpen) return body;
+  return (
+    <div className="fmtsplit">
+      <FormatPane
+        config={format}
+        onChange={(next) => setSessionFormat(session.id, next)}
+        onClose={() => setFormatOpen(false)}
+      />
+      {body}
     </div>
   );
 }

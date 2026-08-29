@@ -768,6 +768,35 @@ describe("chat", () => {
     expect(await chatBody({ keepAlive: "5m", tools: [] })).not.toHaveProperty("tools");
   });
 
+  /* ── format (docs/SPEC-round-two.md R2) ─────────────────────────────── */
+
+  it("omits `format` entirely when unset — never \"\" and never null", async () => {
+    // "off" is the *absence* of the field. An empty string is a format
+    // Ollama would try to honour, which is a different instruction.
+    const body = await chatBody({ keepAlive: "5m" });
+    expect(body).not.toHaveProperty("format");
+    expect(JSON.stringify(body)).not.toContain("format");
+  });
+
+  it("sends the literal string for `json` mode", async () => {
+    expect(await chatBody({ keepAlive: "5m", format: "json" })).toMatchObject({
+      format: "json",
+    });
+  });
+
+  it("sends a JSON Schema as a parsed object, not a string", async () => {
+    const schema = {
+      type: "object",
+      properties: { summary: { type: "string" }, breaking: { type: "boolean" } },
+      required: ["summary"],
+    };
+    const body = await chatBody({ keepAlive: "5m", format: schema });
+    expect(body.format).toEqual(schema);
+    // Ollama takes the schema as an object; a re-serialised string here
+    // would be accepted as a `format` name and constrain nothing.
+    expect(typeof body.format).toBe("object");
+  });
+
   it("yields tool_calls with arguments still an object, never JSON.parse'd", async () => {
     stubFetch({
       "/api/chat": () =>
@@ -1074,6 +1103,55 @@ describe("load", () => {
     await createClient().load("llama3.1:8b", "5m", undefined, 0);
 
     expect(bodyOf(stub.mock.calls[0][1])).not.toHaveProperty("options");
+  });
+
+  it("omits num_gpu entirely when unset (R1: absent, never 0)", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, undefined, undefined);
+
+    const body = bodyOf(stub.mock.calls[0][1]);
+    expect(body).not.toHaveProperty("options");
+  });
+
+  it("sends num_gpu: 0 as a real instruction, not as unset", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, undefined, 0);
+
+    expect(bodyOf(stub.mock.calls[0][1])).toEqual({
+      model: "llama3.1:8b",
+      prompt: "",
+      keep_alive: "5m",
+      stream: false,
+      options: { num_gpu: 0 },
+    });
+  });
+
+  it("sends num_gpu as a load-time option when one is chosen", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, undefined, 24);
+
+    expect(bodyOf(stub.mock.calls[0][1])).toEqual({
+      model: "llama3.1:8b",
+      prompt: "",
+      keep_alive: "5m",
+      stream: false,
+      options: { num_gpu: 24 },
+    });
+  });
+
+  it("carries num_ctx and num_gpu together in the same options object", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, 16384, 24);
+
+    expect(bodyOf(stub.mock.calls[0][1]).options).toEqual({ num_ctx: 16384, num_gpu: 24 });
   });
 });
 

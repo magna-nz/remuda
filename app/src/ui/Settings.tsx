@@ -12,12 +12,15 @@
  * so every click handler here catches and surfaces the failure inline
  * instead of doing nothing.
  */
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import "./Settings.css";
 import { useRemuda } from "./state";
 import { createClient } from "../api/client";
 import { DEFAULT_BASE_URL, type KeepAlive } from "../api/types";
 import { openExternal } from "../api/host";
+import { GLOSSARY } from "../help/glossary";
+import { reopenAll } from "../help/persistence";
+import { startTour } from "../tour/controller";
 
 type TestResult = "idle" | "testing" | "healthy" | "unreachable";
 
@@ -183,6 +186,50 @@ export function Settings() {
             <div className="st">{docsError}</div>
           </div>
         )}
+      </div>
+
+      <div className="eyebrow help-eyebrow">Help</div>
+      <div className="setgrid">
+        <div className="setrow">
+          <div className="st">
+            <b>Guided tour</b>
+            <div>
+              A five-step walk through the model control, the Modelfile editor, Benchmarks,
+              Format and Prompt.
+            </div>
+          </div>
+          {/* R6: the tour's permanent home. It puts the app back where it
+              found it on the way out, so this row is where you land again. */}
+          <button type="button" className="btn sm" onClick={() => startTour()}>
+            Run the tour
+          </button>
+        </div>
+        <div className="setrow">
+          <div className="st">
+            <b>Pane explainers</b>
+            <div>
+              The <code>?</code> panel at the top of each pane. Closing one keeps it closed 
+              this brings them all back.
+            </div>
+          </div>
+          <button type="button" className="btn sm" onClick={() => reopenAll()}>
+            Reopen all
+          </button>
+        </div>
+        <div className="setrow glossary-row">
+          <div className="st">
+            <b>Glossary</b>
+            <div>Every machine word Remuda uses, and what it means here.</div>
+            <dl className="glossary-list">
+              {Object.values(GLOSSARY).map((entry) => (
+                <Fragment key={entry.term}>
+                  <dt>{entry.term}</dt>
+                  <dd>{entry.definition}</dd>
+                </Fragment>
+              ))}
+            </dl>
+          </div>
+        </div>
       </div>
     </section>
   );

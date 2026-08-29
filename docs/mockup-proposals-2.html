@@ -1,0 +1,1326 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Remuda — round two: bench, constrained output, the rendered prompt, and help</title>
+<style>
+:root{
+  --bg:#191817; --surface:#1e1d1b; --surface-2:#262523; --raised:#302e2b;
+  --border:#3a3733; --border-strong:#55504a;
+  --ink:#f2efe9; --ink-2:#dcd7ce; --muted:#a29c91; --faint:#7b756a;
+  --ember:#6165c6; --ember-press:#6b4fa8; --ember-tint:#262445; --ember-ink:#a9a5ea;
+  --good:#89c360; --good-tint:#1e2a16;
+  --warn:#f1ae27; --warn-tint:#2e2610;
+  --crit:#e75140; --crit-tint:#2f1714;
+  --shadow:0 1px 2px rgba(0,0,0,.35), 0 8px 24px -10px rgba(0,0,0,.55);
+  --shadow-lg:0 22px 60px -16px rgba(0,0,0,.7);
+  --radius:12px;
+  --ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,"SF Mono","Cascadia Code",monospace;
+}
+*{box-sizing:border-box}
+[hidden]{display:none !important}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--ui);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button{font-family:inherit;cursor:pointer;color:inherit}
+h1,h2,h3,h4{margin:0;font-weight:700;letter-spacing:-.01em}
+code{font-family:var(--mono)}
+::selection{background:var(--ember-tint)}
+
+/* ---------- page chrome ---------- */
+.page{max-width:1080px;margin:0 auto;padding:34px 24px 90px}
+.page > header h1{font-size:21px}
+.page > header p{margin:8px 0 0;color:var(--muted);font-size:13.5px;max-width:74ch}
+.page > header .meta{margin-top:12px;font-family:var(--mono);font-size:12px;color:var(--faint)}
+.sec{margin-top:52px;padding-top:34px;border-top:1px solid var(--border)}
+.sec > .num{font-family:var(--mono);font-size:12px;color:var(--ember-ink);letter-spacing:.06em}
+.sec > h2{font-size:17.5px;margin-top:5px}
+.sec > .why{margin:9px 0 0;color:var(--ink-2);font-size:13.5px;max-width:74ch}
+.sec > .why + .why{margin-top:8px;color:var(--muted)}
+.sec h3.sub{font-size:13.5px;margin:26px 0 0;color:var(--ink)}
+.sec h3.sub + .why{margin-top:6px}
+.api{margin:14px 0 18px;display:flex;flex-wrap:wrap;gap:7px;align-items:center}
+.api .k{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-right:2px}
+.api code{font-size:11.5px;background:var(--surface-2);border:1px solid var(--border);padding:2px 8px;border-radius:6px;color:var(--ink-2)}
+.caption{margin:11px 2px 0;font-size:12.5px;color:var(--muted);max-width:80ch}
+.caption b{color:var(--ink-2);font-weight:600}
+.winwrap{margin-top:16px}
+
+/* ---------- fake app window ---------- */
+.win{position:relative;border:1px solid var(--border);border-radius:14px;overflow:hidden;background:var(--bg);box-shadow:var(--shadow)}
+.shell{display:flex;min-height:0}
+.sidebar{width:210px;flex:0 0 auto;background:var(--bg);border-right:1px solid var(--border);padding:12px 10px;display:flex;flex-direction:column;gap:3px}
+.side-label{padding:6px 8px 5px;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.side-label.spaced{margin-top:10px}
+.sess{display:block;width:100%;min-width:0;overflow:hidden;text-align:left;border:1px solid transparent;background:transparent;border-radius:10px;padding:8px 10px}
+.sess.active{background:var(--surface-2);border-color:var(--border-strong)}
+.sess .stitle{font-size:12.5px;font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sess .smodel{display:flex;align-items:center;gap:6px;margin-top:3px;font-family:var(--mono);font-size:10.5px;color:var(--muted)}
+.sess .sdot{width:6px;height:6px;border-radius:50%;background:var(--good);flex:0 0 auto}
+.main{flex:1;min-width:0;background:var(--surface);display:flex;flex-direction:column}
+.tabs{display:flex;align-items:center;gap:2px;padding:0 16px;border-bottom:1px solid var(--border);background:var(--surface);flex:0 0 auto}
+.tab{padding:12px 12px 11px;font-size:12.5px;font-weight:600;color:var(--muted);background:transparent;border:0;border-bottom:2px solid transparent}
+.tab.active{color:var(--ink);border-bottom-color:var(--ember)}
+
+/* ---------- buttons ---------- */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border-radius:9px;padding:8px 12px;font-weight:600;font-size:13px;border:1px solid var(--border-strong);background:var(--surface-2);color:var(--ink)}
+.btn:hover{background:var(--raised)}
+.btn svg{width:15px;height:15px}
+.btn.primary{background:var(--ember);border-color:transparent;color:#fff;box-shadow:var(--shadow)}
+.btn.primary:hover{background:var(--ember-press)}
+.btn.sm{padding:5px 10px;font-size:12px;border-radius:8px}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--muted)}
+.btn.ghost:hover{background:var(--raised);color:var(--ink)}
+.iconbtn{width:28px;height:28px;display:grid;place-items:center;border:1px solid transparent;border-radius:8px;background:transparent;color:var(--muted)}
+.iconbtn:hover{background:var(--raised);color:var(--ink)}
+.iconbtn svg{width:15px;height:15px}
+.input{border:1px solid var(--border-strong);background:var(--surface);color:var(--ink);border-radius:8px;padding:6px 9px;font-family:var(--mono);font-size:12px;outline:none;width:100%}
+.seg{display:inline-flex;align-items:center;gap:2px;padding:2px;border-radius:8px;background:var(--raised);border:1px solid var(--border)}
+.seg button{border:0;background:transparent;color:var(--muted);font-size:11px;font-weight:600;padding:3px 9px;border-radius:6px;font-family:var(--mono)}
+.seg button.on{background:var(--ember);color:#fff}
+
+/* ---------- chat ---------- */
+.chatmain{display:flex;flex-direction:column;height:430px}
+.chatlog{flex:1;overflow-y:auto;padding:20px 22px;display:flex;flex-direction:column;gap:16px}
+.msg{display:flex;gap:11px;max-width:92%}
+.msg .av{width:27px;height:27px;border-radius:8px;flex:0 0 auto;display:grid;place-items:center;font-size:11.5px;font-weight:700}
+.msg.user{align-self:flex-end;flex-direction:row-reverse}
+.msg.user .av{background:var(--ink);color:var(--surface)}
+.msg.bot .av{background:var(--ember-tint);color:var(--ember-ink);font-family:var(--mono)}
+.bubble{padding:10px 13px;border-radius:12px;font-size:13.5px;line-height:1.6}
+.msg.user .bubble{background:var(--ink);color:var(--surface);border-bottom-right-radius:4px}
+.msg.bot .bubble{background:var(--surface-2);border:1px solid var(--border);border-bottom-left-radius:4px}
+.bubble code{font-family:var(--mono);font-size:12px;background:var(--raised);padding:1px 5px;border-radius:5px}
+.msg.user .bubble code{background:rgba(0,0,0,.14);color:var(--surface)}
+.msg .col{min-width:0}
+.composer{flex:0 0 auto;border-top:1px solid var(--border);padding:11px 14px;position:relative}
+.composer .box{display:flex;align-items:flex-end;gap:9px;border:1px solid var(--border-strong);border-radius:12px;padding:7px 7px 7px 12px;background:var(--surface-2)}
+.composer .fake-input{flex:1;font-size:13.5px;color:var(--faint);padding:6px 0}
+.composer .send{width:32px;height:32px;border-radius:9px;background:var(--ember);color:#fff;border:0;display:grid;place-items:center;flex:0 0 auto}
+.composer .send svg{width:15px;height:15px}
+.notebar{display:flex;align-items:center;gap:9px;margin-top:8px;font-size:11.5px;color:var(--muted);flex-wrap:wrap}
+.notebar code{background:var(--raised);padding:1px 6px;border-radius:5px;color:var(--ink-2);font-size:11px}
+.notebar .spacer{flex:1}
+.runpill{display:inline-flex;align-items:center;gap:7px;padding:4px 9px;border-radius:8px;border:1px solid var(--border);background:var(--raised);color:var(--ink-2);font-family:var(--mono);font-size:11px;font-weight:600}
+.runpill.dirty{border-color:color-mix(in srgb,var(--ember) 45%,transparent);background:var(--ember-tint);color:var(--ember-ink)}
+.runpill svg{width:13px;height:13px}
+
+/* NEW — hover menu on a user message, where capture lives */
+.replymenu{display:flex;align-items:center;gap:2px;margin-top:6px;justify-content:flex-end}
+.replymenu .mi{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:var(--muted);background:transparent;border:1px solid transparent;border-radius:7px;padding:3px 8px}
+.replymenu .mi:hover{background:var(--raised);color:var(--ink)}
+.replymenu .mi.hot{background:var(--ember-tint);border-color:color-mix(in srgb,var(--ember) 40%,transparent);color:var(--ember-ink)}
+.replymenu .mi svg{width:12px;height:12px}
+
+/* NEW — bench */
+.benchhead{display:flex;align-items:center;gap:12px;padding:13px 16px;border-bottom:1px solid var(--border);background:var(--surface);flex-wrap:wrap}
+.benchhead b{font-size:14px}
+.benchhead .bmeta{font-family:var(--mono);font-size:11px;color:var(--faint)}
+.benchhead .spacer{flex:1}
+.runsel{display:inline-flex;align-items:center;gap:7px;padding:5px 10px;border-radius:8px;border:1px solid var(--border-strong);background:var(--surface-2);font-family:var(--mono);font-size:11.5px;color:var(--ink-2)}
+.runsel svg{width:12px;height:12px;color:var(--muted)}
+.runbar{display:flex;align-items:center;gap:10px;padding:9px 16px;border-bottom:1px solid var(--border);background:var(--surface-2);font-family:var(--mono);font-size:11px;color:var(--muted)}
+.runbar .against{color:var(--ember-ink)}
+.runbar .spacer{flex:1}
+.tally{display:inline-flex;gap:8px}
+.tally span{display:inline-flex;align-items:center;gap:5px;font-weight:600;font-size:11px;padding:2px 8px;border-radius:999px}
+.tally .ch{background:var(--warn-tint);color:var(--warn)}
+.tally .sa{background:var(--good-tint);color:var(--good)}
+.tally .er{background:var(--crit-tint);color:var(--crit)}
+
+.bench{height:452px;overflow-y:auto;background:var(--surface)}
+.brow{border-bottom:1px solid var(--border)}
+.brow-h{display:flex;align-items:flex-start;gap:11px;padding:12px 16px;width:100%;background:transparent;border:0;text-align:left}
+.brow-h:hover{background:var(--surface-2)}
+.brow-n{font-family:var(--mono);font-size:11px;color:var(--faint);width:20px;flex:0 0 auto;padding-top:2px}
+.brow-p{flex:1;min-width:0;font-size:13px;color:var(--ink);line-height:1.5}
+.brow-p .sn{display:block;margin-top:4px;font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.badge{flex:0 0 auto;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:3px 9px;border-radius:999px;margin-top:1px}
+.badge.changed{background:var(--warn-tint);color:var(--warn)}
+.badge.same{background:var(--good-tint);color:var(--good)}
+.badge.err{background:var(--crit-tint);color:var(--crit)}
+.badge.pending{background:var(--raised);color:var(--faint)}
+.brow-t{font-family:var(--mono);font-size:10.5px;color:var(--faint);flex:0 0 auto;width:62px;text-align:right;padding-top:3px;font-variant-numeric:tabular-nums}
+.brow-b{padding:0 16px 15px 47px;display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.bcol{border:1px solid var(--border);border-radius:11px;background:var(--surface-2);overflow:hidden}
+.bcol-h{display:flex;align-items:center;gap:7px;padding:7px 11px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.bcol-h .now{color:var(--ember-ink);font-weight:600}
+.bcol-b{padding:10px 12px;font-size:12.5px;line-height:1.6;color:var(--ink-2)}
+.bcol-b del{background:var(--crit-tint);color:#f0a196;text-decoration:none;border-radius:3px;padding:0 2px}
+.bcol-b ins{background:var(--good-tint);color:#b6dd93;text-decoration:none;border-radius:3px;padding:0 2px}
+.bfoot{display:flex;gap:14px;padding:7px 12px;border-top:1px solid var(--border);font-family:var(--mono);font-size:10px;color:var(--faint);font-variant-numeric:tabular-nums}
+.emptyrail{padding:9px 10px;font-size:11.5px;color:var(--faint);line-height:1.5}
+
+/* NEW — schema / format pane */
+.split{display:flex;height:452px}
+.pane{flex:1;min-width:0;display:flex;flex-direction:column;border-right:1px solid var(--border)}
+.pane:last-child{border-right:0}
+.pane-h{display:flex;align-items:center;gap:9px;padding:10px 13px;border-bottom:1px solid var(--border);background:var(--surface-2);flex:0 0 auto}
+.pane-h b{font-size:12.5px}
+.pane-h .spacer{flex:1}
+.pane-h .hint{font-family:var(--mono);font-size:10.5px;color:var(--faint)}
+.code{flex:1;overflow:auto;padding:12px 14px;font-family:var(--mono);font-size:11.5px;line-height:1.7;color:var(--ink-2);white-space:pre;background:var(--bg)}
+.code .k{color:var(--ember-ink)}
+.code .s{color:#9ecb87}
+.code .n{color:#e0b26b}
+.code .c{color:var(--faint)}
+.code .slot{background:var(--ember-tint);border:1px solid color-mix(in srgb,var(--ember) 45%,transparent);border-radius:4px;padding:0 3px;color:var(--ember-ink)}
+.code .slotfill{background:var(--good-tint);border:1px solid color-mix(in srgb,var(--good) 35%,transparent);border-radius:4px;padding:0 3px;color:#b6dd93}
+
+.conform{border:1px solid var(--border);border-radius:11px;background:var(--surface-2);overflow:hidden;margin-top:9px;max-width:560px}
+.conform-h{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border);font-size:11.5px;font-weight:600}
+.conform-h .ok{color:var(--good)}
+.conform-h .bad{color:var(--crit)}
+.conform-h svg{width:14px;height:14px}
+.conform-h .spacer{flex:1}
+.conform-h .sname{font-family:var(--mono);font-size:10.5px;color:var(--faint);font-weight:400}
+.frow{display:flex;align-items:baseline;gap:9px;padding:6px 12px;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:11.5px}
+.frow:last-child{border-bottom:0}
+.frow .fk{color:var(--ink);min-width:112px}
+.frow .fv{color:var(--ink-2);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fb{font-size:9.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:2px 7px;border-radius:5px;flex:0 0 auto}
+.fb.ok{background:var(--good-tint);color:var(--good)}
+.fb.no{background:var(--crit-tint);color:var(--crit)}
+.fb.extra{background:var(--warn-tint);color:var(--warn)}
+.fb.miss{background:var(--crit-tint);color:var(--crit)}
+
+/* NEW — embedding surfaces */
+.gate{margin:16px;padding:14px;border-radius:11px;background:var(--warn-tint);border:1px solid color-mix(in srgb,var(--warn) 32%,transparent);display:flex;gap:11px;align-items:flex-start}
+.gate svg{width:17px;height:17px;color:var(--warn);flex:0 0 auto;margin-top:1px}
+.gate b{font-size:13px}
+.gate p{margin:3px 0 0;font-size:12.5px;color:var(--ink-2)}
+.simrow{display:flex;align-items:center;gap:12px;padding:11px 14px;border-bottom:1px solid var(--border)}
+.simrow .st{flex:1;min-width:0;font-size:12.5px;color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.simbar{width:150px;height:7px;border-radius:999px;background:var(--border);overflow:hidden;flex:0 0 auto}
+.simbar i{display:block;height:100%;background:var(--ember);border-radius:999px}
+.simval{font-family:var(--mono);font-size:11.5px;font-weight:600;color:var(--ember-ink);width:44px;text-align:right;font-variant-numeric:tabular-nums;flex:0 0 auto}
+
+/* ---------- ranked table / decision blocks ---------- */
+table.rank{width:100%;border-collapse:collapse;margin-top:16px;font-size:13px}
+table.rank th{text-align:left;font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint);padding:0 10px 8px;border-bottom:1px solid var(--border)}
+table.rank td{padding:11px 10px;border-bottom:1px solid var(--border);vertical-align:top;color:var(--ink-2)}
+table.rank td:first-child{color:var(--ink);font-weight:600;width:28%}
+table.rank td code{font-size:11.5px;color:var(--muted)}
+.tag{display:inline-block;font-size:10px;font-weight:700;padding:2px 7px;border-radius:999px;letter-spacing:.03em}
+.tag.s{background:var(--good-tint);color:var(--good)}
+.tag.m{background:var(--warn-tint);color:var(--warn)}
+.tag.l{background:var(--crit-tint);color:var(--crit)}
+.skip{margin-top:26px;padding:14px 16px;border-radius:11px;border:1px solid var(--border);background:var(--surface)}
+.skip h3{font-size:13.5px}
+.skip ul{margin:9px 0 0;padding-left:19px;color:var(--muted);font-size:13px}
+.skip li{margin-bottom:7px}
+.skip b{color:var(--ink-2)}
+.choice{margin-top:14px;padding:13px 15px;border-radius:11px;border:1px solid var(--border);background:var(--surface)}
+.choice h4{font-size:12.5px;color:var(--ember-ink);font-family:var(--mono);letter-spacing:.02em}
+.choice p{margin:6px 0 0;font-size:13px;color:var(--ink-2)}
+.choice p.cost{margin-top:7px;color:var(--muted);font-size:12.5px}
+
+/* ---------- help layer ---------- */
+.qbtn{width:19px;height:19px;border-radius:50%;border:1px solid var(--border-strong);background:transparent;color:var(--muted);font-size:11px;font-weight:700;display:inline-grid;place-items:center;line-height:1;flex:0 0 auto}
+.qbtn:hover{background:var(--ember-tint);border-color:color-mix(in srgb,var(--ember) 45%,transparent);color:var(--ember-ink)}
+.qbtn.on{background:var(--ember);border-color:transparent;color:#fff}
+.helpstrip{border-bottom:1px solid var(--border);background:color-mix(in srgb,var(--ember-tint) 40%,var(--surface));padding:13px 16px 14px;display:flex;gap:13px;align-items:flex-start}
+.helpstrip .hs-ic{width:26px;height:26px;border-radius:8px;background:var(--ember-tint);color:var(--ember-ink);display:grid;place-items:center;flex:0 0 auto;border:1px solid color-mix(in srgb,var(--ember) 34%,transparent)}
+.helpstrip .hs-ic svg{width:14px;height:14px}
+.helpstrip .hs-b{min-width:0;flex:1}
+.helpstrip h4{font-size:12.5px;color:var(--ink)}
+.helpstrip p{margin:5px 0 0;font-size:12.5px;color:var(--ink-2);line-height:1.6;max-width:70ch}
+.helpstrip p.note{margin-top:7px;color:var(--muted);font-size:12px}
+.helpsteps{margin:9px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:5px}
+.helpsteps li{display:flex;gap:9px;font-size:12.5px;color:var(--ink-2);line-height:1.5}
+.helpsteps li b{font-family:var(--mono);font-size:10.5px;color:var(--ember-ink);flex:0 0 auto;padding-top:2px;width:13px}
+.helpstrip .hs-x{flex:0 0 auto}
+
+/* dotted glossary term + its popover */
+.term{border-bottom:1px dotted var(--border-strong);cursor:help;position:relative;color:var(--ink)}
+.termwrap{position:relative;display:inline-block}
+.termpop{position:absolute;left:0;top:calc(100% + 7px);width:290px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:11px;box-shadow:var(--shadow-lg);padding:11px 13px;z-index:40}
+.termpop b{font-family:var(--mono);font-size:11.5px;color:var(--ember-ink);display:block}
+.termpop p{margin:5px 0 0;font-size:12px;color:var(--ink-2);line-height:1.55}
+.termpop .tp-more{margin-top:8px;font-size:11px;color:var(--faint)}
+
+/* empty state — the help nobody has to go looking for */
+.emptyfeat{padding:46px 30px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:11px}
+.emptyfeat .ef-ic{width:44px;height:44px;border-radius:13px;background:var(--ember-tint);color:var(--ember-ink);display:grid;place-items:center;border:1px solid color-mix(in srgb,var(--ember) 30%,transparent)}
+.emptyfeat .ef-ic svg{width:21px;height:21px}
+.emptyfeat h3{font-size:15px}
+.emptyfeat p{margin:0;font-size:13px;color:var(--muted);max-width:52ch;line-height:1.65}
+.emptyfeat .ef-how{margin-top:6px;display:flex;flex-direction:column;gap:7px;text-align:left;background:var(--surface-2);border:1px solid var(--border);border-radius:11px;padding:12px 15px;max-width:430px}
+.emptyfeat .ef-how div{display:flex;gap:10px;font-size:12.5px;color:var(--ink-2)}
+.emptyfeat .ef-how b{font-family:var(--mono);font-size:10.5px;color:var(--ember-ink);flex:0 0 auto;padding-top:2px}
+
+/* ---------- guided tour ---------- */
+.tourstage{position:relative}
+.tour-scrim{position:absolute;inset:0;z-index:30;pointer-events:none}
+.tour-spot{position:absolute;border-radius:11px;border:2px solid var(--ember);box-shadow:0 0 0 9999px rgba(10,9,9,.72);z-index:31}
+.tour-card{position:absolute;width:322px;background:var(--surface-2);border:1px solid var(--border-strong);border-radius:13px;box-shadow:var(--shadow-lg);z-index:33;overflow:hidden}
+.tour-card .tc-b{padding:14px 15px}
+.tour-card .tc-step{font-family:var(--mono);font-size:10px;letter-spacing:.07em;text-transform:uppercase;color:var(--ember-ink)}
+.tour-card h4{font-size:14px;margin-top:5px}
+.tour-card p{margin:7px 0 0;font-size:12.5px;color:var(--ink-2);line-height:1.6}
+.tour-card .tc-f{display:flex;align-items:center;gap:8px;padding:10px 13px;border-top:1px solid var(--border);background:var(--surface)}
+.tour-card .tc-f .spacer{flex:1}
+.tour-dots{display:flex;gap:5px}
+.tour-dots i{width:6px;height:6px;border-radius:50%;background:var(--border-strong);display:block}
+.tour-dots i.on{background:var(--ember);width:16px;border-radius:999px}
+
+/* first-run offer, and the settings row that brings it back */
+.firstrun{display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:12px;border:1px solid color-mix(in srgb,var(--ember) 38%,transparent);background:color-mix(in srgb,var(--ember-tint) 70%,var(--surface));margin:16px}
+.firstrun .fr-ic{width:32px;height:32px;border-radius:9px;background:var(--ember);color:#fff;display:grid;place-items:center;flex:0 0 auto}
+.firstrun .fr-ic svg{width:16px;height:16px}
+.firstrun .fr-b{flex:1;min-width:0}
+.firstrun b{font-size:13px}
+.firstrun p{margin:2px 0 0;font-size:12.5px;color:var(--ink-2)}
+.setrow{display:flex;align-items:center;gap:14px;padding:14px 16px;border-bottom:1px solid var(--border)}
+.setrow .sr-b{flex:1;min-width:0}
+.setrow b{font-size:13px;display:block}
+.setrow p{margin:3px 0 0;font-size:12.5px;color:var(--muted);max-width:60ch}
+.setrow:last-child{border-bottom:0}
+</style>
+</head>
+<body>
+<div class="page">
+
+<header>
+  <h1>Remuda — round two, from Ollama's unused surface</h1>
+  <p>
+    The first round took what Ollama <em>reports back</em>. This one takes the parameters Remuda
+    still never sends — <code>format</code>, <code>raw</code>, <code>num_gpu</code> — plus the one
+    feature already specced and never built. Nothing here needs an account, an API key, or a network
+    call off <code>127.0.0.1</code>.
+  </p>
+  <p>
+    Sections <b>05</b> and <b>06</b> are the other half of shipping any of it: Remuda now does
+    enough that a word like <em>bench</em> or <em>compare</em> means nothing on sight. Three layers
+    of always-there help, and a five-step tour that survives Ollama not being installed.
+  </p>
+  <div class="meta">Mock data from a 27B q4 on a 36 GB machine · companion to docs/mockup-proposals.html</div>
+</header>
+
+<!-- ═══════════════════════════ 1 · BENCH ═══════════════════════════ -->
+<section class="sec" id="bench">
+  <div class="num">01</div>
+  <h2>Bench — the regression test for a Modelfile</h2>
+  <p class="why">
+    <b>The problem it solves.</b> You tighten the system prompt so the model stops rambling. It
+    stops rambling. Three chats later you notice it also stopped using the code fences you'd taught
+    it two saves ago — and you have no idea which save did that, because the only evidence was a
+    conversation you closed. Every edit to a Modelfile is a change to <em>all</em> behaviour, and
+    right now Remuda lets you observe exactly one prompt's worth of it at a time.
+  </p>
+  <p class="why">
+    <b>What a bench is.</b> A named set of prompts you've saved — the handful you always re-test
+    after a change — replayed against the current model on one click, each answer diffed against
+    what the same prompt returned last run. Not a score. Not a grade. A <b>diff</b>: this answer
+    changed, that one didn't. You read the changed ones and decide.
+  </p>
+  <p class="why">
+    It is <a href="SPEC-tuning.md" style="color:var(--ember-ink)">T1 + T2 composed</a> and almost no
+    new machinery: T1 already snapshots every Modelfile save, T2 already runs a pinned seed and
+    renders two answers side by side, and the diff renderer already exists in
+    <code>editor/diff.ts</code>. A bench run is those three pointed at a list instead of a pair.
+  </p>
+  <div class="api"><span class="k">API</span><code>POST /api/chat — one call per prompt, sequential, pinned seed</code><code>no new endpoints</code></div>
+
+  <h3 class="sub">Capture — one click, from the chat you're already in</h3>
+  <p class="why">
+    A bench that costs a form to populate does not get populated. So capture is a single item on the
+    hover menu any user message already has — the same menu that holds <b>Re-roll</b> and
+    <b>Promote to SYSTEM</b>. You are always in a chat when you discover a prompt worth keeping.
+  </p>
+
+  <div class="winwrap">
+  <div class="win">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="side-label">Benches</div>
+        <button class="sess"><span class="stitle">Coding voice</span>
+          <span class="smodel">6 prompts · run 7</span></button>
+        <div class="side-label spaced">Chats</div>
+        <button class="sess active"><span class="stitle">Tuning the coding system prompt</span>
+          <span class="smodel"><span class="sdot"></span>qwen3.8-27b…q4</span></button>
+      </div>
+      <div class="main">
+        <div class="tabs"><button class="tab active">Chat</button><button class="tab">Modelfile</button><button class="tab">Tools</button></div>
+        <div class="chatmain" style="height:300px">
+          <div class="chatlog">
+            <div class="msg user"><span class="av">D</span>
+              <div class="col">
+                <div class="bubble">Rewrite this loop to bail early, and explain why in one line.</div>
+                <!-- ▼ NEW: capture lives in the menu the message already has -->
+                <div class="replymenu">
+                  <button class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M8 5h10a2 2 0 012 2v10"/><rect x="4" y="8" width="12" height="12" rx="2"/></svg>Copy</button>
+                  <button class="mi"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 12a8 8 0 1114 5"/><path d="M4 18v-6h6"/></svg>Re-roll</button>
+                  <button class="mi hot"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>Add to bench</button>
+                </div>
+                <!-- ▲ -->
+              </div>
+            </div>
+            <div class="msg bot"><span class="av">Qw</span>
+              <div class="col"><div class="bubble">Use <code>break</code> once <code>seen.has(id)</code> — the rest of the scan can't change the answer.</div></div>
+            </div>
+          </div>
+          <div class="composer">
+            <div class="box"><div class="fake-input">Ask this model something…</div>
+              <button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button></div>
+            <div class="notebar"><span class="spacer"></span><span><code>Enter</code> send · <code>⇧Enter</code> newline</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    <b>Benches sit above Chats in the rail</b>, which already persists across every surface — so a
+    bench is reachable from inside the Modelfile editor, which is exactly where you are standing
+    when you want to run one.
+  </p>
+
+  <h3 class="sub">The run table — one row per prompt, this run against the last</h3>
+  <p class="why">
+    Rows collapsed by default and sorted <b>changed first</b>: the whole point is that you only read
+    the ones that moved. Expanding a row gives you the previous answer and the current one, word-diffed.
+  </p>
+
+  <div class="winwrap">
+  <div class="win">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="side-label">Benches</div>
+        <button class="sess active"><span class="stitle">Coding voice</span>
+          <span class="smodel">6 prompts · run 7</span></button>
+        <button class="sess"><span class="stitle">Refusals &amp; edge cases</span>
+          <span class="smodel">4 prompts · run 2</span></button>
+        <div class="side-label spaced">Chats</div>
+        <button class="sess"><span class="stitle">Tuning the coding system prompt</span>
+          <span class="smodel"><span class="sdot"></span>qwen3.8-27b…q4</span></button>
+      </div>
+      <div class="main">
+        <div class="benchhead">
+          <b>Coding voice</b>
+          <span class="bmeta">6 prompts · qwen3.8-27b-instruct:q4_K_M</span>
+          <span class="spacer"></span>
+          <button class="runsel">run 7 · 14:22
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <button class="btn sm primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"/></svg>
+            Run all
+          </button>
+        </div>
+        <!-- ▼ the line that makes history and results one artifact -->
+        <div class="runbar">
+          <span>run 7 · against <span class="against">terse-v2 @ 14:22</span> · seed 40412</span>
+          <span class="spacer"></span>
+          <span class="tally">
+            <span class="ch">2 changed</span>
+            <span class="sa">3 same</span>
+            <span class="er">1 error</span>
+          </span>
+        </div>
+        <!-- ▲ -->
+        <div class="bench">
+
+          <div class="brow">
+            <button class="brow-h">
+              <span class="brow-n">01</span>
+              <span class="brow-p">Rewrite this loop to bail early, and explain why in one line.
+                <span class="sn">Use <code>break</code> once <code>seen.has(id)</code> — the rest of the scan…</span>
+              </span>
+              <span class="badge changed">Changed</span>
+              <span class="brow-t">2.4 s</span>
+            </button>
+            <div class="brow-b">
+              <div class="bcol">
+                <div class="bcol-h">run 6 · against <b>terse-v1</b></div>
+                <div class="bcol-b">Use <code>break</code> once <code>seen.has(id)</code><del> is true, because continuing the scan cannot change the result and you pay for every remaining element</del>.</div>
+                <div class="bfoot"><span>184 tok</span><span>41.2 tok/s</span></div>
+              </div>
+              <div class="bcol">
+                <div class="bcol-h">run 7 · against <b class="now">terse-v2</b></div>
+                <div class="bcol-b">Use <code>break</code> once <code>seen.has(id)</code><ins> — the rest of the scan can't change the answer</ins>.</div>
+                <div class="bfoot"><span>97 tok</span><span>42.8 tok/s</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="brow">
+            <button class="brow-h">
+              <span class="brow-n">02</span>
+              <span class="brow-p">Give me three names for a function that drains a queue.
+                <span class="sn"><code>drainPending</code>, <code>sweepUnclaimed</code>, <code>collectStragglers</code> — the third…</span>
+              </span>
+              <span class="badge changed">Changed</span>
+              <span class="brow-t">1.9 s</span>
+            </button>
+          </div>
+
+          <div class="brow">
+            <button class="brow-h">
+              <span class="brow-n">03</span>
+              <span class="brow-p">Explain a mutex to someone who writes only Python.
+                <span class="sn">Think of it as a single key on a hook by the door. Only one thread…</span>
+              </span>
+              <span class="badge same">Same</span>
+              <span class="brow-t">3.1 s</span>
+            </button>
+          </div>
+
+          <div class="brow">
+            <button class="brow-h">
+              <span class="brow-n">04</span>
+              <span class="brow-p">Review this SQL for injection risk. Be blunt.
+                <span class="sn">The <code>WHERE name = '" + q + "'</code> concatenation is the whole bug…</span>
+              </span>
+              <span class="badge same">Same</span>
+              <span class="brow-t">2.7 s</span>
+            </button>
+          </div>
+
+          <div class="brow">
+            <button class="brow-h">
+              <span class="brow-n">05</span>
+              <span class="brow-p">Summarise this stack trace in two sentences.
+                <span class="sn" style="color:var(--crit)">context length exceeded — prompt is 34 102 tokens, num_ctx is 26 624</span>
+              </span>
+              <span class="badge err">Error</span>
+              <span class="brow-t">—</span>
+            </button>
+          </div>
+
+          <div class="brow">
+            <button class="brow-h">
+              <span class="brow-n">06</span>
+              <span class="brow-p">Write a commit message for a one-line null check.
+                <span class="sn">fix(parse): guard against a null body before reading .length</span>
+              </span>
+              <span class="badge same">Same</span>
+              <span class="brow-t">0.9 s</span>
+            </button>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    <b>The rules that keep it a tool and not a scoreboard.</b>
+    Same/changed is a <b>diff, not a verdict</b> — Remuda never says one answer is better, because an
+    LLM judge would make this a different and much less trustworthy product.
+    One seed is pinned across every prompt in a run, for the same reason A/B pins one.
+    Runs are sequential and cancellable; a cancelled run keeps its finished rows and is marked
+    <b>partial</b> rather than thrown away.
+    An errored row is a real result and stays visible — row 05 above is telling you your
+    <code>num_ctx</code> is too small, which is exactly the kind of thing a bench is for.
+    And the header names the <b>T1 snapshot</b> each run ran against, which is what makes the
+    Modelfile history and the results one artifact instead of two.
+  </p>
+</section>
+
+<!-- ═══════════════════════════ 2 · FORMAT ═══════════════════════════ -->
+<section class="sec" id="format">
+  <div class="num">02</div>
+  <h2>Constrained output — <code>format</code>, the parameter Remuda never sends</h2>
+  <p class="why">
+    <b>What Ollama does.</b> <code>/api/chat</code> and <code>/api/generate</code> both take a
+    <code>format</code> field. Give it a JSON Schema and Ollama constrains <em>decoding</em> to it —
+    the sampler is only ever allowed to pick tokens that keep the output valid against your schema.
+    It is not prompt-engineering and it is not a retry loop; malformed JSON is unreachable by
+    construction. Remuda passes <code>format</code> on exactly zero of its requests.
+  </p>
+  <p class="why">
+    <b>Why it belongs here specifically.</b> Half of Modelfile tuning is trying to make a model emit
+    a shape — “answer with JSON like this”, wedged into <code>SYSTEM</code>, then a week of
+    whack-a-mole as it drifts. <code>format</code> deletes that entire class of system prompt. The
+    tuning question changes from “did it produce valid JSON” to the one that actually matters:
+    <b>given the shape is guaranteed, are the values any good?</b>
+  </p>
+  <p class="why">
+    <b>And it is mostly already built.</b> <code>tools/validate.ts</code> is a JSON-Schema validator
+    with per-field verdicts, and the tool-call card in <code>tools/ToolsView.tsx</code> is its
+    display. This is that same pair, pointed at the reply instead of the tool call.
+  </p>
+  <div class="api"><span class="k">API</span><code>POST /api/chat { format: {"type":"object","properties":{…},"required":[…]} }</code><code>format:"json"</code></div>
+
+  <div class="winwrap">
+  <div class="win">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="side-label">Chats</div>
+        <button class="sess active"><span class="stitle">Extracting release notes</span>
+          <span class="smodel"><span class="sdot"></span>qwen3.8-27b…q4</span></button>
+      </div>
+      <div class="main">
+        <div class="tabs"><button class="tab active">Chat</button><button class="tab">Modelfile</button><button class="tab">Tools</button></div>
+        <div class="split">
+          <!-- LEFT: the schema you're constraining to -->
+          <div class="pane" style="max-width:352px">
+            <div class="pane-h">
+              <b>Format</b>
+              <span class="hint">this chat only</span>
+              <span class="spacer"></span>
+              <div class="seg"><button class="on">Schema</button><button>json</button><button>off</button></div>
+            </div>
+<div class="code"><span class="c">// constrains decoding — not a prompt</span>
+{
+  <span class="k">"type"</span>: <span class="s">"object"</span>,
+  <span class="k">"properties"</span>: {
+    <span class="k">"summary"</span>: { <span class="k">"type"</span>: <span class="s">"string"</span> },
+    <span class="k">"breaking"</span>: { <span class="k">"type"</span>: <span class="s">"boolean"</span> },
+    <span class="k">"issues"</span>: {
+      <span class="k">"type"</span>: <span class="s">"array"</span>,
+      <span class="k">"items"</span>: { <span class="k">"type"</span>: <span class="s">"integer"</span> }
+    },
+    <span class="k">"severity"</span>: {
+      <span class="k">"type"</span>: <span class="s">"string"</span>,
+      <span class="k">"enum"</span>: [<span class="s">"patch"</span>, <span class="s">"minor"</span>, <span class="s">"major"</span>]
+    }
+  },
+  <span class="k">"required"</span>: [<span class="s">"summary"</span>, <span class="s">"severity"</span>]
+}</div>
+            <div class="notebar" style="padding:9px 13px;margin:0;border-top:1px solid var(--border)">
+              <span style="color:var(--good)">✓ valid schema · 4 properties</span>
+              <span class="spacer"></span>
+              <button class="btn ghost sm">Copy as curl</button>
+            </div>
+          </div>
+
+          <!-- RIGHT: the transcript, each reply judged against it -->
+          <div class="pane">
+            <div class="chatmain" style="height:auto;flex:1">
+              <div class="chatlog">
+                <div class="msg user"><span class="av">D</span>
+                  <div class="bubble">Summarise the diff on branch <code>fix/paste-chord</code>.</div></div>
+
+                <div class="msg bot"><span class="av">Qw</span>
+                  <div class="col">
+                    <div class="bubble"><code>{"summary":"Name the paste chord the platform actually has","breaking":false,"issues":[43,45],"severity":"patch"}</code></div>
+                    <!-- ▼ NEW: conformance card, same shape as the tool-call card -->
+                    <div class="conform">
+                      <div class="conform-h">
+                        <span class="ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></span>
+                        <span class="ok">Conforms</span>
+                        <span class="spacer"></span>
+                        <span class="sname">4 of 4 properties · 2 required present</span>
+                      </div>
+                      <div class="frow"><span class="fk">summary</span><span class="fv">"Name the paste chord the platform actually has"</span><span class="fb ok">string</span></div>
+                      <div class="frow"><span class="fk">breaking</span><span class="fv">false</span><span class="fb ok">boolean</span></div>
+                      <div class="frow"><span class="fk">issues</span><span class="fv">[43, 45]</span><span class="fb ok">integer[]</span></div>
+                      <div class="frow"><span class="fk">severity</span><span class="fv">"patch"</span><span class="fb ok">enum</span></div>
+                    </div>
+                    <!-- ▲ -->
+                  </div>
+                </div>
+
+                <div class="msg bot"><span class="av">Qw</span>
+                  <div class="col">
+                    <div class="bubble"><code>{"summary":"Refactor the Linux bundle path so the AppImage and the .deb share one descrip</code></div>
+                    <!-- ▼ the failure that actually happens under `format` -->
+                    <div class="conform">
+                      <div class="conform-h">
+                        <span class="bad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 8v5M12 17h.01"/><circle cx="12" cy="12" r="9"/></svg></span>
+                        <span class="bad">Cut off — not valid JSON</span>
+                        <span class="spacer"></span>
+                        <span class="sname">num_predict 64 reached</span>
+                      </div>
+                      <div class="frow"><span class="fk">summary</span><span class="fv">truncated mid-string</span><span class="fb no">incomplete</span></div>
+                      <div class="frow"><span class="fk">severity</span><span class="fv">never emitted</span><span class="fb miss">missing</span></div>
+                    </div>
+                    <!-- ▲ -->
+                  </div>
+                </div>
+              </div>
+              <div class="composer">
+                <div class="box"><div class="fake-input">Ask this model something…</div>
+                  <button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button></div>
+                <div class="notebar">
+                  <button class="runpill dirty">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4H6a2 2 0 00-2 2v4l-2 2 2 2v4a2 2 0 002 2h2M16 4h2a2 2 0 012 2v4l2 2-2 2v4a2 2 0 01-2 2h-2"/></svg>
+                    Format · schema
+                  </button>
+                  <button class="runpill">Run controls · 1</button>
+                  <span class="spacer"></span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    <b>The honest failure is the interesting one.</b> Under <code>format</code> the model cannot emit
+    invalid JSON — but it can be <em>cut off</em> mid-object when <code>num_predict</code> runs out,
+    and then you get a broken string and no explanation. The second card names that directly instead
+    of showing a red parse error. It is the single most common way constrained output goes wrong,
+    and no GUI I've seen tells you which of the two it was.
+  </p>
+  <p class="caption">
+    <b>Three states, not two</b> — <code>Schema</code>, plain <code>json</code> mode (Ollama's
+    older <code>format:"json"</code>, valid JSON with no shape), and <code>off</code>. It is
+    per-chat and never persists, exactly like Run controls, because <code>format</code> is a request
+    parameter — there is no <code>PARAMETER format</code>, so there is nothing to bake and the pane
+    shouldn't pretend otherwise. <b>Copy as curl</b> picks up the <code>format</code> body for free.
+  </p>
+</section>
+
+<!-- ═══════════════════════════ 3 · PROMPT ═══════════════════════════ -->
+<section class="sec" id="prompt">
+  <div class="num">03</div>
+  <h2>The rendered prompt — the string the model actually receives</h2>
+  <p class="why">
+    <b>The blind spot.</b> Remuda is a Modelfile tuning tool that will not show you what it sends.
+    You write <code>SYSTEM</code>, Ollama pastes it into the model's <code>TEMPLATE</code>, wraps it
+    in whatever control tokens that family uses, and hands the result to the runner. Remuda shows you
+    the input and the output and nothing in between — so when a system prompt has no effect, there
+    is no way to tell “the model ignored it” from “it never got there”.
+  </p>
+  <p class="why">
+    <b>Both of those happen, and they need opposite fixes.</b> A hand-written or inherited
+    <code>TEMPLATE</code> that never references <code>.System</code> silently drops your system
+    prompt entirely; so does a <code>MESSAGE</code>-heavy file that pushes it out of the branch the
+    template took. You cannot debug that from the chat window. You can read it in one glance here.
+  </p>
+  <p class="why">
+    <b>Where it goes.</b> A fourth segment in the Modelfile editor, beside the three that exist —
+    <code>Form · Raw · Prompt · History</code>. The template comes from <code>/api/show</code>,
+    which Remuda already calls and already stores in <code>ModelDetail.template</code>; today
+    nothing renders it.
+  </p>
+  <div class="api"><span class="k">API</span><code>POST /api/show → template</code><code>POST /api/generate { raw: true }</code></div>
+
+  <div class="winwrap">
+  <div class="win">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="side-label">Chats</div>
+        <button class="sess active"><span class="stitle">Tuning the coding system prompt</span>
+          <span class="smodel"><span class="sdot"></span>qwen3.8-27b…q4</span></button>
+      </div>
+      <div class="main">
+        <div class="tabs"><button class="tab">Chat</button><button class="tab active">Modelfile</button><button class="tab">Tools</button></div>
+        <div class="pane-h" style="background:var(--surface)">
+          <div class="seg">
+            <button>Form</button><button>Raw</button><button class="on">Prompt</button><button>History</button>
+          </div>
+          <span class="spacer"></span>
+          <span class="hint">rendering: <b style="color:var(--ink-2)">Tuning the coding system prompt</b> · last 2 turns</span>
+        </div>
+        <div class="split" style="height:400px">
+          <!-- LEFT: the template, slots marked -->
+          <div class="pane">
+            <div class="pane-h">
+              <b>TEMPLATE</b>
+              <span class="hint">from /api/show · read-only</span>
+            </div>
+<div class="code">{{- <span class="k">if</span> .<span class="slot">System</span> }}&lt;|im_start|&gt;system
+{{ .<span class="slot">System</span> }}&lt;|im_end|&gt;
+{{ <span class="k">end</span> }}
+{{- <span class="k">range</span> .<span class="slot">Messages</span> }}
+&lt;|im_start|&gt;{{ .Role }}
+{{ .Content }}&lt;|im_end|&gt;
+{{ <span class="k">end</span> }}
+&lt;|im_start|&gt;assistant
+{{- <span class="k">if</span> .<span class="slot">Tools</span> }}
+&lt;tools&gt;{{ .Tools }}&lt;/tools&gt;
+{{- <span class="k">end</span> }}
+</div>
+            <div class="notebar" style="padding:9px 13px;margin:0;border-top:1px solid var(--border)">
+              <span style="color:var(--good)">✓ references <code>.System</code></span>
+              <span class="spacer"></span>
+              <span><code>4 slots</code></span>
+            </div>
+          </div>
+
+          <!-- RIGHT: the same thing, filled in -->
+          <div class="pane">
+            <div class="pane-h">
+              <b>Rendered</b>
+              <span class="spacer"></span>
+              <span class="hint">1 204 tokens · 4 812 bytes</span>
+            </div>
+<div class="code">&lt;|im_start|&gt;system
+<span class="slotfill">You are terse. Answer in one line unless
+asked to expand. Prefer code over prose.</span>&lt;|im_end|&gt;
+&lt;|im_start|&gt;user
+<span class="slotfill">Rewrite this loop to bail early, and
+explain why in one line.</span>&lt;|im_end|&gt;
+&lt;|im_start|&gt;assistant
+<span class="slotfill">Use `break` once `seen.has(id)` — the
+rest of the scan can't change the answer.</span>&lt;|im_end|&gt;
+&lt;|im_start|&gt;user
+<span class="slotfill">Now do the same for the reverse pass.</span>&lt;|im_end|&gt;
+&lt;|im_start|&gt;assistant
+</div>
+            <div class="notebar" style="padding:9px 13px;margin:0;border-top:1px solid var(--border)">
+              <button class="btn ghost sm">Copy</button>
+              <button class="btn ghost sm">Send as raw…</button>
+              <span class="spacer"></span>
+              <span style="color:var(--faint)">green = substituted</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    <b>The check in the left footer is the feature.</b> “references <code>.System</code>” goes red
+    the moment you are editing a Modelfile whose template cannot see your system prompt — which is
+    the bug this pane exists to catch, and the one that costs people an afternoon.
+  </p>
+  <p class="caption">
+    <b>Scope note, and it matters.</b> Ollama has no “render this template” endpoint, so the right
+    pane is Remuda executing a Go <code>text/template</code> subset in TypeScript. That is real work
+    and it can drift from the server's own renderer. Two ways to stay honest: keep the substitution
+    to the handful of actions real Modelfiles use (<code>if</code>, <code>range</code>,
+    <code>.System</code>, <code>.Messages</code>, <code>.Prompt</code>, <code>.Tools</code>) and say
+    “unsupported template action — showing the raw template” rather than guessing; and give the
+    rendered pane a <b>Send as raw…</b> button that posts it back through
+    <code>/api/generate</code> with <code>raw: true</code>, which bypasses templating entirely. If
+    the raw send and the normal send produce the same answer, the render was right. That button is
+    the pane's own test.
+  </p>
+</section>
+
+<!-- ═══════════════════════════ 4 · EMBEDDINGS ═══════════════════════════ -->
+<section class="sec" id="embed">
+  <div class="num">04</div>
+  <h2>Embeddings — what they are, and the one version worth building</h2>
+  <p class="why">
+    <b>Plainly: what an embedding model is.</b> You give it text, it returns a list of numbers — a
+    few hundred to a couple of thousand of them. Text that means similar things comes back as
+    similar numbers. That is the entire product. It does not chat, it has no system prompt, it has
+    no <code>TEMPLATE</code>, and there are no sampling parameters worth touching. You cannot tune
+    one, because there is nothing on it to tune.
+  </p>
+  <p class="why">
+    <b>So the honest answer to “should Remuda add embeddings” is: not as a feature of its own.</b>
+    An embed pane — paste text, look at 768 numbers — flatters nobody and teaches nothing. It is
+    the kind of thing that gets built because the endpoint exists.
+  </p>
+  <p class="why">
+    <b>A correction to what I told you last time.</b> I said Remuda lets you pull an embedding model
+    and then silently does nothing useful with it. That was wrong — <code>ChatView.tsx:129</code>
+    already has an <code>EmbeddingGate</code> that names the model, says it has no
+    <code>completion</code> capability, and explains why there's no composer. That hole was closed
+    in round one. Nothing to fix.
+  </p>
+
+  <h3 class="sub">The one version that earns its place — and it is blocked on Bench</h3>
+  <p class="why">
+    Bench's changed/same is a <b>string diff</b>. That's the right default and it has one real
+    weakness: reword a sentence without changing its meaning and the row goes amber, so a run where
+    nothing meaningful moved still hands you six rows to read. An embedding of both answers gives
+    you the distance between them as a number.
+  </p>
+  <p class="why">
+    Crucially this is still <b>a measurement, not a judgement</b> — cosine distance says how far the
+    answer moved, never whether it got better. It stays on the right side of the no-LLM-judge line
+    the tuning spec draws.
+  </p>
+
+  <div class="winwrap">
+  <div class="win">
+    <div class="runbar">
+      <span>run 7 · against <span class="against">terse-v2 @ 14:22</span> · seed 40412</span>
+      <span class="spacer"></span>
+      <span class="tally"><span class="ch">2 changed</span><span class="sa">3 same</span></span>
+    </div>
+    <div style="background:var(--surface)">
+      <div class="simrow">
+        <span class="badge changed">Changed</span>
+        <span class="st">Rewrite this loop to bail early, and explain why in one line.</span>
+        <span class="simbar"><i style="width:96%"></i></span>
+        <span class="simval">0.96</span>
+      </div>
+      <div class="simrow">
+        <span class="badge changed">Changed</span>
+        <span class="st">Give me three names for a function that drains a queue.</span>
+        <span class="simbar"><i style="width:41%;background:var(--warn)"></i></span>
+        <span class="simval" style="color:var(--warn)">0.41</span>
+      </div>
+      <div class="simrow" style="border-bottom:0">
+        <span class="badge same">Same</span>
+        <span class="st">Explain a mutex to someone who writes only Python.</span>
+        <span class="simbar"><i style="width:100%"></i></span>
+        <span class="simval">1.00</span>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    Row 1 reworded and meant the same thing — <b>0.96</b>, skim it. Row 2 came back with genuinely
+    different names — <b>0.41</b>, read it properly. That column is the difference between a bench
+    you run and a bench you stop running.
+  </p>
+
+  <div class="choice">
+    <h4>the cost, stated up front</h4>
+    <p>
+      It needs a <b>second model resident</b> — an embedding model is 50–700 MB and has to be loaded
+      alongside the one under test. Remuda's load pane, fit predictor and runtime telemetry are all
+      written around one active model; that assumption would have to go, and the fit predictor would
+      need to account for a passenger. That is the real price, and it is not small.
+    </p>
+    <p class="cost">
+      <b>My recommendation:</b> don't decide this now. Build Bench with the string diff, run it for a
+      fortnight, and see whether the reword noise actually bothers you. If it does, this column is a
+      well-scoped follow-up with an obvious payoff. If it doesn't, you've saved yourself the
+      two-resident-models refactor. Either way there is nothing to build here today.
+    </p>
+  </div>
+</section>
+
+<!-- ═══════════════════════════ 5 · HELP ═══════════════════════════ -->
+<section class="sec" id="help">
+  <div class="num">05</div>
+  <h2>Help that is always there — three layers, none of them modal</h2>
+  <p class="why">
+    Remuda now has a chat, a Modelfile editor with three sub-views, an A/B compare, a tool
+    playground, a fit predictor, a runtime readout — and this round adds three more surfaces. A word
+    like <b>bench</b> means nothing until someone tells you, and a tooltip you have to hover to
+    discover is not telling anyone anything. So: three layers, each doing a different job, and
+    <b>a tour is not one of them</b> — a tour you watched last Tuesday cannot answer a question you
+    have today.
+  </p>
+
+  <h3 class="sub">Layer 1 — the empty state, where “what <em>is</em> a bench?” gets answered</h3>
+  <p class="why">
+    The best help costs nothing to find because you cannot avoid it. Every feature's first screen is
+    empty by definition, and an empty screen that explains itself is worth more than any tooltip.
+    Nobody reaches a bench without passing through this.
+  </p>
+
+  <div class="winwrap">
+  <div class="win">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="side-label">Benches</div>
+        <button class="sess active"><span class="stitle">Coding voice</span>
+          <span class="smodel">no prompts yet</span></button>
+        <div class="side-label spaced">Chats</div>
+        <button class="sess"><span class="stitle">Tuning the coding system prompt</span>
+          <span class="smodel"><span class="sdot"></span>qwen3.8-27b…q4</span></button>
+      </div>
+      <div class="main">
+        <div class="benchhead">
+          <b>Coding voice</b>
+          <span class="bmeta">empty</span>
+          <span class="spacer"></span>
+          <button class="qbtn" title="About this pane">?</button>
+        </div>
+        <div class="emptyfeat">
+          <span class="ef-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v4M15 3v4M4 9h16M6 9v10a2 2 0 002 2h8a2 2 0 002-2V9"/><path d="M9 14h6"/></svg></span>
+          <h3>A bench is a set of prompts you re-run after a change</h3>
+          <p>
+            Every edit to a Modelfile changes <em>all</em> of a model's behaviour, not just the part
+            you were working on. A bench replays your saved prompts against the new version and
+            shows you which answers moved — so you notice the thing you weren't looking at.
+          </p>
+          <div class="ef-how">
+            <div><b>1</b><span>Find a prompt worth keeping in any chat, and choose <b style="font-family:var(--ui);color:var(--ink)">Add to bench</b> on the message.</span></div>
+            <div><b>2</b><span>Save a Modelfile, then press <b style="font-family:var(--ui);color:var(--ink)">Run all</b>. Every prompt runs on one pinned seed.</span></div>
+            <div><b>3</b><span>Read only the rows badged <b style="font-family:var(--ui);color:var(--ink)">Changed</b>. The rest answered the same as last time.</span></div>
+          </div>
+          <p style="font-size:12px;color:var(--faint);margin-top:4px">Remuda diffs the answers. It never scores them.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <h3 class="sub">Layer 2 — “About this pane”, one <code>?</code> per surface</h3>
+  <p class="why">
+    A <code>?</code> in every pane header, toggling an explainer <b>inline</b> — it pushes the pane
+    down rather than floating over it, so it can't cover the thing it's describing and it can't be
+    dismissed by a stray click. Same three beats every time: <b>what it is</b>, <b>why you'd use
+    it</b>, <b>how</b>. Open/closed is remembered per pane, so an experienced user closes each one
+    once and never sees it again.
+  </p>
+
+  <div class="winwrap">
+  <div class="win">
+    <div class="pane-h" style="background:var(--surface)">
+      <b>Format</b><span class="hint">this chat only</span>
+      <span class="spacer"></span>
+      <div class="seg"><button class="on">Schema</button><button>json</button><button>off</button></div>
+      <button class="qbtn on">?</button>
+    </div>
+    <div class="helpstrip">
+      <span class="hs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 4H6a2 2 0 00-2 2v4l-2 2 2 2v4a2 2 0 002 2h2M16 4h2a2 2 0 012 2v4l2 2-2 2v4a2 2 0 01-2 2h-2"/></svg></span>
+      <div class="hs-b">
+        <h4>Format — force the reply into a shape</h4>
+        <p>
+          Ollama restricts what the model is allowed to say next so that the answer always fits the
+          JSON Schema you write here. It isn't an instruction the model can ignore and it isn't a
+          retry — a malformed reply is simply unreachable.
+        </p>
+        <ul class="helpsteps">
+          <li><b>1</b><span>Write or paste a JSON Schema on the left.</span></li>
+          <li><b>2</b><span>Chat as normal — every reply comes back in that shape.</span></li>
+          <li><b>3</b><span>The card under each reply checks it field by field against your schema.</span></li>
+        </ul>
+        <p class="note">Applies to this chat only. There is no Modelfile setting for it, so there is nothing to bake in.</p>
+      </div>
+      <button class="qbtn hs-x">✕</button>
+    </div>
+    <div class="pane-h" style="background:var(--surface);border-top:1px solid var(--border)">
+      <div class="seg"><button>Form</button><button>Raw</button><button class="on">Prompt</button><button>History</button></div>
+      <span class="spacer"></span>
+      <button class="qbtn on">?</button>
+    </div>
+    <div class="helpstrip">
+      <span class="hs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M4 12h10M4 17h13"/></svg></span>
+      <div class="hs-b">
+        <h4>Prompt — the exact text the model receives</h4>
+        <p>
+          Your <code>SYSTEM</code> and your messages don't reach the model as you wrote them. Ollama
+          pours them into the model's own template, which adds the control tokens that family
+          expects. This pane shows the result.
+        </p>
+        <ul class="helpsteps">
+          <li><b>1</b><span>Left is the template Ollama reports; the highlighted words are its slots.</span></li>
+          <li><b>2</b><span>Right is the same template with your current chat filled in.</span></li>
+          <li><b>3</b><span>Watch the <b style="font-family:var(--ui);color:var(--ink)">references .System</b> check — if it goes red, your system prompt is being dropped before the model ever sees it.</span></li>
+        </ul>
+      </div>
+      <button class="qbtn hs-x">✕</button>
+    </div>
+    <div class="pane-h" style="background:var(--surface);border-top:1px solid var(--border)">
+      <b>Coding voice</b><span class="hint">6 prompts · run 7</span>
+      <span class="spacer"></span>
+      <button class="qbtn on">?</button>
+    </div>
+    <div class="helpstrip" style="border-bottom:0">
+      <span class="hs-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 3v4M15 3v4M4 9h16M6 9v10a2 2 0 002 2h8a2 2 0 002-2V9"/></svg></span>
+      <div class="hs-b">
+        <h4>Bench — re-run your prompts after a change</h4>
+        <p>
+          A saved set of prompts, replayed against the current model on one click, each answer
+          diffed against what it returned last run. It is how you catch the behaviour you broke
+          while fixing the behaviour you meant to.
+        </p>
+        <ul class="helpsteps">
+          <li><b>1</b><span>Add prompts from any chat — hover a message, <b style="font-family:var(--ui);color:var(--ink)">Add to bench</b>.</span></li>
+          <li><b>2</b><span>Press <b style="font-family:var(--ui);color:var(--ink)">Run all</b> after saving a Modelfile.</span></li>
+          <li><b>3</b><span>Read the rows badged <b style="font-family:var(--ui);color:var(--ink)">Changed</b>; expand one to see both answers word-diffed.</span></li>
+        </ul>
+        <p class="note">Same or changed is a diff, not a verdict — Remuda never says one answer is better than another.</p>
+      </div>
+      <button class="qbtn hs-x">✕</button>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    Three panes shown stacked so you can compare the pattern. In the app you'd see one at a time,
+    and only if you'd left that pane's <code>?</code> open.
+  </p>
+
+  <h3 class="sub">Layer 3 — a glossary for the machine words</h3>
+  <p class="why">
+    The identity of the app is human words in Inter and machine words in Plex Mono
+    (<code>SPEC §4</code>). That split is already doing the work — so make <b>every machine word a
+    definition</b>. Dotted underline, and the definition opens on hover, on focus, <em>and</em> on
+    click, so it isn't hover-only for keyboard users. One shared glossary, one component, every
+    surface.
+  </p>
+
+  <div class="winwrap">
+  <div class="win">
+    <div style="padding:20px 22px 30px;background:var(--surface);min-height:310px">
+      <div style="font-size:13px;color:var(--ink-2);line-height:2.1;max-width:64ch">
+        Context length —
+        <span class="termwrap"><code class="term">num_ctx</code>
+          <span class="termpop">
+            <b>num_ctx</b>
+            <p>How much text the model can hold at once, counted in tokens — the conversation so far
+              plus the reply it's about to write. Raising it uses more memory, and Ollama has to
+              reload the model to change it.</p>
+            <p class="tp-more">A token is roughly ¾ of a word.</p>
+          </span>
+        </span>
+        &nbsp;· estimated fit uses the
+        <span class="termwrap"><code class="term">KV cache</code></span> size ·
+        forked variants can be <span class="termwrap"><code class="term">quantised</code></span> on save
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    <b>Cheap to build and it compounds.</b> One <code>&lt;Term&gt;</code> component plus a flat
+    glossary file. Every term you define is defined everywhere it appears — the load pane, the
+    editor form, the run controls, the fit predictor — because they all render the same component.
+  </p>
+</section>
+
+<!-- ═══════════════════════════ 6 · TOUR ═══════════════════════════ -->
+<section class="sec" id="tour">
+  <div class="num">06</div>
+  <h2>The guided tour — offered on first run, re-runnable from Settings</h2>
+  <p class="why">
+    The three layers above answer “what is this thing in front of me?”. They don't answer the
+    question a brand-new user actually has, which is <b>“what is this app for, and in what
+    order do I do things?”</b> That's a tour's job, and it's the only job it's good at — so it
+    should be short, skippable, and never the only place a fact lives.
+  </p>
+  <p class="why">
+    <b>Four rules it has to obey.</b> It is <em>offered</em>, never forced — a dismissible card, not
+    a modal you have to escape before you can use the app you just installed. It runs on the
+    <em>real</em> UI with real panes lighting up, not a slideshow of pictures. It must survive
+    <b>Ollama not being installed</b>, which on a first launch is the likeliest state of the world,
+    so no step may depend on a loaded model. And it is <b>five steps</b>, because nobody finishes
+    fifteen.
+  </p>
+
+  <h3 class="sub">The offer, first launch</h3>
+  <div class="winwrap">
+  <div class="win">
+    <div class="firstrun">
+      <span class="fr-ic"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"/></svg></span>
+      <div class="fr-b">
+        <b>First time here? Remuda in five steps.</b>
+        <p>About two minutes. You can stop anywhere, and re-run it later from Settings.</p>
+      </div>
+      <button class="btn sm ghost">Not now</button>
+      <button class="btn sm primary">Take the tour</button>
+    </div>
+    <div class="gate" role="note">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01M10.3 3.9L1.8 18a2 2 0 002 3h17a2 2 0 001.7-3L13.7 3.9a2 2 0 00-3.4 0z"/></svg>
+      <div>
+        <b>Ollama isn't running.</b>
+        <p>The tour still works — it explains what each part of Remuda is for. You'll need Ollama
+          started before you can load a model and chat.</p>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    <b>This pairing is the whole point.</b> A first launch with no Ollama is the most likely first
+    launch there is, and it's exactly when a tour that demands a loaded model falls over. This one
+    doesn't, and it says so.
+  </p>
+
+  <h3 class="sub">Step 3 of 5 — Bench</h3>
+  <div class="winwrap">
+  <div class="win tourstage">
+    <div class="shell">
+      <div class="sidebar">
+        <div class="side-label">Benches</div>
+        <button class="sess"><span class="stitle">Coding voice</span><span class="smodel">6 prompts · run 7</span></button>
+        <button class="sess"><span class="stitle">Refusals &amp; edge cases</span><span class="smodel">4 prompts · run 2</span></button>
+        <div class="side-label spaced">Chats</div>
+        <button class="sess"><span class="stitle">Tuning the coding system prompt</span><span class="smodel">qwen3.8-27b…q4</span></button>
+      </div>
+      <div class="main" style="min-height:342px">
+        <div class="benchhead"><b>Coding voice</b><span class="bmeta">6 prompts</span><span class="spacer"></span><button class="btn sm primary">Run all</button></div>
+        <div class="runbar"><span>run 7 · against <span class="against">terse-v2 @ 14:22</span></span><span class="spacer"></span><span class="tally"><span class="ch">2 changed</span><span class="sa">3 same</span></span></div>
+      </div>
+    </div>
+    <div class="tour-spot" style="left:8px;top:8px;width:196px;height:96px"></div>
+    <div class="tour-card" style="left:236px;top:74px">
+      <div class="tc-b">
+        <div class="tc-step">Step 3 of 5</div>
+        <h4>Benches — your re-run list</h4>
+        <p>
+          When you change a Modelfile you change everything the model does, not just the bit you
+          were fixing. A <b>bench</b> is a handful of prompts you keep, replay after each save, and
+          check for answers that moved. Add one from any chat message.
+        </p>
+      </div>
+      <div class="tc-f">
+        <span class="tour-dots"><i></i><i></i><i class="on"></i><i></i><i></i></span>
+        <span class="spacer"></span>
+        <button class="btn ghost sm">Skip</button>
+        <button class="btn sm">Back</button>
+        <button class="btn sm primary">Next</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <h3 class="sub">Step 4 of 5 — Format</h3>
+  <div class="winwrap">
+  <div class="win tourstage">
+    <div class="shell">
+      <div class="main" style="min-height:300px">
+        <div class="tabs"><button class="tab active">Chat</button><button class="tab">Modelfile</button><button class="tab">Tools</button></div>
+        <div style="flex:1"></div>
+        <div class="composer">
+          <div class="box"><div class="fake-input">Ask this model something…</div>
+            <button class="send"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4z"/></svg></button></div>
+          <div class="notebar">
+            <button class="runpill">Format · off</button>
+            <button class="runpill">Run controls</button>
+            <span class="spacer"></span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="tour-spot" style="left:22px;bottom:16px;width:118px;height:25px"></div>
+    <div class="tour-card" style="left:170px;bottom:14px">
+      <div class="tc-b">
+        <div class="tc-step">Step 4 of 5</div>
+        <h4>Format — make the reply a shape</h4>
+        <p>
+          Give Remuda a JSON schema and the model is only ever allowed to produce text that fits it.
+          Useful when you want data back rather than prose, and it saves you writing “reply in JSON
+          like this…” into your system prompt, where it drifts.
+        </p>
+      </div>
+      <div class="tc-f">
+        <span class="tour-dots"><i></i><i></i><i></i><i class="on"></i><i></i></span>
+        <span class="spacer"></span>
+        <button class="btn ghost sm">Skip</button>
+        <button class="btn sm">Back</button>
+        <button class="btn sm primary">Next</button>
+      </div>
+    </div>
+  </div>
+  </div>
+
+  <h3 class="sub">Step 5 of 5 — Prompt</h3>
+  <div class="winwrap">
+  <div class="win tourstage">
+    <div class="shell">
+      <div class="main" style="min-height:296px">
+        <div class="tabs"><button class="tab">Chat</button><button class="tab active">Modelfile</button><button class="tab">Tools</button></div>
+        <div class="pane-h" style="background:var(--surface)">
+          <div class="seg"><button>Form</button><button>Raw</button><button class="on">Prompt</button><button>History</button></div>
+          <span class="spacer"></span>
+          <span class="hint">rendering: <b style="color:var(--ink-2)">Tuning the coding system prompt</b></span>
+        </div>
+        <div style="flex:1"></div>
+      </div>
+    </div>
+    <div class="tour-spot" style="left:24px;top:52px;width:214px;height:30px"></div>
+    <div class="tour-card" style="left:270px;top:44px">
+      <div class="tc-b">
+        <div class="tc-step">Step 5 of 5</div>
+        <h4>Prompt — see what the model is actually sent</h4>
+        <p>
+          Your system prompt doesn't reach the model as you typed it; Ollama wraps it in the model's
+          own template first. If a system prompt ever seems to be ignored, look here — you'll see
+          whether it arrived at all.
+        </p>
+      </div>
+      <div class="tc-f">
+        <span class="tour-dots"><i></i><i></i><i></i><i></i><i class="on"></i></span>
+        <span class="spacer"></span>
+        <button class="btn sm">Back</button>
+        <button class="btn sm primary">Done</button>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    Steps 1 and 2, not drawn: the <b>model control</b> in the top nav (pick a model, load it — the
+    thing you do before anything else works) and the <b>Modelfile editor</b> beside the chat, which
+    is the loop the app exists for.
+  </p>
+
+  <h3 class="sub">And where it lives afterwards</h3>
+  <div class="winwrap">
+  <div class="win">
+    <div class="pane-h" style="background:var(--surface)"><b>Settings</b><span class="spacer"></span><span class="hint">Help</span></div>
+    <div style="background:var(--surface)">
+      <div class="setrow">
+        <div class="sr-b">
+          <b>Guided tour</b>
+          <p>Five steps through the model control, the Modelfile editor, benches, format and the rendered prompt.</p>
+        </div>
+        <button class="btn sm">Run the tour</button>
+      </div>
+      <div class="setrow">
+        <div class="sr-b">
+          <b>Pane explainers</b>
+          <p>The <code>?</code> panel at the top of each pane. Closing one keeps it closed; this brings them all back.</p>
+        </div>
+        <button class="btn sm">Reopen all</button>
+      </div>
+      <div class="setrow">
+        <div class="sr-b">
+          <b>Glossary</b>
+          <p>Every machine word Remuda uses — <code>num_ctx</code>, <code>KV cache</code>, <code>quantise</code>, <code>keep_alive</code> — with what it means here.</p>
+        </div>
+        <button class="btn sm">Open</button>
+      </div>
+    </div>
+  </div>
+  </div>
+  <p class="caption">
+    <b>“Reopen all” is the row that matters.</b> Layer 2 remembers that you closed an explainer,
+    which is right for you and wrong for the person you hand the laptop to. One button undoes every
+    dismissal, and it costs a boolean.
+  </p>
+</section>
+
+<!-- ═══════════════════════════ ranked ═══════════════════════════ -->
+<section class="sec">
+  <div class="num">—</div>
+  <h2>Ranked, and what's deliberately not here</h2>
+  <table class="rank">
+    <thead><tr><th>Feature</th><th>Why it's worth it</th><th>New API surface</th><th>Size</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Load-time <code>num_gpu</code><br /><span style="font-weight:400;color:var(--muted);font-size:12px">+ the unmodelled parameters</span></td>
+        <td>The fit predictor already tells you a model will spill to system RAM. Today the only answer is to eject. This gives the warning an action.</td>
+        <td><code>options.num_gpu</code> on the load call</td>
+        <td><span class="tag s">small</span></td>
+      </tr>
+      <tr>
+        <td>Constrained output (<code>format</code>)</td>
+        <td>Deletes a whole class of system prompt. The schema validator and its card already exist in the Tools tab.</td>
+        <td><code>format</code> on <code>/api/chat</code></td>
+        <td><span class="tag m">medium</span></td>
+      </tr>
+      <tr>
+        <td>Bench</td>
+        <td>The tuning loop's missing half — you can change a Modelfile but not tell what else changed. Already specced as T5.</td>
+        <td>none — <code>/api/chat</code> in a loop</td>
+        <td><span class="tag m">medium</span></td>
+      </tr>
+      <tr>
+        <td>Rendered prompt</td>
+        <td>Most differentiating of the four. Nothing else in this space shows you the string the model receives.</td>
+        <td><code>template</code> (already fetched), <code>raw:true</code></td>
+        <td><span class="tag l">large</span></td>
+      </tr>
+      <tr>
+        <td>Help — the three layers</td>
+        <td>Empty states, a <code>?</code> per pane, and a glossary. Prerequisite for everything above: a feature nobody can name is a feature nobody uses.</td>
+        <td>none</td>
+        <td><span class="tag s">small</span></td>
+      </tr>
+      <tr>
+        <td>Guided tour</td>
+        <td>Answers “what is this app for and in what order”, which the per-pane help can't. Five steps, offered not forced.</td>
+        <td>none</td>
+        <td><span class="tag m">medium</span></td>
+      </tr>
+      <tr>
+        <td>Bench similarity</td>
+        <td>Only if Bench's string diff proves too noisy in practice. Costs a second resident model.</td>
+        <td><code>/api/embed</code></td>
+        <td><span class="tag l">large</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="skip">
+    <h3>Ruled out for now — your call, recorded here so it isn't re-proposed</h3>
+    <ul>
+      <li><b>Cloud models</b> (<code>:cloud</code> tags proxied through the local server). Needs <code>ollama signin</code>. Not doing cloud.</li>
+      <li><b>Push / publish</b> (<code>POST /api/push</code>). Needs a signed-in namespace. Not doing auth.</li>
+      <li><b>Web search / fetch as executable tools</b> (<code>ollama.com/api/web_search</code>). Needs an API key and sends prompts off the machine. Not doing keys.</li>
+      <li><b>One worth revisiting when auth is on the table:</b> GGUF and Safetensors import via <code>/api/blobs</code>, plus LoRA <code>adapters</code>. It needs no account at all — it was only ever deferred by <code>SPEC §12.5</code>. There is a live sharp edge today: <code>modelfile/parse.ts</code> happily parses an <code>ADAPTER</code> line and <code>toCreateRequest</code> then throws on it, so such a Modelfile opens and cannot be saved.</li>
+    </ul>
+  </div>
+</section>
+
+</div>
+</body>
+</html>
