@@ -224,3 +224,57 @@ each targeted component.
 ## Build log
 
 Updated at the end of each wave, per the working agreement.
+
+### Wave 1 — R1 `num_gpu` + R5 layers 2/3 · complete, all gates green
+
+**1A [sonnet-5] — R1.** `api/types.ts`, `api/client.ts`, `ui/LoadPane.tsx`
+(+`.css`), `ui/test/FakeClient.ts`.
+
+- `numGpu` added to `RunOptions` and `RUN_OPTION_KEYS`; `load()` widened.
+  Unset is omitted; `0` is sent, because "no layers on the GPU" is a real
+  instruction and not the same as "you decide".
+- The control hides entirely when `archParams` is null — no known
+  `blockCount` means no honest ceiling to offer, the same principle the fit
+  predictor already follows by staying silent rather than guessing.
+- `exportRequest.ts` needed no functional change: it maps over the shared
+  `RUN_OPTION_KEYS`, so `num_gpu` flows through in lockstep. Covered by test
+  rather than assumed.
+
+**1B [opus-5] — R5 layers 2 and 3.** New `app/src/help/`, no existing file
+touched.
+
+- `PaneHelp` renders in normal flow (`<section role="region">`, no `position`
+  in its CSS) with a test asserting it precedes the pane body in document
+  order — the constraint that keeps it from covering what it describes.
+- `Term`'s trigger is a real `<button>`, so click and keyboard focus both
+  reach it for free; hover is layered on top.
+- Dismissal persists under `remuda.help.v1` behind a defensive parse; six
+  corrupt-payload cases are tested. A change-listener set keeps the header
+  `?`, the strip's `✕` and Settings → *Reopen all* in step without
+  prop-drilling.
+
+**Two things fixed in the main thread, both cross-boundary by nature.**
+
+1. **`Term` closed on the first click.** The tests fired `click` alone, which
+   in jsdom fires neither `mouseEnter` nor `focus`. A real mouse fires all
+   three in order — and because `onFocus` also *pinned*, the click that
+   followed read as a second click and closed the popover it had just
+   opened. Focus now opens without pinning; keyboard focus needs no pin,
+   since it holds the popover for exactly as long as it lasts. Two tests were
+   added that fire the full sequence, and both were confirmed to fail against
+   the old code before the fix went in.
+
+2. **`RunControls.tsx` typed three maps as `Record<keyof RunOptions, …>`.**
+   Adding any domain-wide run option therefore demanded a popover label and
+   an "inherited" fallback for it — meaningless for a load-time parameter.
+   The maps are now keyed on `PresentedKey`, the popover's own curated list,
+   which is what they were always indexed by. 1A had correctly refused to
+   touch the file and reported the conflict instead of widening its own
+   scope.
+   1A had also inlined `client.load(...)` inside `LoadPane` to avoid editing
+   `state.tsx`; the store's `load` is now widened to carry `numGpu` and the
+   pane routes through it again.
+
+**Gates:** `npm run typecheck`, `npm test` (566 passed, 40 files),
+`npm run build` — all clean. Pushed to the draft PR for the macOS and Linux
+legs.

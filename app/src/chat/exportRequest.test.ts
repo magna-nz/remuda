@@ -69,6 +69,16 @@ describe("asCurl", () => {
     expect(bodyFromCurl(command).options).toEqual({ temperature: 0.4, seed: 4417 });
   });
 
+  // R1: num_gpu is load-time, so the UI never actually populates it on a
+  // captured chat reply's options — but the wire mapping is generic over
+  // RUN_OPTION_KEYS (api/types.ts), same as client.ts's wireOptions, so it
+  // has to carry num_gpu correctly if it's ever present. 0 is the case that
+  // matters: it must not be dropped as if it were unset.
+  it("carries num_gpu:0 through as a real value, not as unset", () => {
+    const command = asCurl(fixture({ options: { numGpu: 0 } }));
+    expect(bodyFromCurl(command).options).toEqual({ num_gpu: 0 });
+  });
+
   it("carries images on the message but never emits thinking", () => {
     const command = asCurl(
       fixture({
@@ -124,6 +134,11 @@ describe("asOllamaRun", () => {
   it("emits no /set parameter lines when no options are set", () => {
     const command = asOllamaRun(fixture());
     expect(command).not.toContain("/set parameter");
+  });
+
+  it("emits /set parameter num_gpu 0 rather than dropping a deliberate 0", () => {
+    const command = asOllamaRun(fixture({ options: { numGpu: 0 } }));
+    expect(command).toContain("/set parameter num_gpu 0");
   });
 
   it("annotates think as not reproducible instead of dropping it silently", () => {

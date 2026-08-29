@@ -266,7 +266,13 @@ export interface RemudaContextValue {
   /** Re-fetch the installed model list. */
   refreshModels: () => Promise<void>;
   /** Load a model with the configured keep_alive, then refresh the model list. */
-  load: (tag: string, numCtx?: number) => Promise<void>;
+  /**
+   * `numCtx` and `numGpu` are both load-time: they size the KV cache and the
+   * GPU layer split the runner allocates, so neither can be changed without
+   * a reload. Unset means Ollama's own choice — and for `numGpu`, unset is
+   * not the same as `0`, which asks for no layers on the GPU at all.
+   */
+  load: (tag: string, numCtx?: number, numGpu?: number) => Promise<void>;
   /** Free one model's weights (keep_alive: 0), then refresh the list. */
   unload: (tag: string) => Promise<void>;
   /** Free every resident model, then refresh the list once. */
@@ -788,8 +794,8 @@ export function RemudaProvider({
   }, [checkHealth, pollIntervalMs]);
 
   const load = useCallback(
-    async (tag: string, numCtx?: number) => {
-      await client.load(tag, keepAlive, undefined, numCtx);
+    async (tag: string, numCtx?: number, numGpu?: number) => {
+      await client.load(tag, keepAlive, undefined, numCtx, numGpu);
       await refreshModels();
     },
     [client, keepAlive, refreshModels],

@@ -227,6 +227,7 @@ function FitPanel({
   trainedCtx,
   resident,
   onCtxChosen,
+  onNumGpuChosen,
 }: {
   client: OllamaClient;
   tag: string;
@@ -242,10 +243,18 @@ function FitPanel({
    * predictor changing the thing it claims only to predict.
    */
   onCtxChosen: (ctx: number) => void;
+  /**
+   * Fires when the user picks a GPU layer count, or resets back to Auto
+   * (`undefined`). Until it fires the load sends no `num_gpu` at all (R1).
+   */
+  onNumGpuChosen: (numGpu: number | undefined) => void;
 }) {
   const [archParams, setArchParams] = useState<ArchParams | null>(null);
   const [hostMem, setHostMem] = useState<HostStats | null>(null);
   const [ctx, setCtx] = useState(() => Math.min(DEFAULT_CTX, trainedCtx ?? DEFAULT_CTX));
+  /** null = Auto (nothing sent) — the only state that can offer a GPU-layer
+   * range at all, since the range's ceiling is archParams.blockCount. */
+  const [numGpu, setNumGpu] = useState<number | null>(null);
   /** Bumped after recordFitObservation writes, so the "Calibrated" copy
    * reflects it immediately rather than waiting for an unrelated re-render. */
   const [calibrationVersion, bumpCalibration] = useReducer((n: number) => n + 1, 0);
@@ -373,6 +382,7 @@ function FitPanel({
   void calibrationVersion;
 
   return (
+    <>
     <div className="pfield">
       <div className="ctxhead">
         <label htmlFor="pane-ctx">Context</label>
@@ -419,6 +429,60 @@ function FitPanel({
         <span className="r3">{r3}</span>
       </div>
     </div>
+    {/* R1: caps how many transformer layers the runner offloads to the
+        GPU — a response to the spill warning above, other than Eject. Needs
+        a known layer count to offer a range at all, so archParams === null
+        (an older server, or one that didn't report enough) hides it rather
+        than guessing a ceiling. */}
+    {archParams !== null && (
+      <div className="pfield">
+        <div className="ctxhead">
+          <label htmlFor="pane-numgpu">GPU layers</label>
+          <span className="cv">
+            {numGpu === null ? "Auto" : `${numGpu} / ${archParams.blockCount}`}
+          </span>
+        </div>
+        <div className="track">
+          <input
+            type="range"
+            id="pane-numgpu"
+            className="ctxrange"
+            min={0}
+            max={archParams.blockCount}
+            step={1}
+            value={numGpu ?? archParams.blockCount}
+            onChange={(e) => {
+              const next = Number(e.target.value);
+              setNumGpu(next);
+              onNumGpuChosen(next);
+            }}
+            aria-label="GPU layers"
+          />
+        </div>
+        <div className="gpuhint">
+          <span>
+            {numGpu === null
+              ? "Auto lets Ollama decide how many layers fit on the GPU."
+              : numGpu === 0
+                ? "No layers on the GPU — the model runs entirely on CPU."
+                : `${numGpu} of ${archParams.blockCount} transformer layers on the GPU.`}
+          </span>
+          {numGpu !== null && (
+            <button
+              type="button"
+              className="btn sm ghost"
+              onClick={() => {
+                setNumGpu(null);
+                onNumGpuChosen(undefined);
+              }}
+            >
+              Reset to auto
+            </button>
+          )}
+        </div>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -428,13 +492,13 @@ export function LoadPane() {
     groups,
     loaded,
     running,
-    load,
     loadPaneOpen,
     closeLoadPane,
     status,
     openEditorForNew,
     client,
     refreshModels,
+    load,
     confirmDeleteModel,
     setView,
     unload,
@@ -475,11 +539,19 @@ export function LoadPane() {
    * Ollama/the Modelfile decides, as before (SPEC-tuning T4).
    */
   const [chosenCtx, setChosenCtx] = useState<number | null>(null);
+  /**
+   * The GPU layer count the user deliberately chose, or null for "Auto" —
+   * in which case the load sends no `num_gpu` at all and Ollama's own
+   * layer-fit heuristic decides (R1).
+   */
+  const [chosenNumGpu, setChosenNumGpu] = useState<number | null>(null);
 
-  // Picking a different model drops any context the user chose for the last
-  // one — carrying it across would apply one model's ceiling to another's.
+  // Picking a different model drops any context/layer choice the user made
+  // for the last one — carrying it across would apply one model's ceiling
+  // (or block count) to another's.
   useEffect(() => {
     setChosenCtx(null);
+    setChosenNumGpu(null);
   }, [variantTag]);
   /** A tuning dropped by a quant switch, so the pane can say why. */
   const [droppedVariant, setDroppedVariant] = useState<string | null>(null);
@@ -574,7 +646,7 @@ export function LoadPane() {
     setPhase("loading");
     setLoadError(null);
     try {
-      await load(variantTag, chosenCtx ?? undefined);
+      await load(variantTag, chosenCtx ?? undefined, chosenNumGpu ?? undefined);
       setPhase("done");
       window.setTimeout(() => {
         closeLoadPane();
@@ -963,6 +1035,7 @@ export function LoadPane() {
                   trainedCtx={models.find((m) => m.tag === variantTag)?.contextLength ?? null}
                   resident={detailEntry}
                   onCtxChosen={setChosenCtx}
+                  onNumGpuChosen={(n) => setChosenNumGpu(n ?? null)}
                 />
               )}
 

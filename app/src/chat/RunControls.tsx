@@ -28,7 +28,20 @@ const RUN_OPTION_KEYS = [
   "numCtx",
 ] as const satisfies readonly (keyof RunOptions)[];
 
-const LABELS: Record<keyof RunOptions, string> = {
+/**
+ * The keys this popover actually presents.
+ *
+ * Deliberately narrower than `keyof RunOptions`. A run option can exist
+ * domain-wide without being a per-chat knob: `numGpu` is load-time, set in
+ * the load pane because changing it forces a reload, so it has no slider
+ * here and no sensible "inherited" starting position. Typing the maps below
+ * against the presented list rather than against `keyof RunOptions` is what
+ * stops every future load-time option from demanding a label and a fallback
+ * for a control that will never render.
+ */
+type PresentedKey = (typeof RUN_OPTION_KEYS)[number];
+
+const LABELS: Record<PresentedKey, string> = {
   temperature: "Temperature",
   topP: "Top P",
   topK: "Top K",
@@ -39,7 +52,7 @@ const LABELS: Record<keyof RunOptions, string> = {
 };
 
 /** Wire names, for the one-line note under a reply — what the request said. */
-const WIRE_NAMES: Record<keyof RunOptions, string> = {
+const WIRE_NAMES: Record<PresentedKey, string> = {
   temperature: "temperature",
   topP: "top_p",
   topK: "top_k",
@@ -83,7 +96,7 @@ const FALLBACKS = {
   seed: 0,
   numPredict: -1,
   numCtx: 4096,
-} as const satisfies Record<keyof RunOptions, number>;
+} as const satisfies Record<PresentedKey, number>;
 
 const DEFAULT_CTX_MAX = 131_072;
 
@@ -102,7 +115,7 @@ const DEFAULT_CTX_MAX = 131_072;
  * lane is already named an inch away by the popover's own header, and
  * repeating it on every knob would be noise.
  */
-function scopedId(scope: string | undefined, optionKey: keyof RunOptions): string {
+function scopedId(scope: string | undefined, optionKey: PresentedKey): string {
   if (scope === undefined) return `run-${optionKey}`;
   return `run-${scope.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-${optionKey}`;
 }
@@ -150,7 +163,7 @@ function KnobHeader({
 }
 
 function SliderKnob(props: {
-  optionKey: keyof RunOptions;
+  optionKey: PresentedKey;
   scope: string | undefined;
   min: number;
   max: number;
@@ -194,7 +207,7 @@ function SliderKnob(props: {
 }
 
 function NumberKnob(props: {
-  optionKey: keyof RunOptions;
+  optionKey: PresentedKey;
   scope: string | undefined;
   value: number | undefined;
   placeholder: string;

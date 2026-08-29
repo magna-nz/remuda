@@ -213,6 +213,12 @@ export interface RunOptions {
    * with a different memory footprint. The UI warns before applying it.
    */
   numCtx?: number;
+  /**
+   * Load-time, not sampling, like `numCtx`: caps how many transformer layers
+   * the runner offloads to the GPU, so it can only be set as the model
+   * loads. Belongs in the load pane, not the per-chat run controls.
+   */
+  numGpu?: number;
 }
 
 /**
@@ -229,6 +235,7 @@ export const RUN_OPTION_KEYS: Array<[keyof RunOptions, string]> = [
   ["numPredict", "num_predict"],
   ["repeatPenalty", "repeat_penalty"],
   ["numCtx", "num_ctx"],
+  ["numGpu", "num_gpu"],
 ];
 
 /** One streamed progress event from POST /api/pull. */
@@ -299,15 +306,19 @@ export interface OllamaClient {
    * and the configured keep_alive. Resolves when the model is loaded.
    */
   /**
-   * `numCtx` is a load-time parameter, not a sampling one: it sizes the KV
-   * cache the runner allocates, so it can only be set as the model is loaded
-   * (SPEC §8). Omitted ⇒ Ollama's own default for the model.
+   * `numCtx` and `numGpu` are load-time parameters, not sampling ones: the
+   * first sizes the KV cache the runner allocates, the second caps how many
+   * transformer layers it offloads to the GPU, so both can only be set as
+   * the model is loaded (SPEC §8). Omitted ⇒ Ollama's own default for the
+   * model — for `numGpu` that means Ollama's own layer-fit heuristic, not
+   * "zero layers", which is why unset must never be sent as `0`.
    */
   load(
     tag: string,
     keepAlive: KeepAlive,
     signal?: AbortSignal,
     numCtx?: number,
+    numGpu?: number,
   ): Promise<void>;
   /** Unload: POST /api/generate with keep_alive: 0. */
   unload(tag: string): Promise<void>;

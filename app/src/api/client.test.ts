@@ -1075,6 +1075,55 @@ describe("load", () => {
 
     expect(bodyOf(stub.mock.calls[0][1])).not.toHaveProperty("options");
   });
+
+  it("omits num_gpu entirely when unset (R1: absent, never 0)", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, undefined, undefined);
+
+    const body = bodyOf(stub.mock.calls[0][1]);
+    expect(body).not.toHaveProperty("options");
+  });
+
+  it("sends num_gpu: 0 as a real instruction, not as unset", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, undefined, 0);
+
+    expect(bodyOf(stub.mock.calls[0][1])).toEqual({
+      model: "llama3.1:8b",
+      prompt: "",
+      keep_alive: "5m",
+      stream: false,
+      options: { num_gpu: 0 },
+    });
+  });
+
+  it("sends num_gpu as a load-time option when one is chosen", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, undefined, 24);
+
+    expect(bodyOf(stub.mock.calls[0][1])).toEqual({
+      model: "llama3.1:8b",
+      prompt: "",
+      keep_alive: "5m",
+      stream: false,
+      options: { num_gpu: 24 },
+    });
+  });
+
+  it("carries num_ctx and num_gpu together in the same options object", async () => {
+    const stub = stubFetch({
+      "/api/generate": () => jsonResponse({ done: true }),
+    });
+    await createClient().load("llama3.1:8b", "5m", undefined, 16384, 24);
+
+    expect(bodyOf(stub.mock.calls[0][1]).options).toEqual({ num_ctx: 16384, num_gpu: 24 });
+  });
 });
 
 /* ── chat: tool results going back out ─────────────────────────────────── */

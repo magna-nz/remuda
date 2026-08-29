@@ -110,7 +110,7 @@ export class FakeClient implements OllamaClient {
   failVersion: boolean;
   failLoad: string | undefined;
   failUnload: string | undefined;
-  loadCalls: { tag: string; keepAlive: KeepAlive; numCtx?: number }[] = [];
+  loadCalls: { tag: string; keepAlive: KeepAlive; numCtx?: number; numGpu?: number }[] = [];
   chatChunks: ChatChunk[] | undefined;
   failChat: string | undefined;
   /** Every chat() call, including the think level and run options it carried. */
@@ -268,13 +268,17 @@ export class FakeClient implements OllamaClient {
     keepAlive: KeepAlive,
     _signal?: AbortSignal,
     numCtx?: number,
+    numGpu?: number,
   ): Promise<void> {
     if (this.failLoad !== undefined) {
       throw new Error(this.failLoad);
     }
     // Recorded only when set, so existing `toEqual({ tag, keepAlive })`
     // assertions keep passing — an undefined key would fail them.
-    this.loadCalls.push(numCtx === undefined ? { tag, keepAlive } : { tag, keepAlive, numCtx });
+    const call: { tag: string; keepAlive: KeepAlive; numCtx?: number; numGpu?: number } = { tag, keepAlive };
+    if (numCtx !== undefined) call.numCtx = numCtx;
+    if (numGpu !== undefined) call.numGpu = numGpu;
+    this.loadCalls.push(call);
     // Additive, like Ollama: loading a model doesn't evict the others until
     // OLLAMA_MAX_LOADED_MODELS forces it.
     this.models = this.models.map((m) => (m.tag === tag ? { ...m, isLoaded: true } : m));

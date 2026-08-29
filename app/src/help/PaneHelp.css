@@ -1,0 +1,124 @@
+/* "About this pane" (R5 layer 2; mockup-proposals-2.html `.qbtn`/`.helpstrip`).
+   Every colour is an index.css token. */
+
+/* The `?` in a pane header, and the `✕` on the strip. */
+.qbtn {
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  border: 1px solid var(--border-strong);
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+}
+
+.qbtn:hover {
+  background: var(--ember-tint);
+  border-color: color-mix(in srgb, var(--ember) 45%, transparent);
+  color: var(--ember-ink);
+}
+
+.qbtn.on {
+  background: var(--ember);
+  border-color: transparent;
+  /* The mockup used a literal #fff here; --ink is the token for text on a
+     brand fill and is near enough to white to read the same. */
+  color: var(--ink);
+}
+
+.qbtn:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+/*
+ * The strip. Deliberately has no `position` and no transform: it is a normal
+ * block in the pane's flow, so it pushes the pane's content down instead of
+ * covering it (R5). If this ever grows a `position: absolute`, it has become
+ * the popover the spec rejected.
+ */
+.helpstrip {
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--ember-tint) 40%, var(--surface));
+  padding: 13px 16px 14px;
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+}
+
+.helpstrip .hs-ic {
+  width: 26px;
+  height: 26px;
+  border-radius: 8px;
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid color-mix(in srgb, var(--ember) 34%, transparent);
+}
+
+.helpstrip .hs-ic svg {
+  width: 14px;
+  height: 14px;
+}
+
+.helpstrip .hs-b {
+  min-width: 0;
+  flex: 1;
+}
+
+.helpstrip h4 {
+  font-size: 12.5px;
+  color: var(--ink);
+}
+
+.helpstrip p {
+  margin: 5px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.6;
+  max-width: 70ch;
+}
+
+.helpstrip p.note {
+  margin-top: 7px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.helpsteps {
+  margin: 9px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.helpsteps li {
+  display: flex;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.helpsteps li b {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ember-ink);
+  flex: 0 0 auto;
+  padding-top: 2px;
+  width: 13px;
+}
+
+.helpstrip .hs-x {
+  flex: 0 0 auto;
+}
