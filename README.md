@@ -79,10 +79,6 @@ glibc-based x86-64 Linux with GTK 3 and WebKitGTK 4.1 (Ubuntu 22.04 and newer, a
 Remuda is a client — it doesn't bundle models or run inference itself.
 <!-- PLACEHOLDER: Intel/universal macOS and Windows builds are planned -->
 
-On Linux the fit predictor stays quiet: it sizes a model against unified memory, and there is no
-supported way to read a discrete card's VRAM, so Remuda reports no prediction rather than a
-confident wrong one. Everything else works the same.
-
 ```sh
 brew install ollama
 ollama serve
@@ -100,17 +96,6 @@ That pulls in [magna-nz/homebrew-tap](https://github.com/magna-nz/homebrew-tap) 
 there's no separate `brew tap` step. The build is unsigned, but the cask clears the quarantine
 flag, so the app just launches. Then `brew upgrade --cask --force remuda` and `brew uninstall
 --cask remuda` do what you'd expect.
-
-<sub><code>--force</code> is not busywork. If <code>/Applications/Remuda.app</code> has gone
-missing while Homebrew still has it on the books — you moved it to the Trash, or a local build
-replaced it — then plain <code>install</code> and <code>upgrade</code> both dead-end on
-<em>"It seems the App source '/Applications/Remuda.app' is not there"</em>, because the upgrade
-tries to move the old app back to staging before installing the new one. Nothing the cask
-declares can recover from that; <code>--force</code> is the only way through. The trade is that
-an existing <code>Remuda.app</code> gets overwritten rather than flagged.</sub>
-
-<sub>If macOS balks anyway, run
-<code>xattr -dr com.apple.quarantine /Applications/Remuda.app</code>.</sub>
 
 ### Linux
 
