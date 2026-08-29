@@ -90,7 +90,9 @@ export interface RunBenchmarkArgs {
 }
 
 function statsFrom(chunkStats: ChatChunk["stats"], ms: number): CellStats {
-  if (chunkStats === undefined) return { evalCount: 0, tokPerSec: null, ms };
+  // No stats from the server is not a count of zero. `ms` is still ours,
+  // measured here rather than reported, so it stays a real figure.
+  if (chunkStats === undefined) return { evalCount: null, tokPerSec: null, ms };
   const tokPerSec =
     chunkStats.evalDurationNs > 0
       ? Math.round(chunkStats.evalCount / (chunkStats.evalDurationNs / 1e9))

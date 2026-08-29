@@ -52,7 +52,12 @@ export interface Cell {
 }
 
 export interface CellStats {
-  evalCount: number;
+  /**
+   * null when the server reported no count. Absent, never zero: "0 tok"
+   * beside a full answer is a measurement the reader will act on, and no
+   * measurement was ever taken (SPEC §8).
+   */
+  evalCount: number | null;
   /** null when the server reported no usable duration. */
   tokPerSec: number | null;
   ms: number;

@@ -167,6 +167,27 @@ describe("adding and removing lanes", () => {
   });
 });
 
+describe("the two fields, labelled once at the top", () => {
+  it("heads the columns Model and Modelfile", () => {
+    renderEditor(ONE_LANE);
+    // "Modelfile", not "Configuration": it is what the chips, the glossary
+    // and the SPEC call this field, and R7 spends "configuration" on the
+    // whole lane rather than on half of it.
+    expect(screen.getByText("Model")).toBeInTheDocument();
+    expect(screen.getByText("Modelfile")).toBeInTheDocument();
+  });
+
+  it("hides those headings from assistive tech, which has the labels already", () => {
+    renderEditor(ONE_LANE);
+    // Each select carries its own aria-label, so an announced column would
+    // repeat the word without adding anything.
+    const head = screen.getByText("Model").closest("[aria-hidden]");
+    expect(head).not.toBeNull();
+    expect(screen.getByRole("combobox", { name: "Lane 1 model" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Lane 1 Modelfile" })).toBeInTheDocument();
+  });
+});
+
 describe("the chip label", () => {
   it("names the base model and the Modelfile, never the variant tag twice", () => {
     expect(laneChipLabel(ONE_LANE[0]!, CHOICES)).toBe("gemma-4-31b · Original");

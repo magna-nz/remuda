@@ -348,8 +348,10 @@ describe("runBenchmark", () => {
       now: () => (clock += 1200),
     });
     expect(run.cells[0]!.stats).toEqual({ evalCount: 84, tokPerSec: 42, ms: 1200 });
-    // No timings from the server is "we don't know", never a fabricated rate.
-    expect(run.cells[1]!.stats).toEqual({ evalCount: 0, tokPerSec: null, ms: 1200 });
+    // No timings from the server is "we don't know", never a fabricated rate
+    // — and the count it never sent is null for the same reason. `ms` stays
+    // a figure, because the runner measured that one itself.
+    expect(run.cells[1]!.stats).toEqual({ evalCount: null, tokPerSec: null, ms: 1200 });
   });
 
   it("keeps thinking apart from content", async () => {
@@ -378,5 +380,32 @@ describe("runBenchmark", () => {
     });
     expect(run.ranAt).toBe("2026-08-29T12:00:00.000Z");
     expect(run.id).not.toBe("");
+  });
+});
+
+describe("stats the server did not report", () => {
+  it("records no eval count rather than a count of zero", async () => {
+    // A final chunk with no `stats` block: an older server, or a stream that
+    // ended without one. "0 tok" under a full answer is a measurement the
+    // reader will act on, and nothing was ever measured (SPEC §8).
+    let b = createBenchmark("Voice", "gemma-4-31b:latest");
+    b = addPrompt(b, "one");
+    const { load, chat } = server({ reply: () => [{ content: "an answer", done: true }] });
+    const run = await runBenchmark({ benchmark: b, seed: 5, signal: never(), chat, load });
+
+    const stats = run.cells[0]?.stats;
+    expect(stats).toBeDefined();
+    expect(stats?.evalCount).toBeNull();
+    expect(stats?.tokPerSec).toBeNull();
+    // The duration is ours, measured here rather than reported, so it stays.
+    expect(typeof stats?.ms).toBe("number");
+  });
+
+  it("keeps a real zero when the server actually reported one", async () => {
+    let b = createBenchmark("Voice", "gemma-4-31b:latest");
+    b = addPrompt(b, "one");
+    const { load, chat } = server({ reply: () => answer("", 0) });
+    const run = await runBenchmark({ benchmark: b, seed: 5, signal: never(), chat, load });
+    expect(run.cells[0]?.stats?.evalCount).toBe(0);
   });
 });

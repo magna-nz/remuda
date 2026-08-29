@@ -142,7 +142,7 @@ function Column({
       </div>
       {cell?.stats !== undefined && (
         <div className="bfoot">
-          <span>{cell.stats.evalCount} tok</span>
+          {cell.stats.evalCount !== null && <span>{cell.stats.evalCount} tok</span>}
           {cell.stats.tokPerSec !== null && <span>{cell.stats.tokPerSec} tok/s</span>}
           <span>{formatDuration(cell)}</span>
         </div>

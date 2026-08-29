@@ -35,14 +35,24 @@
   outline-offset: 2px;
 }
 
+/* Fixed, not absolute: a term sits inside panes that scroll
+   (`.benchmarkview` is `overflow-y: auto`), and an absolutely positioned
+   popover is cropped by the nearest such ancestor the moment the word is
+   near its edge — the definition loses its last line and the reader has no
+   way to reach it. Viewport coordinates come from `placeTerm.ts`; `left`
+   and `top` are set inline, so the values here are only the pre-placement
+   fallback. `max-height` is set inline too, and the overflow below is the
+   guarantee that a long definition scrolls rather than runs off-screen. */
 .termpop {
-  position: absolute;
+  position: fixed;
   left: 0;
-  top: calc(100% + 7px);
+  top: 0;
   z-index: 40;
   display: block;
   width: 290px;
   max-width: 80vw;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 11px 13px;
   background: var(--surface-2);
   border: 1px solid var(--border-strong);

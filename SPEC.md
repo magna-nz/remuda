@@ -321,7 +321,7 @@ template does not reference `.System`. The template comes from the `/api/show`
 data already held, so this costs no new request. The renderer is a
 **documented subset** of Go's `text/template` — `if`, `range`, `.System`,
 `.Prompt`, `.Messages`, `.Role`, `.Content`, `.Tools` — and anything outside
-it renders as *"unsupported template action, showing the raw template"*
+it renders as *"Unsupported template action … — showing the raw template."*
 rather than a guess, because a wrong render is worse than an absent one.
 
 ## 5.5 Pull (global)

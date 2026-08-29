@@ -205,9 +205,21 @@ export function LaneEditor({
       <div className="le-h">
         <b>Lanes</b>
         <span className="le-note">
-          One configuration each. The same model with two different Modelfiles is a normal
-          setup, and the way you read what a Modelfile changed.
+          Pick a model and the Modelfile it runs. Add a lane for each setup you want to
+          compare.
         </span>
+      </div>
+      {/* Column headings, once, rather than a label per row. Hidden from
+          assistive tech because each select already carries its own
+          `aria-label` ("Lane 1 Modelfile"); announcing both would read the
+          column twice and say nothing new. */}
+      <div className="lane-head" aria-hidden="true">
+        <span className="lane-n" />
+        <div className="lane-pair-h">
+          <span>Model</span>
+          <span>Modelfile</span>
+        </div>
+        <span className="lane-x" />
       </div>
       <ol className="lanelist">
         {lanes.map((lane, index) => {
@@ -219,6 +231,10 @@ export function LaneEditor({
           return (
             <li key={lane.id} className="lanerow">
               <span className="lane-n">{name}</span>
+              {/* One capsule, two fields: a lane is a single configuration
+                  (SPEC §5.7), so it reads as one control with a divider
+                  rather than two that happen to sit side by side. */}
+              <div className="lane-pair">
               <select
                 className="lane-sel"
                 aria-label={`${name} model`}
@@ -250,6 +266,7 @@ export function LaneEditor({
                   </option>
                 ))}
               </select>
+              </div>
               <button
                 type="button"
                 className="lane-x"

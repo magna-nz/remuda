@@ -19,8 +19,9 @@
  * click pins, and only a pinned popover survives the pointer leaving — see
  * the note on `onFocus` for why focus is deliberately not a pin.
  */
-import { useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode, useLayoutEffect } from "react";
 import "./Term.css";
+import { availableHeight, placeTerm } from "./placeTerm";
 import { lookupTerm } from "./glossary";
 
 export interface TermProps {
@@ -43,7 +44,14 @@ export function Term({ name, children, className }: TermProps) {
   const entry = lookupTerm(name);
   const popoverId = useId();
   const wrapRef = useRef<HTMLSpanElement>(null);
+  const popRef = useRef<HTMLSpanElement>(null);
   const [open, setOpen] = useState(false);
+  /**
+   * Viewport coordinates for the popover, measured once it has been laid
+   * out. Null means "not placed yet", and the popover stays hidden for that
+   * frame rather than flashing at the top-left corner.
+   */
+  const [pos, setPos] = useState<{ left: number; top: number } | null>(null);
   /**
    * Whether the popover was opened deliberately — by click or by focus —
    * rather than by the pointer passing over it. A deliberate open survives
@@ -55,6 +63,40 @@ export function Term({ name, children, className }: TermProps) {
     setOpen(false);
     setPinned(false);
   };
+
+  // Measure and place before paint. `useLayoutEffect` rather than
+  // `useEffect` so the popover is never painted at its unplaced position
+  // first — that reads as a flicker at the corner of the window.
+  useLayoutEffect(() => {
+    if (!open) {
+      setPos(null);
+      return;
+    }
+    const place = () => {
+      const wrap = wrapRef.current;
+      const pop = popRef.current;
+      if (wrap === null || pop === null) return;
+      const rect = wrap.getBoundingClientRect();
+      setPos(
+        placeTerm(
+          { left: rect.left, top: rect.top, width: rect.width, height: rect.height },
+          { width: window.innerWidth, height: window.innerHeight },
+          pop.offsetWidth,
+          pop.offsetHeight,
+        ),
+      );
+    };
+    place();
+    // Fixed coordinates do not follow the word, so anything that moves it
+    // re-places rather than leaving the popover behind. Capture catches
+    // scrolls in the pane, which do not bubble.
+    window.addEventListener("scroll", place, true);
+    window.addEventListener("resize", place);
+    return () => {
+      window.removeEventListener("scroll", place, true);
+      window.removeEventListener("resize", place);
+    };
+  }, [open]);
 
   // Escape closes from anywhere, not just from the trigger: the popover can
   // be open under the pointer while focus sits elsewhere entirely.
@@ -117,7 +159,18 @@ export function Term({ name, children, className }: TermProps) {
         {label}
       </button>
       {open && (
-        <span className="termpop" id={popoverId} role="tooltip">
+        <span
+          className="termpop"
+          id={popoverId}
+          role="tooltip"
+          ref={popRef}
+          style={{
+            left: pos?.left ?? 0,
+            top: pos?.top ?? 0,
+            maxHeight: availableHeight({ width: window.innerWidth, height: window.innerHeight }),
+            visibility: pos === null ? "hidden" : undefined,
+          }}
+        >
           <b>{entry.term}</b>
           <span className="tp-def">{entry.definition}</span>
           {entry.extra !== undefined && <span className="tp-more">{entry.extra}</span>}

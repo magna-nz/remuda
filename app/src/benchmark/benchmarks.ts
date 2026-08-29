@@ -240,11 +240,14 @@ export function latestRun(benchmark: Benchmark): BenchmarkRun | null {
 function coerceStats(value: unknown): CellStats | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
   const raw = value as Record<string, unknown>;
-  if (typeof raw.evalCount !== "number" || !Number.isFinite(raw.evalCount)) return undefined;
   if (typeof raw.ms !== "number" || !Number.isFinite(raw.ms)) return undefined;
+  // Both counts coerce to null rather than to 0: a payload that lost one is
+  // a figure nobody measured, not a figure that measured nothing.
+  const evalCount =
+    typeof raw.evalCount === "number" && Number.isFinite(raw.evalCount) ? raw.evalCount : null;
   const tokPerSec =
     typeof raw.tokPerSec === "number" && Number.isFinite(raw.tokPerSec) ? raw.tokPerSec : null;
-  return { evalCount: raw.evalCount, tokPerSec, ms: raw.ms };
+  return { evalCount, tokPerSec, ms: raw.ms };
 }
 
 /**
