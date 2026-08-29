@@ -285,7 +285,10 @@ function FitPanel({
     };
   }, []);
 
-  const usableVramBytes = hostMem !== null ? usableVramFromHostMemory(hostMem.memTotalBytes) : null;
+  const usableVramBytes =
+    hostMem !== null
+      ? usableVramFromHostMemory(hostMem.memTotalBytes, hostMem.memIsUnified)
+      : null;
   const calibrationFactor = calibrationFactorFor(tag);
   const calibrated = calibrationFactor !== null;
   const fit = predictFit({

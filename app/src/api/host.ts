@@ -30,6 +30,17 @@ export interface HostStats {
    */
   ollamaCpuPercent: number | null;
   /**
+   * Whether this machine's system memory *is* its VRAM — true only on Apple
+   * Silicon, where CPU and GPU share one pool.
+   *
+   * The fit predictor derives usable VRAM from `memTotalBytes`. That is only
+   * meaningful when this is true; on a discrete GPU the two numbers are
+   * unrelated, and the honest result is no prediction rather than a
+   * confident wrong one. Enforced in `usableVramFromHostMemory`, which
+   * returns null when this is false.
+   */
+  memIsUnified: boolean;
+  /**
    * Always `null`. Apple Silicon exposes no supported GPU-utilisation API, so
    * Rust never fills this in. Declared so the contract does not change when
    * one appears — until then the UI must omit the row.

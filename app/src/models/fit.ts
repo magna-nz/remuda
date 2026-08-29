@@ -46,8 +46,23 @@ export const RUNTIME_OVERHEAD_BYTES = 0;
  */
 export const APPLE_SILICON_VRAM_FRACTION = 0.75;
 
-/** Usable VRAM from total unified memory, per Ollama's Apple Silicon default. */
-export function usableVramFromHostMemory(memTotalBytes: number): number {
+/**
+ * Usable VRAM from total unified memory, per Ollama's Apple Silicon default.
+ *
+ * Returns `null` when memory is not unified. The fraction above describes a
+ * machine whose RAM *is* its VRAM; applied to a box with a discrete card it
+ * would report a 64 GB host as having 48 GB of VRAM when the card holds 8,
+ * and a five-minute model load is what a wrong answer costs.
+ *
+ * `memIsUnified` is a required parameter rather than an optional flag on
+ * purpose: the caller cannot forget to consider it, and there is no default
+ * that is safe on both platforms.
+ */
+export function usableVramFromHostMemory(
+  memTotalBytes: number,
+  memIsUnified: boolean,
+): number | null {
+  if (!memIsUnified) return null;
   return Math.max(0, memTotalBytes * APPLE_SILICON_VRAM_FRACTION);
 }
 

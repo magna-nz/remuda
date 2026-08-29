@@ -81,6 +81,7 @@ describe("RuntimePopover — telemetry present", () => {
           memTotalBytes: 32_000_000_000,
           memUsedBytes: 18_400_000_000,
           ollamaCpuPercent: 4,
+          memIsUnified: true,
           gpuPercent: null,
         };
       }
@@ -107,6 +108,7 @@ describe("RuntimePopover — telemetry present", () => {
       memTotalBytes: 1,
       memUsedBytes: 1,
       ollamaCpuPercent: 0,
+      memIsUnified: true,
       gpuPercent: null,
     }));
     const client = spilledClient();

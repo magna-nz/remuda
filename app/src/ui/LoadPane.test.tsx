@@ -64,13 +64,14 @@ async function openTrayWithLoaded(client: FakeClient) {
  * `hostStats()` resolves to null — the no-Tauri-bridge default this whole
  * suite otherwise runs under.
  */
-function stubHostBridge(memTotalBytes: number) {
+function stubHostBridge(memTotalBytes: number, memIsUnified = true) {
   (window as unknown as { __TAURI__?: unknown }).__TAURI__ = {
     core: {
       invoke: async () => ({
         memTotalBytes,
         memUsedBytes: 0,
         ollamaCpuPercent: null,
+        memIsUnified,
         gpuPercent: null,
       }),
     },
@@ -801,6 +802,26 @@ describe("LoadPane fit predictor (SPEC-tuning.md T4)", () => {
     expect(await screen.findByText("No prediction available")).toBeInTheDocument();
     expect(screen.getByText("usable VRAM is unknown on this machine")).toBeInTheDocument();
     // No fabricated fit track and no fabricated number.
+    expect(document.querySelector(".track .fit")).toBeNull();
+    expect(document.querySelector(".track .over")).toBeNull();
+    expect(document.querySelector(".track .tick")).toBeNull();
+    expect(screen.queryByText(/≈/)).not.toBeInTheDocument();
+  });
+
+  // The Linux case, end to end. A discrete-GPU box reports plenty of system
+  // RAM, and reading that as VRAM would claim a comfortable fit for a model
+  // that cannot load at all. Everything needed for a prediction is present
+  // here *except* an honest VRAM figure — so the pane must show none.
+  it("renders the no-prediction state on a machine whose memory is not unified, however much RAM it reports", async () => {
+    stubHostBridge(64_000_000_000, false);
+    const client = new FakeClient({
+      models: fixtureModels(),
+      archParamsByTag: { "llama3.1:8b-q4_K_M": LLAMA_8B_ARCH },
+    });
+    await openDetail(client);
+
+    expect(await screen.findByText("No prediction available")).toBeInTheDocument();
+    expect(screen.getByText("usable VRAM is unknown on this machine")).toBeInTheDocument();
     expect(document.querySelector(".track .fit")).toBeNull();
     expect(document.querySelector(".track .over")).toBeNull();
     expect(document.querySelector(".track .tick")).toBeNull();
