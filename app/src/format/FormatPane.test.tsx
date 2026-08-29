@@ -413,3 +413,28 @@ describe("the conformance card", () => {
     ).toBeInTheDocument();
   });
 });
+
+/**
+ * Found by opening the menu in the packaged app: it appeared as a sliver with
+ * its labels cut in half. An assistant row anchors its button at the far left
+ * of the message column, so the default right-anchored dropdown grew leftward
+ * out of the transcript's scroll container, which clips it. Pre-existing — no
+ * round-two change touched ReplyMenu.css or .msgfoot — but reachable from
+ * every reply on screen.
+ */
+describe("the assistant reply menu opens into the pane, not out of it", () => {
+  it("pins the dropdown to the left edge", async () => {
+    seedSession({
+      messages: [
+        { id: "m-1", role: "user", content: "Summarise the diff" },
+        { id: "m-2", role: "assistant", content: "It renames the paste chord." },
+      ],
+    });
+    await openSeeded(client());
+
+    fireEvent.click(screen.getByRole("button", { name: "Reply actions for message 2" }));
+
+    const menu = screen.getByRole("menu", { name: /Reply actions for message 2/ });
+    expect(menu.className).toContain("left");
+  });
+});

@@ -84,11 +84,23 @@ export interface ReplyMenuProps {
    * one — see `addToBench` in ui/state.tsx.
    */
   onAddToBench?: () => void;
+  /**
+   * Which edge the dropdown is pinned to.
+   *
+   * Default `"right"` suits a button at the right of its row — a user
+   * message, which is right-aligned. An **assistant** row puts the button at
+   * the far left of the column, and a right-anchored dropdown then grows
+   * leftward, straight out of the transcript's scroll container, which clips
+   * it: the menu appears as a sliver with its labels cut in half. Those call
+   * sites pass `"left"`.
+   */
+  align?: "left" | "right";
 }
 
 export function ReplyMenu({
   name,
   label = "Reply actions",
+  align = "right",
   open,
   onToggle,
   onClose,
@@ -139,7 +151,11 @@ export function ReplyMenu({
         </svg>
       </button>
       {open && (
-        <div className="menu" role="menu" aria-label={`${label} ${name}`}>
+        <div
+          className={align === "left" ? "menu left" : "menu"}
+          role="menu"
+          aria-label={`${label} ${name}`}
+        >
           {onAddToBench !== undefined && (
             <button type="button" role="menuitem" className="mi" onClick={run(onAddToBench)}>
               <span className="ic" aria-hidden="true">

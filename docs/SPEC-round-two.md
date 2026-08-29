@@ -511,3 +511,36 @@ before trusting anything on screen.
 
 **Gates:** `npm run typecheck`, `npm test` (804 passed, 54 files),
 `npm run build` — all clean.
+
+### Native pass, continued — the reply menu, and a real bench run
+
+**A pre-existing bug, reported from the packaged app.** The assistant reply
+menu opened as a sliver with its labels cut in half — *"…M"*, *"…no seed
+set"*, *"…new seed"*. `.replymenu .menu` is `position: absolute; right: 0`,
+which pins the dropdown's right edge to the button and grows it leftward. On a
+user message that is correct: the row is right-aligned. On an **assistant**
+row the button sits at the far left of the column, so the menu grew straight
+out of the transcript's scroll container, which clips it.
+
+Not introduced by this round — `git diff main...HEAD` touches neither
+`ReplyMenu.css` nor `.msgfoot` — but reachable from every reply on screen.
+Fixed with an explicit `align` prop rather than a descendant selector reaching
+from the menu into `ChatView`'s classes: the component should not have to know
+what kind of row it is in, and the caller already knows.
+
+**The bench, run end to end against a live model** (`gemma-4-31b-coding-q5`,
+all on GPU, ctx 16 384):
+
+- Capture from a chat message put the prompt in the bench; the rail moved to
+  *1 prompt · never run*.
+- **Run 1** loaded the model on demand and finished in 8.6 s. The run bar read
+  *run 1 · against no saved Modelfile · seed 80290* — the honest reading when
+  the tag has no T1 snapshot, rather than naming one that would be wrong. The
+  row was badged **NEW**, which is the state that exists because a first run
+  has nothing to be changed *against*.
+- **Run 2** drew a different seed (69594) and the row came back **SAME**,
+  tally *1 same*. Seeds are pinned within a run and fresh between runs, which
+  is what makes the second run a comparison rather than a re-roll.
+
+**Gates:** `npm run typecheck`, `npm test` (805 passed, 54 files),
+`npm run build` — all clean.

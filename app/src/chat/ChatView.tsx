@@ -575,6 +575,8 @@ export function ChatView() {
     return (
       <ReplyMenu
         name={name}
+        // Assistant rows anchor their button at the left of the column.
+        align="left"
         open={menuFor !== null && menuFor === id}
         onToggle={() => setMenuFor((prev) => (prev === id ? null : (id ?? null)))}
         onClose={() => setMenuFor(null)}
