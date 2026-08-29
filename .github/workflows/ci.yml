@@ -47,20 +47,46 @@ jobs:
       - run: npm run build
 
   rust:
-    name: Rust (src-tauri/)
-    # macOS, not ubuntu-latest: the Tauri shell links WebKitGTK + GTK on
-    # Linux and the Ubuntu runner doesn't have those system packages. On a
-    # macOS runner the system webview is already present, so the Rust side
-    # needs no extra provisioning.
+    name: Rust (src-tauri/) — ${{ matrix.os }}
+    # Both targets, because the cfg-gated code in host.rs is exactly what a
+    # single-platform job cannot see: `#[cfg(unix)]` compiles on macOS but the
+    # Linux-only paths around process discovery do not get exercised there.
     #
-    # macos-14 matches the release runner (arm64), so what CI checks is the
-    # target the release actually builds for.
-    runs-on: macos-14
+    # macos-14 matches the release runner (arm64). ubuntu-22.04 is pinned
+    # rather than ubuntu-latest for the same reason: it is the oldest image
+    # Tauri 2 supports (it needs webkit2gtk 4.1), so it is what a Linux
+    # release would have to build on to keep the glibc floor low.
+    #
+    # fail-fast is off so a Linux failure still reports the macOS result —
+    # while Linux support is in progress, one red leg should not hide the
+    # other.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: src-tauri
     steps:
       - uses: actions/checkout@v4
+
+      # The Tauri shell links WebKitGTK and GTK on Linux; the runner image
+      # does not carry them. `libssl-dev` is deliberately absent — reqwest is
+      # built with rustls (see Cargo.toml), so there is no system OpenSSL in
+      # the tree to satisfy.
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -78,13 +104,26 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-check-
 
+      # Formatting is platform-independent, so one leg is enough — running it
+      # on both would just report the same failure twice.
       - name: Formatting
+        if: matrix.os == 'macos-14'
         run: cargo fmt --all --check
 
-      # No `npm run build` beforehand: `cargo check`/`clippy` don't need
-      # app/dist to exist — only `tauri build` reads the bundled frontend.
+      # No `npm run build` beforehand: `cargo check`/`clippy`/`cargo test`
+      # don't need app/dist to exist — only `tauri build` reads the bundled
+      # frontend.
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Check
         run: cargo check --all-targets
+
+      # The unit tests in host.rs and registry.rs have never run in CI. They
+      # are the only automated check on the process-matching and
+      # model-reference parsing rules, and they are what tells us whether the
+      # host telemetry contract holds on Linux as well as macOS.
+      #
+      # The `#[ignore]`d tests need a live `ollama serve` and stay excluded.
+      - name: Test
+        run: cargo test --all-targets
