@@ -135,8 +135,23 @@ gh api repos/magna-nz/remuda/releases \
 ## Install
 
 ```bash
-brew install --cask magna-nz/tap/remuda
+brew install --cask --force magna-nz/tap/remuda
 ```
+
+`--force` is part of the documented command, not a troubleshooting step. An upgrade moves the
+old version's app back to staging before installing the new one, so if
+`/Applications/Remuda.app` has gone missing while Homebrew still has it registered, both
+`install` and `upgrade` abort with:
+
+```
+Error: magna-nz/tap/remuda: It seems the App source '/Applications/Remuda.app' is not there.
+```
+
+This is not fixable from the cask. The uninstall runs against the *installed* version's
+definition, rebuilt from its receipt — which records `"uninstall_flight_blocks": false` — so an
+`uninstall_preflight` block added here never runs for anyone already on an older version.
+`--force` is what makes Homebrew skip the missing-artifact check
+(`Cask::Artifact::Moved#move_back`), and it is the only route out of that state.
 
 ## Current limits
 
