@@ -16,7 +16,7 @@
  */
 import type { EditorPane, View } from "../ui/state";
 
-export type TourStepId = "model-control" | "modelfile" | "bench" | "format" | "prompt";
+export type TourStepId = "model-control" | "modelfile" | "benchmark" | "format" | "prompt";
 
 export interface TourStep {
   /** Stable: it is both the registry key and the dot's React key. */
@@ -59,10 +59,10 @@ export const TOUR_STEPS: readonly TourStep[] = [
     view: "chat",
   },
   {
-    id: "bench",
-    title: "Benches. Your re-run list",
+    id: "benchmark",
+    title: "Benchmarks. Put configurations side by side",
     body:
-      "When you change a Modelfile you change everything the model does, not just the bit you were fixing. A bench is a handful of prompts you keep, replay after each save, and check for answers that moved. Add one from any chat message.",
+      "A benchmark is a handful of prompts you keep, run against several configurations at once. Put two models against each other, or the same model with two different Modelfiles, and read the answers side by side. Add a prompt from the menu under any chat message.",
     view: "chat",
   },
   {

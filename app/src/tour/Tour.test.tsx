@@ -128,7 +128,7 @@ describe("a first launch with no Ollama", () => {
     // The state under test, asserted rather than assumed.
     await screen.findByText("Not running");
     expect(screen.getByRole("button", { name: "New chat" })).toBeDisabled();
-    expect(screen.getByText(/A bench is a set of prompts you re-run/)).toBeInTheDocument();
+    expect(screen.getByText(/A benchmark runs one set of prompts through several models/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Take the tour" }));
 

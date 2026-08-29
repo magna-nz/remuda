@@ -54,11 +54,16 @@ export const GLOSSARY: Record<string, GlossaryEntry> = {
     definition:
       "How long Ollama keeps the model in memory after your last message. Until it runs out the next reply starts immediately; after that the model is unloaded and the one after it waits for a fresh load.",
   },
-  bench: {
-    term: "bench",
+  benchmark: {
+    term: "benchmark",
     definition:
-      "A saved set of prompts you re-run after changing a Modelfile. Each answer is compared with what the same prompt returned last time, so you can see what else moved.",
-    extra: "Add one from the menu under any chat message.",
+      "A saved set of prompts, run against several configurations so you can read their answers side by side. A configuration is a model plus a Modelfile, so you can put two models against each other, or one model with two different Modelfiles.",
+    extra: "Remuda shows you what differs. It never says which answer is better.",
+  },
+  lane: {
+    term: "lane",
+    definition:
+      "One configuration inside a benchmark: a model, and the Modelfile it runs. Each lane becomes a column in the results table.",
   },
   seed: {
     term: "seed",

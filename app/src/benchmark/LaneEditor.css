@@ -1,0 +1,100 @@
+/* The lane editor (docs/mockup-proposals-2.html §01 — the `.runbar` surface
+   and the mono type of `.runsel`, one row per lane). */
+.laneeditor {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 10px 16px 12px;
+}
+
+.laneeditor .le-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.laneeditor .le-h b {
+  font-size: 12px;
+}
+
+.laneeditor .le-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 62ch;
+}
+
+.laneeditor .lanelist {
+  list-style: none;
+  margin: 9px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.lanerow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lanerow .lane-n {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  flex: 0 0 auto;
+  width: 52px;
+}
+
+.lanerow .lane-sel {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 5px 8px;
+  min-width: 0;
+  max-width: 220px;
+}
+
+.lanerow .lane-sel:disabled {
+  opacity: 0.5;
+}
+
+.lanerow .lane-x {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.lanerow .lane-x:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.lanerow .lane-x:disabled {
+  opacity: 0.3;
+}
+
+.laneeditor .le-f {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.laneeditor .le-cap {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}

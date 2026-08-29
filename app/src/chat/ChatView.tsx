@@ -347,7 +347,7 @@ export function ChatView() {
     lastStats,
     statsByMessage,
     compareRun,
-    benchProgress,
+    benchmarkProgress,
     sendMessage,
     cancelGeneration,
     setSessionOptions,
@@ -361,7 +361,7 @@ export function ChatView() {
     keepLane,
     regenerateReply,
     promoteToSystem,
-    addToBench,
+    addToBenchmark,
   } = useRemuda();
   const [draft, setDraft] = useState("");
   const [pending, setPending] = useState<PendingImage[]>([]);
@@ -411,7 +411,7 @@ export function ChatView() {
   // enabled through a replay that can run for minutes: the store refused the
   // send and the composer said nothing, so the message just sat there.
   const streaming =
-    streamingSessionId !== null || compareRun !== null || benchProgress !== null;
+    streamingSessionId !== null || compareRun !== null || benchmarkProgress !== null;
   const streamingHere = streamingSessionId === session.id;
   const busyHere = streamingHere || compareHere;
   const last = session.messages[session.messages.length - 1];
@@ -603,7 +603,7 @@ export function ChatView() {
           promptBefore(index) === null
             ? undefined
             : () => {
-                addToBench(promptBefore(index) ?? "");
+                addToBenchmark(promptBefore(index) ?? "");
                 setMenuFor(null);
               }
         }
@@ -640,7 +640,7 @@ export function ChatView() {
         onClose={() => setMenuFor(null)}
         busy={streaming}
         onAddToBench={() => {
-          addToBench(message.content);
+          addToBenchmark(message.content);
           setMenuFor(null);
         }}
       />

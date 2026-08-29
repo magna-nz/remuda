@@ -1,5 +1,10 @@
 /* docs/mockup-proposals-2.html §05 `.emptyfeat` — the help nobody has to go
-   looking for. */
+   looking for.
+
+   The same rules bench/BenchEmpty.css carries. They are duplicated rather
+   than imported across because R7 removes app/src/bench/ once the diff
+   helpers move, and an empty state that loses its stylesheet on that day is
+   a worse trade than two identical blocks for one release. */
 .emptyfeat {
   padding: 46px 30px;
   display: flex;

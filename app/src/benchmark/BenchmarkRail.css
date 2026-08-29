@@ -1,0 +1,40 @@
+/* The Benchmarks group reuses the session row (.sess / .sess-open / .strow,
+   ui/Sidebar.css) so the two groups in the rail read as one list with two
+   labels, not two widgets.
+
+   `.side-add` is repeated from bench/BenchRail.css, identically: R7 removes
+   app/src/bench/ and its stylesheet with it, and a `+` that loses its rules
+   on that day is a worse trade than one duplicated block for one release. */
+.benchmarklist {
+  flex: 0 0 auto;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 0 8px 4px;
+}
+
+.benchmarklist .smodel {
+  margin-left: 0;
+}
+
+.side-add {
+  width: 18px;
+  height: 18px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 15px;
+  line-height: 1;
+  padding: 0;
+}
+
+.side-add:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.side-add:disabled {
+  opacity: 0.4;
+}

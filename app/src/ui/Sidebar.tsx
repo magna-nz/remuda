@@ -20,7 +20,8 @@ import { relativeTime, shortTag, type ChatSession } from "../chat/sessions";
 // file keeps to one job; the group is above Recent because the rail persists
 // across every surface, which is what makes a bench reachable from inside
 // the Modelfile editor.
-import { BenchRail } from "../bench/BenchRail";
+import { BenchmarkRail } from "../benchmark/BenchmarkRail";
+import { useTourTarget } from "../tour/registry";
 import { useRemuda } from "./state";
 
 function SessionRow({ session, active }: { session: ChatSession; active: boolean }) {
@@ -70,7 +71,22 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
 }
 
 export function Sidebar() {
-  const { view, setView, sessions, activeSessionId, activeModel, newChat } = useRemuda();
+  const {
+    view,
+    setView,
+    sessions,
+    activeSessionId,
+    activeModel,
+    newChat,
+    benchmarks,
+    activeBenchmarkId,
+    openBenchmark,
+    createBenchmark,
+    deleteBenchmark,
+  } = useRemuda();
+  // R6 step 3 rings the BENCHMARKS header; the rail takes the ref rather
+  // than registering it, so tour/steps.ts stays this side of the boundary.
+  const benchmarksRef = useTourTarget("benchmark");
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();
@@ -107,7 +123,17 @@ export function Sidebar() {
           New chat
         </button>
       </div>
-      <BenchRail />
+      <BenchmarkRail
+        benchmarks={benchmarks}
+        activeBenchmarkId={activeBenchmarkId}
+        paneVisible={view === "benchmark"}
+        canCreate={activeModel !== null}
+        createBlockedReason="Load a model first"
+        onOpen={openBenchmark}
+        onCreate={() => void createBenchmark()}
+        onDelete={deleteBenchmark}
+        headerRef={benchmarksRef}
+      />
       <div className="side-label">Recent</div>
       <div className="sesslist">
         {filtered.length === 0 ? (

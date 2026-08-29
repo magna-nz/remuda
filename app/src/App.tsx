@@ -11,7 +11,7 @@ import { Sidebar } from "./ui/Sidebar";
 import { TopNav } from "./ui/TopNav";
 import { PullView } from "./pull/PullView";
 import { ToolsView } from "./tools/ToolsView";
-import { BenchView } from "./bench/BenchView";
+import { BenchmarkPane } from "./benchmark/BenchmarkPane";
 import { FirstRunOffer } from "./tour/FirstRunOffer";
 import { Tour } from "./tour/Tour";
 
@@ -21,7 +21,7 @@ function MainPanel() {
   if (view === "pull") return <PullView />;
   if (view === "modelfile") return <EditorView />;
   if (view === "tools") return <ToolsView />;
-  if (view === "bench") return <BenchView />;
+  if (view === "benchmark") return <BenchmarkPane />;
   return <ChatView />;
 }
 

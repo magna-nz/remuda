@@ -686,3 +686,43 @@ saved Modelfile yet, so there is nothing to tie these answers to".
 
 **Gates:** `npm run typecheck`, `npm test` (813 passed, 55 files),
 `npm run build` — all clean. Verified in the packaged app.
+
+### Wave R7 — Benchmark · code complete, all gates green
+
+**B1 [opus-5] — core.** `benchmark/{benchmarks,run,rows,words}.ts`, 82 tests.
+`words.ts` moved from `bench/` unchanged. The run loop takes `chat` and
+`load` callbacks, so lane-grouped ordering is asserted as a literal log with
+no server involved.
+
+**B2 [opus-5] — views.** `benchmark/{BenchmarkView,LaneEditor,BenchmarkRail,
+BenchmarkEmpty}.tsx`, 44 tests. Deliberately prop-driven and ignorant of
+`useRemuda`, which is what let them be built against fixtures while the store
+was still being rewritten.
+
+**Wired in the main thread.** `ui/state.tsx` rewritten from benches to
+benchmarks with lanes and migration; `benchmark/BenchmarkPane.tsx` added as
+the single seam between the store and the prop-driven views; `App.tsx` routed;
+`ui/Sidebar.tsx` pointed at the new rail; `app/src/bench/` deleted; the tour
+step, glossary and `help/coverage.test.ts` moved across.
+
+**Judgement calls worth knowing:**
+
+- **A single-lane row is `single`, not `same`.** Every migrated R4 bench is
+  exactly that shape, and calling it "same" would claim an agreement that was
+  never tested against anything.
+- **A gap is not a difference.** A lane that has not reached a prompt yet
+  leaves the row `pending`, not `different`.
+- **`laneChipLabel` resolves the base through `choices`** rather than using
+  `laneLabel`, which builds from `lane.model` and would render
+  `terse-v2 · terse-v2` for a variant, losing the model it came from.
+- **Migration loses two things**, both commented and tested: the old T1
+  `snapshotId`, which has no field in a lane-shaped model, and runs past the
+  new cap of 6 for a bench sitting at R4's cap of 8.
+- **`BenchmarkPane` diffs lanes** rather than replacing them wholesale, so a
+  lane keeps its id and its cells in past runs stay attached.
+
+**Gates:** `npm run typecheck`, `npm test` (878 passed, 58 files),
+`npm run build` — all clean.
+
+**Not yet done:** the rename sweep through `README.md`, `SPEC.md`, the other
+`docs/`, and `site/`; and live testing of a real multi-lane run.

@@ -1,5 +1,5 @@
 /**
- * Word-level diff for two bench answers (docs/SPEC-round-two.md R4).
+ * Word-level diff for two benchmark answers (docs/SPEC-round-two.md R7).
  *
  * There is exactly one diff in Remuda and it lives in editor/diff.ts. This
  * module does not re-implement it — it changes what a "line" means. Words
@@ -15,8 +15,12 @@
  *   character diff, which shreds.
  * - `diffLines` falls back to "replaced wholesale" past its own 1500-line
  *   ceiling, which here means 1500 words. Answers are stored trimmed
- *   (benches.ts PROSE_CAP), so this is well out of reach in practice, and
+ *   (types.ts PROSE_CAP), so this is well out of reach in practice, and
  *   when it is reached the output is still correct — just coarse.
+ *
+ * Moved unchanged from R4's `bench/words.ts`: R7 folds the old bench into a
+ * benchmark with one lane, and the diff it used is exactly the diff a
+ * two-lane row needs — lane B against lane A instead of run 7 against run 6.
  *
  * Pure: no React, no storage, no I/O.
  */
@@ -90,7 +94,7 @@ export function newSide(chunks: WordChunk[]): WordChunk[] {
  * Whether two answers differ at all — the `same` / `changed` badge, and
  * nothing more than that. It reports a *textual* difference. It does not
  * report which answer is better, because Remuda does not know and will not
- * guess (SPEC-tuning T5).
+ * guess (SPEC-tuning T5, R7: "different is a diff, not a verdict").
  *
  * Leading and trailing whitespace is not a difference; interior whitespace
  * is left alone, because a reply that reflowed its paragraphs did change.

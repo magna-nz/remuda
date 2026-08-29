@@ -23,7 +23,7 @@ function source(file: string): string {
 }
 
 const PANES: Array<[string, string]> = [
-  ["BenchView.tsx", "bench"],
+  ["BenchmarkView.tsx", "benchmark"],
   ["ChatView.tsx", "chat"],
   ["EditorView.tsx", "modelfile"],
   ["PullView.tsx", "pull"],

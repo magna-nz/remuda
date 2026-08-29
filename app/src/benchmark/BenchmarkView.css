@@ -1,14 +1,23 @@
-/* The run table (docs/mockup-proposals-2.html §01).
-   Class names are prefixed where the app already uses the mockup's: `.tally`
-   belongs to the tool playground, so the bench's is `.btally`. */
-.benchview {
+/* The benchmark table (docs/mockup-proposals-2.html §01).
+
+   `.benchhead`, `.runbar`, `.brow`, `.bcol` and `.bbadge` repeat
+   bench/BenchView.css, deliberately. R7 removes app/src/bench/ and takes
+   that stylesheet with it, and the two files are identical where they
+   overlap, so the overlap costs nothing while both exist and the surface
+   survives the deletion. The badge and tally states differ, because a
+   benchmark's are rows.ts's `different` / `same` / `single` / `pending`
+   rather than R4's changed / same.
+
+   Prefixed where the app already uses the mockup's names: `.tally` belongs
+   to the tool playground, so this one is `.btally`. */
+.benchmarkview {
   display: flex;
   flex-direction: column;
   min-height: 0;
   overflow-y: auto;
 }
 
-.benchhead {
+.benchmarkview .benchhead {
   display: flex;
   align-items: center;
   gap: 12px;
@@ -18,21 +27,46 @@
   flex-wrap: wrap;
 }
 
-.benchhead b {
+.benchmarkview .benchhead b {
   font-size: 14px;
 }
 
-.benchhead .bmeta {
+.benchmarkview .bmeta {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--faint);
 }
 
-.benchhead .spacer {
+.benchmarkview .spacer {
   flex: 1;
 }
 
-.benchrename {
+/* One chip per configuration: the header's answer to "what is being
+   compared here". */
+.lanechips {
+  display: inline-flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.lanechip {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.benchmarkview .benchrename {
   border: 0;
   background: transparent;
   color: var(--faint);
@@ -42,12 +76,12 @@
   margin-left: -8px;
 }
 
-.benchrename:hover {
+.benchmarkview .benchrename:hover {
   background: var(--raised);
   color: var(--ink);
 }
 
-.runsel {
+.benchmarkview .runsel {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--ink-2);
@@ -57,8 +91,7 @@
   padding: 5px 8px;
 }
 
-/* The line that makes the Modelfile history and the results one artifact. */
-.runbar {
+.benchmarkview .runbar {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -71,21 +104,43 @@
   flex-wrap: wrap;
 }
 
-.runbar .against {
+/* The honest cost of the feature, said out loud. */
+.runbar .bloading {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--ember-ink);
 }
 
-.runbar .spacer {
-  flex: 1;
+.runbar .spin {
+  width: 9px;
+  height: 9px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--ember) 35%, transparent);
+  border-top-color: var(--ember);
+  animation: bmk-spin 0.9s linear infinite;
 }
 
-.btally {
+@keyframes bmk-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .runbar .spin {
+    animation: none;
+  }
+}
+
+.benchmarkview .btally {
   display: inline-flex;
   gap: 8px;
   flex-wrap: wrap;
 }
 
-.btally span {
+.benchmarkview .btally span {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -95,33 +150,33 @@
   border-radius: 999px;
 }
 
-.btally .changed {
+.benchmarkview .btally .different {
   background: var(--warn-tint);
   color: var(--warn);
 }
 
-.btally .same {
+.benchmarkview .btally .same {
   background: var(--good-tint);
   color: var(--good);
 }
 
-.btally .error {
+.benchmarkview .btally .error {
   background: var(--crit-tint);
   color: var(--crit);
 }
 
-.btally .new,
-.btally .pending {
+.benchmarkview .btally .single,
+.benchmarkview .btally .pending {
   background: var(--raised);
   color: var(--faint);
 }
 
-.brow {
+.benchmarkview .brow {
   position: relative;
   border-bottom: 1px solid var(--border);
 }
 
-.brow-h {
+.benchmarkview .brow-h {
   display: flex;
   align-items: flex-start;
   gap: 11px;
@@ -134,11 +189,11 @@
   font: inherit;
 }
 
-.brow-h:hover {
+.benchmarkview .brow-h:hover {
   background: var(--surface-2);
 }
 
-.brow-n {
+.benchmarkview .brow-n {
   font-family: var(--mono);
   font-size: 11px;
   color: var(--faint);
@@ -147,7 +202,7 @@
   padding-top: 2px;
 }
 
-.brow-p {
+.benchmarkview .brow-p {
   flex: 1;
   min-width: 0;
   font-size: 13px;
@@ -155,7 +210,7 @@
   line-height: 1.5;
 }
 
-.brow-p .sn {
+.benchmarkview .brow-p .sn {
   display: block;
   margin-top: 4px;
   font-size: 11.5px;
@@ -165,13 +220,13 @@
   text-overflow: ellipsis;
 }
 
-/* The failure, in the collapsed row. Row 05 of the mockup: it is telling
-   you your num_ctx is too small, which is exactly what a bench is for. */
-.brow-p .sn.err {
+/* The failure, in the collapsed row: it is telling you your num_ctx is too
+   small, which is exactly what a benchmark is for. */
+.benchmarkview .brow-p .sn.err {
   color: var(--crit);
 }
 
-.bbadge {
+.benchmarkview .bbadge {
   flex: 0 0 auto;
   font-size: 10px;
   font-weight: 700;
@@ -182,39 +237,28 @@
   margin-top: 1px;
 }
 
-.bbadge.changed {
+.benchmarkview .bbadge.different {
   background: var(--warn-tint);
   color: var(--warn);
 }
 
-.bbadge.same {
+.benchmarkview .bbadge.same {
   background: var(--good-tint);
   color: var(--good);
 }
 
-.bbadge.error {
+.benchmarkview .bbadge.error {
   background: var(--crit-tint);
   color: var(--crit);
 }
 
-.bbadge.new,
-.bbadge.pending {
+.benchmarkview .bbadge.single,
+.benchmarkview .bbadge.pending {
   background: var(--raised);
   color: var(--faint);
 }
 
-.brow-t {
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--faint);
-  flex: 0 0 auto;
-  width: 62px;
-  text-align: right;
-  padding-top: 3px;
-  font-variant-numeric: tabular-nums;
-}
-
-.brow-x {
+.benchmarkview .brow-x {
   position: absolute;
   top: 11px;
   right: 10px;
@@ -232,51 +276,58 @@
   opacity: 0;
 }
 
-.brow:hover .brow-x,
-.brow:focus-within .brow-x {
+.benchmarkview .brow:hover .brow-x,
+.benchmarkview .brow:focus-within .brow-x {
   opacity: 1;
 }
 
-.brow-x:hover {
+.benchmarkview .brow-x:hover {
   background: var(--raised);
   color: var(--ink);
 }
 
-.brow-b {
+/* One column per lane. The template is set inline, because the count is the
+   number of lanes and lives in the data. */
+.benchmarkview .brow-b {
   padding: 0 16px 15px 47px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
   gap: 12px;
 }
 
-.brow-b:has(> .bcol:only-child) {
-  grid-template-columns: 1fr;
-}
-
-.bcol {
+.benchmarkview .bcol {
   border: 1px solid var(--border);
   border-radius: 11px;
   background: var(--surface-2);
   overflow: hidden;
+  min-width: 0;
 }
 
-.bcol-h {
+.benchmarkview .bcol-h {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 7px;
   padding: 7px 11px;
   border-bottom: 1px solid var(--border);
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--faint);
+  color: var(--ink-2);
 }
 
-.bcol-h .now {
-  color: var(--ember-ink);
+.benchmarkview .bcol-h b {
+  font-size: 10.5px;
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.bcol-b {
+.benchmarkview .bcol-note {
+  color: var(--faint);
+  flex: 0 0 auto;
+}
+
+.benchmarkview .bcol-b {
   padding: 10px 12px;
   font-size: 12.5px;
   line-height: 1.6;
@@ -285,7 +336,7 @@
   word-break: break-word;
 }
 
-.bcol-b del {
+.benchmarkview .bcol-b del {
   background: var(--crit-tint);
   color: #f0a196;
   text-decoration: none;
@@ -293,7 +344,7 @@
   padding: 0 2px;
 }
 
-.bcol-b ins {
+.benchmarkview .bcol-b ins {
   background: var(--good-tint);
   color: #b6dd93;
   text-decoration: none;
@@ -301,27 +352,30 @@
   padding: 0 2px;
 }
 
-.bcol-none {
+.benchmarkview .bcol-none {
   color: var(--faint);
   font-style: italic;
 }
 
-.bcol-err {
+.benchmarkview .bcol-err {
+  display: block;
   color: var(--crit);
 }
 
-.bfoot {
+/* Whatever the lane managed before it stopped. Kept, and visibly secondary
+   to the cause above it. */
+.benchmarkview .bcol-part {
+  display: block;
+  margin-top: 6px;
+  color: var(--faint);
+}
+
+.benchmarkview .bfoot {
   display: flex;
   gap: 12px;
   padding: 7px 11px;
   border-top: 1px solid var(--border);
   font-family: var(--mono);
   font-size: 10.5px;
-  color: var(--faint);
-}
-
-/* An absence, not a name: deliberately not `.against`'s accent, which reads
-   as "this is the thing it ran against". */
-.runbar .nosnap {
   color: var(--faint);
 }

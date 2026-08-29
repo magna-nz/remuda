@@ -88,19 +88,22 @@ import {
 // live in app/src/bench/; this file owns only the wiring: which bench is
 // open, and the one run that may be in flight (SPEC §8).
 import {
+  addLane as addLaneTo,
   addPrompt,
   appendRun,
-  createBench as makeBench,
-  defaultBenchName,
-  loadBenches,
+  createBenchmark as makeBenchmark,
+  defaultBenchmarkName,
+  loadBenchmarks,
+  migrateBenches,
+  removeLane as removeLaneFrom,
   removePrompt,
-  saveBenches,
-  type Bench,
-  type BenchResult,
-} from "../bench/benches";
-import { runBench } from "../bench/run";
+  saveBenchmarks,
+  updateLane as updateLaneIn,
+} from "../benchmark/benchmarks";
+import { runBenchmark, type BenchmarkProgress } from "../benchmark/run";
+import type { Benchmark, Cell, Lane as BenchmarkLane } from "../benchmark/types";
 
-export type View = "chat" | "modelfile" | "tools" | "bench" | "pull" | "settings";
+export type View = "chat" | "modelfile" | "tools" | "benchmark" | "pull" | "settings";
 
 /** Settings persisted across restarts (SPEC §5.6), separate from chat sessions. */
 const SETTINGS_STORAGE_KEY = "remuda.settings.v1";
@@ -508,48 +511,64 @@ export interface RemudaContextValue {
    */
   promoteToSystem: (text: string) => Promise<void>;
 
-  // ---- Bench (docs/SPEC-tuning.md T5, docs/SPEC-round-two.md R4) ----
-  /** Every saved bench, newest-touched first. */
-  benches: Bench[];
-  /** The bench the main area is showing; null when none is open. */
-  activeBenchId: string | null;
+  // ---- Benchmark (docs/SPEC-round-two.md R7) ----
+  /** Every saved benchmark, newest-touched first. */
+  benchmarks: Benchmark[];
+  /** The benchmark the main area is showing; null when none is open. */
+  activeBenchmarkId: string | null;
   /**
-   * The run in flight, or null. Its results accumulate here rather than in
-   * `benches` so a half-finished run is never persisted — the finished
-   * `BenchRun` is appended in one write when the loop ends, cancelled or not.
+   * The run in flight, or null. Its cells accumulate here rather than in
+   * `benchmarks`, so a half-finished run is never persisted: the finished
+   * `BenchmarkRun` is appended in one write when the loop ends, cancelled or
+   * not.
    */
-  benchProgress: BenchProgress | null;
-  /** Create an empty bench on the given model (default: the active one). */
-  createBench: (name?: string, model?: string) => string | null;
-  openBench: (id: string) => void;
+  benchmarkProgress: BenchmarkRunState | null;
+  /** Create a benchmark with one lane on the given model (default: active). */
+  createBenchmark: (name?: string, model?: string) => string | null;
+  openBenchmark: (id: string) => void;
   /** Under the existing §8 confirm toggle, like deleting a model. */
-  deleteBench: (id: string) => void;
-  renameBench: (id: string, name: string) => void;
+  deleteBenchmark: (id: string) => void;
+  renameBenchmark: (id: string, name: string) => void;
   /**
-   * Capture (T5): put one prompt in a bench, with no form in the way.
+   * Capture: put one prompt in a benchmark, with no form in the way.
    *
-   * Targets the open bench when it runs the same model, else the first bench
-   * for that model, else it creates one named after the model. Returns the
-   * bench id, or null when there is no model to bind a bench to. Adding text
-   * already in the bench is a no-op.
+   * Targets the open benchmark when one of its lanes runs this model, else
+   * the first benchmark with such a lane, else it creates one named after the
+   * model. Returns the benchmark id, or null when there is no model to bind
+   * one to. Adding text already present is a no-op.
    */
-  addToBench: (text: string, model?: string) => string | null;
-  removeBenchPrompt: (benchId: string, promptId: string) => void;
-  /** Replay every prompt, sequentially, on one pinned seed. */
-  startBenchRun: (benchId: string) => Promise<void>;
-  /** Keeps the finished rows and marks the run partial (T5). */
-  cancelBenchRun: () => void;
+  addToBenchmark: (text: string, model?: string) => string | null;
+  removeBenchmarkPrompt: (benchmarkId: string, promptId: string) => void;
+  /** Add a lane, up to MAX_LANES. Returns false when already at the cap. */
+  addLane: (benchmarkId: string, model: string, modelfile: string | null) => boolean;
+  removeLane: (benchmarkId: string, laneId: string) => void;
+  updateLane: (
+    benchmarkId: string,
+    laneId: string,
+    patch: Partial<Omit<BenchmarkLane, "id">>,
+  ) => void;
+  /** Run every prompt against every lane, grouped by lane, on one pinned seed. */
+  startBenchmarkRun: (benchmarkId: string) => Promise<void>;
+  /** Keeps the finished cells and marks the run partial. */
+  cancelBenchmarkRun: () => void;
 }
 
-/** A bench run in flight (T5). */
-export interface BenchProgress {
-  benchId: string;
-  /** Pinned across every prompt of this run. */
+/**
+ * A benchmark run in flight (R7).
+ *
+ * `progress` is the loop's own report, which carries the *loading* phase —
+ * R7 asks for a lane switch to be visible rather than looking hung, and on a
+ * 20 GB model that wait is the honest cost of the feature.
+ */
+export interface BenchmarkRunState {
+  benchmarkId: string;
+  /** Pinned across every lane and every prompt of this run. */
   seed: number;
   done: number;
   total: number;
-  /** Finished rows so far, in prompt order. */
-  results: BenchResult[];
+  /** Cells settled so far, in the order they finished. */
+  cells: Cell[];
+  progress: BenchmarkProgress | null;
 }
 
 const RemudaContext = createContext<RemudaContextValue | null>(null);
@@ -703,27 +722,39 @@ export function RemudaProvider({
   historyRef.current = modelfileHistory;
   const [editorPane, setEditorPane] = useState<EditorPane>("form");
 
-  // T5 / R4 — Bench. Loaded once from localStorage and written back on every
+  // R7 — Benchmark. Loaded once from localStorage and written back on every
   // mutation; there is no per-token churn to debounce, because a run commits
   // once, at the end.
-  const [benches, setBenches] = useState<Bench[]>(() => loadBenches());
-  const benchesRef = useRef(benches);
-  benchesRef.current = benches;
-  const [activeBenchId, setActiveBenchId] = useState<string | null>(null);
-  const activeBenchIdRef = useRef<string | null>(null);
-  activeBenchIdRef.current = activeBenchId;
-  const [benchProgress, setBenchProgress] = useState<BenchProgress | null>(null);
+  //
+  // R4's benches are migrated on the way in — one lane each, prompts and runs
+  // intact — and the legacy key is left where it is, so a downgrade still
+  // finds its data. `migrateBenches` returns the same reference when there is
+  // nothing to add, which is what makes the write below conditional.
+  const [benchmarks, setBenchmarks] = useState<Benchmark[]>(() => {
+    const stored = loadBenchmarks();
+    const migrated = migrateBenches(stored);
+    if (migrated !== stored) saveBenchmarks(migrated);
+    return migrated;
+  });
+  const benchmarksRef = useRef(benchmarks);
+  benchmarksRef.current = benchmarks;
+  const [activeBenchmarkId, setActiveBenchmarkId] = useState<string | null>(null);
+  const activeBenchmarkIdRef = useRef<string | null>(null);
+  activeBenchmarkIdRef.current = activeBenchmarkId;
+  const [benchmarkProgress, setBenchmarkProgress] = useState<BenchmarkRunState | null>(null);
   /**
-   * The run in flight, and the §8 guard for it. A bench run is a generation
-   * like any other: it may not start beside a chat or a compare, and neither
-   * may start beside it.
+   * The run in flight, and the §8 guard for it. A benchmark run is a
+   * generation like any other: it may not start beside a chat or a compare,
+   * and neither may start beside it.
    */
-  const benchRunRef = useRef<{ controller: AbortController; benchId: string } | null>(null);
+  const benchmarkRunRef = useRef<{ controller: AbortController; benchmarkId: string } | null>(
+    null,
+  );
 
-  const commitBenches = useCallback((next: Bench[]) => {
-    benchesRef.current = next;
-    setBenches(next);
-    saveBenches(next);
+  const commitBenchmarks = useCallback((next: Benchmark[]) => {
+    benchmarksRef.current = next;
+    setBenchmarks(next);
+    saveBenchmarks(next);
   }, []);
 
   /** SPEC §8: unsaved editor changes prompt before navigating away. */
@@ -1045,7 +1076,7 @@ export function RemudaProvider({
     compareRunRef.current?.controller.abort();
     // Same for a bench replay: it keeps its finished rows and is recorded
     // partial rather than discarded (T5).
-    benchRunRef.current?.controller.abort();
+    benchmarkRunRef.current?.controller.abort();
     for (const entry of streamsRef.current.values()) {
       entry.controller.abort();
     }
@@ -1195,7 +1226,7 @@ export function RemudaProvider({
         // A bench replay is a generation too (T5): it holds the slot for as
         // long as it runs, and a send that slipped past here would put two
         // requests on one runner.
-        benchRunRef.current !== null
+        benchmarkRunRef.current !== null
       )
         return;
       const session = sessionsRef.current.find((s) => s.id === sessionId);
@@ -1756,150 +1787,198 @@ export function RemudaProvider({
 
   /* ------------------------------------- Bench (SPEC-tuning T5 / R4) ---- */
 
-  const createBench = useCallback(
+  const createBenchmark = useCallback(
     (name?: string, model?: string): string | null => {
       const tag = model ?? activeModelRef.current?.variant ?? null;
-      // A bench with no model has nothing to replay against, so there is no
-      // honest empty state for one — same rule as "+ New chat".
+      // A benchmark with no lane has nothing to run against, so there is no
+      // honest empty state for one. Same rule as "+ New chat".
       if (tag === null) return null;
-      const bench = makeBench(name?.trim() === "" || name === undefined ? defaultBenchName(tag) : name, tag);
-      commitBenches([bench, ...benchesRef.current]);
-      return bench.id;
+      const chosen = name?.trim() === "" || name === undefined ? defaultBenchmarkName(tag) : name;
+      const benchmark = makeBenchmark(chosen, tag);
+      commitBenchmarks([benchmark, ...benchmarksRef.current]);
+      return benchmark.id;
     },
-    [commitBenches],
+    [commitBenchmarks],
   );
 
-  const openBench = useCallback(
+  const openBenchmark = useCallback(
     (id: string) => {
-      if (viewRef.current === "modelfile" && !confirmUnsavedChanges()) return;
-      setActiveBenchId(id);
-      activeBenchIdRef.current = id;
-      setViewState("bench");
+      if (!confirmUnsavedChanges()) return;
+      setActiveBenchmarkId(id);
+      activeBenchmarkIdRef.current = id;
+      setViewState("benchmark");
     },
     [confirmUnsavedChanges],
   );
 
-  const deleteBench = useCallback(
+  const deleteBenchmark = useCallback(
     (id: string) => {
-      const bench = benchesRef.current.find((b) => b.id === id);
-      if (bench === undefined) return;
-      // SPEC §5.6/§8: the same confirm toggle that guards deleting a model.
-      if (confirmDeleteModel && !window.confirm(`Delete the bench "${bench.name}"?`)) return;
-      // Only this bench's run. There is at most one, but aborting blind
-      // would take down a run the user never asked to stop.
-      if (benchRunRef.current?.benchId === id) benchRunRef.current.controller.abort();
-      commitBenches(benchesRef.current.filter((b) => b.id !== id));
-      setActiveBenchId((prev) => (prev === id ? null : prev));
+      const benchmark = benchmarksRef.current.find((b) => b.id === id);
+      if (benchmark === undefined) return;
+      if (
+        confirmDeleteModel &&
+        !window.confirm(`Delete the benchmark "${benchmark.name}" and its runs?`)
+      ) {
+        return;
+      }
+      if (benchmarkRunRef.current?.benchmarkId === id) {
+        benchmarkRunRef.current.controller.abort();
+      }
+      commitBenchmarks(benchmarksRef.current.filter((b) => b.id !== id));
+      setActiveBenchmarkId((prev) => (prev === id ? null : prev));
     },
-    [commitBenches, confirmDeleteModel],
+    [commitBenchmarks, confirmDeleteModel],
   );
 
-  const renameBench = useCallback(
+  const renameBenchmark = useCallback(
     (id: string, name: string) => {
       const trimmed = name.trim();
       if (trimmed === "") return;
-      commitBenches(benchesRef.current.map((b) => (b.id === id ? { ...b, name: trimmed } : b)));
+      commitBenchmarks(
+        benchmarksRef.current.map((b) => (b.id === id ? { ...b, name: trimmed } : b)),
+      );
     },
-    [commitBenches],
+    [commitBenchmarks],
   );
 
-  const addToBench = useCallback(
+  const addToBenchmark = useCallback(
     (text: string, model?: string): string | null => {
       const trimmed = text.trim();
       if (trimmed === "") return null;
       const session = sessionsRef.current.find((s) => s.id === activeSessionIdRef.current);
       const tag = model ?? session?.model ?? activeModelRef.current?.variant ?? null;
       if (tag === null) return null;
-      const all = benchesRef.current;
-      // The open bench first, so repeated captures land where the user is
-      // looking; otherwise any bench on this model; otherwise a new one.
-      const open = all.find((b) => b.id === activeBenchIdRef.current && b.model === tag);
-      const target = open ?? all.find((b) => b.model === tag) ?? null;
+      const all = benchmarksRef.current;
+      // The open benchmark first, so repeated captures land where the user is
+      // looking; then any benchmark with a lane on this model; else a new one.
+      const runsTag = (b: Benchmark) => b.lanes.some((l) => l.model === tag);
+      const open = all.find((b) => b.id === activeBenchmarkIdRef.current && runsTag(b));
+      const target = open ?? all.find(runsTag) ?? null;
       if (target === null) {
-        const bench = addPrompt(makeBench(defaultBenchName(tag), tag), trimmed);
-        commitBenches([bench, ...all]);
-        return bench.id;
+        const created = addPrompt(makeBenchmark(defaultBenchmarkName(tag), tag), trimmed);
+        commitBenchmarks([created, ...all]);
+        return created.id;
       }
       const next = addPrompt(target, trimmed);
       // Content-addressed: the same prompt twice changes nothing, and
       // rewriting storage for a no-op would be a lie in the file.
       if (next !== target) {
-        commitBenches(all.map((b) => (b.id === target.id ? next : b)));
+        commitBenchmarks(all.map((b) => (b.id === target.id ? next : b)));
       }
       return target.id;
     },
-    [commitBenches],
+    [commitBenchmarks],
   );
 
-  const removeBenchPrompt = useCallback(
-    (benchId: string, promptId: string) => {
-      commitBenches(
-        benchesRef.current.map((b) => (b.id === benchId ? removePrompt(b, promptId) : b)),
+  const removeBenchmarkPrompt = useCallback(
+    (benchmarkId: string, promptId: string) => {
+      commitBenchmarks(
+        benchmarksRef.current.map((b) => (b.id === benchmarkId ? removePrompt(b, promptId) : b)),
       );
     },
-    [commitBenches],
+    [commitBenchmarks],
   );
 
-  const cancelBenchRun = useCallback(() => {
-    benchRunRef.current?.controller.abort();
+  const addLane = useCallback(
+    (benchmarkId: string, model: string, modelfile: string | null): boolean => {
+      const target = benchmarksRef.current.find((b) => b.id === benchmarkId);
+      if (target === undefined) return false;
+      const next = addLaneTo(target, model, modelfile);
+      // At the cap `addLaneTo` returns the same reference; say so rather than
+      // silently doing nothing, so the UI can explain the ceiling.
+      if (next === target) return false;
+      commitBenchmarks(benchmarksRef.current.map((b) => (b.id === benchmarkId ? next : b)));
+      return true;
+    },
+    [commitBenchmarks],
+  );
+
+  const removeLane = useCallback(
+    (benchmarkId: string, laneId: string) => {
+      commitBenchmarks(
+        benchmarksRef.current.map((b) => (b.id === benchmarkId ? removeLaneFrom(b, laneId) : b)),
+      );
+    },
+    [commitBenchmarks],
+  );
+
+  const updateLane = useCallback(
+    (benchmarkId: string, laneId: string, patch: Partial<Omit<BenchmarkLane, "id">>) => {
+      commitBenchmarks(
+        benchmarksRef.current.map((b) =>
+          b.id === benchmarkId ? updateLaneIn(b, laneId, patch) : b,
+        ),
+      );
+    },
+    [commitBenchmarks],
+  );
+
+  const cancelBenchmarkRun = useCallback(() => {
+    benchmarkRunRef.current?.controller.abort();
   }, []);
 
-  const startBenchRun = useCallback(
-    async (benchId: string) => {
-      const bench = benchesRef.current.find((b) => b.id === benchId);
-      if (bench === undefined || bench.prompts.length === 0) return;
-      // SPEC §8, one generation at a time, app-wide — chat, compare and
-      // bench all queue behind each other rather than racing.
+  const startBenchmarkRun = useCallback(
+    async (benchmarkId: string) => {
+      const benchmark = benchmarksRef.current.find((b) => b.id === benchmarkId);
+      if (benchmark === undefined) return;
+      if (benchmark.prompts.length === 0 || benchmark.lanes.length === 0) return;
+      // SPEC §8, one generation at a time, app-wide: chat, compare and
+      // benchmark all queue behind each other rather than racing.
       if (
-        benchRunRef.current !== null ||
+        benchmarkRunRef.current !== null ||
         streamsRef.current.size > 0 ||
         compareRunRef.current !== null
       ) {
         return;
       }
       const controller = new AbortController();
-      benchRunRef.current = { controller, benchId };
-      // One seed, drawn once, held across every prompt of the run (T5).
+      benchmarkRunRef.current = { controller, benchmarkId };
+      // One seed, drawn once, held across every lane and every prompt (R7).
       const seed = randomSeed();
-      // The T1 snapshot this ran against: the newest Modelfile saved for
-      // this tag. null when the tag has no history — an honest "unknown"
-      // rather than a snapshot id that names the wrong text.
-      const snapshotId = snapshotsForTag(historyRef.current, bench.model)[0]?.id ?? null;
-      setBenchProgress({ benchId, seed, done: 0, total: bench.prompts.length, results: [] });
+      const total = benchmark.prompts.length * benchmark.lanes.length;
+      setBenchmarkProgress({ benchmarkId, seed, done: 0, total, cells: [], progress: null });
       try {
-        const run = await runBench({
-          bench,
+        const run = await runBenchmark({
+          benchmark,
           seed,
-          snapshotId,
           signal: controller.signal,
-          chat: (messages, opts) =>
-            client.chat(bench.model, messages, {
+          // Grouped by lane, so this fires once per lane rather than once per
+          // prompt. keep_alive is the user's setting: the next lane's load
+          // replaces this model anyway.
+          load: (model, signal) => client.load(model, keepAlive, signal),
+          chat: (model, messages, opts) =>
+            client.chat(model, messages, {
               keepAlive,
               signal: opts.signal,
               // The pinned seed is the whole point; nothing else is
-              // overridden, so a bench measures the model as configured.
+              // overridden, so a lane measures the configuration as saved.
               options: { seed: opts.seed },
             }),
-          onResult: (result, done, total) => {
-            setBenchProgress((prev) =>
-              prev === null || prev.benchId !== benchId
+          onProgress: (progress) => {
+            setBenchmarkProgress((prev) =>
+              prev === null || prev.benchmarkId !== benchmarkId ? prev : { ...prev, progress },
+            );
+          },
+          onCell: (cell, done, cellTotal) => {
+            setBenchmarkProgress((prev) =>
+              prev === null || prev.benchmarkId !== benchmarkId
                 ? prev
-                : { ...prev, done, total, results: [...prev.results, result] },
+                : { ...prev, done, total: cellTotal, cells: [...prev.cells, cell] },
             );
           },
         });
-        // One write, at the end: a cancelled run still records the rows it
-        // finished, marked partial (T5).
-        commitBenches(
-          benchesRef.current.map((b) => (b.id === benchId ? appendRun(b, run) : b)),
+        // One write, at the end: a cancelled run still records the cells it
+        // finished, marked partial.
+        commitBenchmarks(
+          benchmarksRef.current.map((b) => (b.id === benchmarkId ? appendRun(b, run) : b)),
         );
         void syncModels().catch(() => {});
       } finally {
-        benchRunRef.current = null;
-        setBenchProgress(null);
+        benchmarkRunRef.current = null;
+        setBenchmarkProgress(null);
       }
     },
-    [client, commitBenches, keepAlive, syncModels],
+    [client, commitBenchmarks, keepAlive, syncModels],
   );
 
   const saveDraft = useCallback(
@@ -2035,17 +2114,20 @@ export function RemudaProvider({
     setEditorPane,
     restoreSnapshot,
     promoteToSystem,
-    benches,
-    activeBenchId,
-    benchProgress,
-    createBench,
-    openBench,
-    deleteBench,
-    renameBench,
-    addToBench,
-    removeBenchPrompt,
-    startBenchRun,
-    cancelBenchRun,
+    benchmarks,
+    activeBenchmarkId,
+    benchmarkProgress,
+    createBenchmark,
+    openBenchmark,
+    deleteBenchmark,
+    renameBenchmark,
+    addToBenchmark,
+    removeBenchmarkPrompt,
+    addLane,
+    removeLane,
+    updateLane,
+    startBenchmarkRun,
+    cancelBenchmarkRun,
   }), [
     client, status, checked, models, groups, running, loaded, activeModel, keepAlive,
     confirmDeleteModel, setConfirmDeleteModel, view, setView, loadPaneOpen,
@@ -2061,8 +2143,9 @@ export function RemudaProvider({
     revertEditor, saving, saveError, reloadToast, saveDraft,
     modelfileHistory, historyForTag, editorPane, setEditorPane, restoreSnapshot,
     promoteToSystem,
-    benches, activeBenchId, benchProgress, createBench, openBench, deleteBench,
-    renameBench, addToBench, removeBenchPrompt, startBenchRun, cancelBenchRun,
+    benchmarks, activeBenchmarkId, benchmarkProgress, createBenchmark, openBenchmark,
+    deleteBenchmark, renameBenchmark, addToBenchmark, removeBenchmarkPrompt,
+    addLane, removeLane, updateLane, startBenchmarkRun, cancelBenchmarkRun,
   ]);
 
   return <RemudaContext.Provider value={value}>{children}</RemudaContext.Provider>;
