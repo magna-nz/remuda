@@ -29,7 +29,7 @@ export function toCreateRequest(doc: ModelfileDoc): CreateRequest {
   const base = from(doc);
   if (base === null) {
     throw new Error(
-      "Modelfile has no FROM instruction — a base model is required " +
+      "Modelfile has no FROM instruction. A base model is required " +
         "before it can be created (add `FROM <model>`).",
     );
   }
@@ -71,7 +71,7 @@ export function toCreateRequest(doc: ModelfileDoc): CreateRequest {
         // The structured body has no adapter field, and silently creating
         // a model without its LoRA would be a discard. Refuse loudly.
         throw new Error(
-          "ADAPTER isn't supported by Remuda's save yet — edit and " +
+          "ADAPTER isn't supported by Remuda's save yet. Edit and " +
             "create this model with the ollama CLI.",
         );
       }

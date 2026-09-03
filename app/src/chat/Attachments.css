@@ -1,0 +1,109 @@
+/* Vision attachments (docs/mockup-proposals.html §05: .att / .thumb / .attach). */
+
+.att {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.att.pending {
+  margin: 0 0 8px;
+}
+
+.att .thumb {
+  position: relative;
+  width: 74px;
+  height: 56px;
+  border-radius: 8px;
+  background: var(--raised);
+  border: 1px solid var(--border-strong);
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  overflow: hidden;
+}
+
+.att .thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.att .thumb > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.att .thumb .rm {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 6px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--ink-2);
+  display: grid;
+  place-items: center;
+  padding: 0;
+}
+
+.att .thumb .rm:hover {
+  background: var(--crit-tint);
+  color: var(--crit);
+}
+
+.att .thumb .rm svg {
+  width: 11px;
+  height: 11px;
+}
+
+/* Restored from localStorage: the thumb is all that was persisted. */
+.att .thumb.gone {
+  border-style: dashed;
+  opacity: 0.75;
+}
+
+.att .thumb.gone .tag {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 1px 4px;
+  font-family: var(--mono);
+  font-size: 8.5px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  color: var(--ink-2);
+  background: color-mix(in srgb, var(--bg) 78%, transparent);
+}
+
+.composer .attach {
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--muted);
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+}
+
+.composer .attach:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.composer .attach:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.composer .attach svg {
+  width: 16px;
+  height: 16px;
+}

@@ -1,0 +1,54 @@
+/* Capability chips (SPEC.md §5.1; mockup-proposals.html `.caps`/`.cap`). */
+
+.caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.cap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1.5px 7px;
+  border-radius: 5px;
+  /* Neutral fallback — also what an unrecognised capability string gets. */
+  background: var(--raised);
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+.cap-thinking {
+  color: var(--ember-ink);
+  background: var(--ember-tint);
+  border-color: color-mix(in srgb, var(--ember) 40%, transparent);
+}
+
+.cap-embedding {
+  color: var(--warn);
+  background: var(--warn-tint);
+  border-color: color-mix(in srgb, var(--warn) 40%, transparent);
+}
+
+/*
+ * .cap-tools and .cap-vision use their own palette tokens rather than the
+ * semantic green/amber/red set: a model supporting tools is not a "good"
+ * status, and the indigo brand is spent only on the primary action and
+ * active state (SPEC §4). Borders are mixed from the accent, matching how
+ * the rest of the app derives chip borders.
+ */
+.cap-tools {
+  color: var(--cap-tools);
+  background: var(--cap-tools-tint);
+  border-color: color-mix(in srgb, var(--cap-tools) 30%, transparent);
+}
+
+.cap-vision {
+  color: var(--cap-vision);
+  background: var(--cap-vision-tint);
+  border-color: color-mix(in srgb, var(--cap-vision) 30%, transparent);
+}

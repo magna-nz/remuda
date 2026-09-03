@@ -15,11 +15,86 @@
   text-align: center;
 }
 
+/* Editor header: the Modelfile's name and the Form · Raw · History segments
+   (docs/mockup-tuning.html #t1 `.mfhead`). */
+.mfhead {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex: 0 0 auto;
+}
+
+.mfhead .mft {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 500;
+  color: var(--ink-2);
+}
+
+.mfhead .spacer {
+  flex: 1;
+}
+
+.mfhead .seg {
+  display: inline-flex;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  gap: 2px;
+}
+
+.mfhead .seg button {
+  padding: 5px 11px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  border-radius: 7px;
+}
+
+.mfhead .seg button:hover {
+  color: var(--ink);
+}
+
+.mfhead .seg button.on {
+  background: var(--surface-2);
+  color: var(--ink);
+  box-shadow: var(--shadow);
+}
+
 .split {
   display: grid;
   grid-template-columns: 1fr 1fr;
   flex: 1;
   min-height: 0;
+}
+
+/* SPEC §5.4 keeps both columns on screen whenever there is room for them;
+   the Form/Raw segments give the chosen one the space. */
+.split.pane-form {
+  grid-template-columns: 1.25fr 0.75fr;
+}
+
+.split.pane-raw {
+  grid-template-columns: 0.75fr 1.25fr;
+}
+
+/* Below this there is no room for two columns, so the segment decides which
+   one is shown rather than which one is wider. */
+@media (max-width: 900px) {
+  .split {
+    grid-template-columns: 1fr;
+  }
+
+  .split.pane-form .col:not(.form),
+  .split.pane-raw .col.form {
+    display: none;
+  }
 }
 
 .split .col {

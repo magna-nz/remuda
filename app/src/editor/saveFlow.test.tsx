@@ -47,11 +47,54 @@ describe("Modelfile editor save flow", () => {
 
     await waitFor(() => expect(client.createCalls).toHaveLength(1));
     expect(client.createCalls[0]!.name).toBe("support-bot-v2:latest");
+    // Default selection is "Keep" — no quantize field reaches /api/create.
+    expect(client.createCalls[0]!.request.quantize).toBeUndefined();
 
     await waitFor(() => expect(loadSpy).toHaveBeenCalled());
     expect(unloadSpy).toHaveBeenCalledWith("llama3.1:8b");
     expect(loadSpy).toHaveBeenCalledWith("support-bot-v2:latest", "5m");
     expect(unloadSpy.mock.invocationCallOrder[0]).toBeLessThan(loadSpy.mock.invocationCallOrder[0]!);
+  });
+
+  it("Quantisation defaults to Keep, naming the base's inherited level, and sends no quantize field", async () => {
+    const client = new FakeClient({
+      models: [makeModel({ tag: "llama3.1:8b", isLoaded: true, quantization: "Q4_K_M" })],
+      modelfile: FIXTURE_MODELFILE,
+    });
+    await openEditorFor(client);
+
+    fireEvent.click(screen.getByRole("button", { name: /Save as/ }));
+    expect(screen.getByRole("button", { name: "Keep · Q4_K_M" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByText("ollama create <name>", { exact: false })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "support-bot-v2" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create & load" }));
+
+    await waitFor(() => expect(client.createCalls).toHaveLength(1));
+    expect(client.createCalls[0]!.request.quantize).toBeUndefined();
+  });
+
+  it("picking an explicit quantisation level forwards it verbatim to /api/create and the preview reflects it", async () => {
+    const client = new FakeClient({
+      models: [makeModel({ tag: "llama3.1:8b", isLoaded: true, quantization: "Q4_K_M" })],
+      modelfile: FIXTURE_MODELFILE,
+    });
+    await openEditorFor(client);
+
+    fireEvent.click(screen.getByRole("button", { name: /Save as/ }));
+    fireEvent.change(screen.getByLabelText("Name"), { target: { value: "support-bot-v2" } });
+    fireEvent.click(screen.getByRole("button", { name: "q8_0" }));
+
+    expect(screen.getByRole("button", { name: "q8_0" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "Keep · Q4_K_M" })).toHaveAttribute("aria-pressed", "false");
+    expect(
+      screen.getByText("ollama create support-bot-v2 -q q8_0", { exact: false }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create & load" }));
+
+    await waitFor(() => expect(client.createCalls).toHaveLength(1));
+    expect(client.createCalls[0]!.request.quantize).toBe("q8_0");
   });
 
   it("a failed create surfaces its error verbatim and leaves the editor dirty", async () => {

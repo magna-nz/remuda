@@ -4,6 +4,7 @@
  * implementation another agent owns; tests only need the shape.
  */
 import type {
+  ArchParams,
   ChatChunk,
   ChatMessage,
   CreateRequest,
@@ -12,9 +13,13 @@ import type {
   Model,
   ModelDetail,
   ModelGroup,
+  ModelSnapshot,
   OllamaClient,
   PullProgress,
+  RunOptions,
+  RunningModel,
   ServerStatus,
+  ThinkLevel,
 } from "../../api/types";
 
 /** Fills in reasonable defaults so fixtures only spell out what a test cares about. */
@@ -29,6 +34,8 @@ export function makeModel(overrides: Partial<Model> & { tag: string }): Model {
     base: null,
     isVariant: false,
     modifiedAt: "2026-01-01T00:00:00Z",
+    capabilities: [],
+    archParams: null,
     ...overrides,
   };
 }
@@ -76,6 +83,21 @@ export interface FakeClientOptions {
   failPull?: string;
   /** listGroups() rejects, simulating a failing /api/show inside the sweep. */
   failListGroups?: string;
+  /**
+   * Scripted GET /api/ps readout. Without this, listRunning() derives one
+   * from `models` (every isLoaded model, no VRAM split, no expiry) so
+   * load()/chat() keep it in sync automatically. Set it to pin exact
+   * SIZE/PROCESSOR/CONTEXT/UNTIL numbers — it then wins over `models`, and
+   * a later load() will NOT change it.
+   */
+  running?: RunningModel[];
+
+  /**
+   * Architecture parameters `show()` reports, per tag. A tag with no entry
+   * gets `null` — the honest default, matching a server whose `model_info`
+   * didn't carry enough to predict against (SPEC-tuning T4).
+   */
+  archParamsByTag?: Record<string, ArchParams>;
 }
 
 function abortError(): DOMException {
@@ -89,10 +111,19 @@ export class FakeClient implements OllamaClient {
   failVersion: boolean;
   failLoad: string | undefined;
   failUnload: string | undefined;
-  loadCalls: { tag: string; keepAlive: KeepAlive }[] = [];
+  loadCalls: { tag: string; keepAlive: KeepAlive; numCtx?: number; numGpu?: number }[] = [];
   chatChunks: ChatChunk[] | undefined;
   failChat: string | undefined;
-  chatCalls: { tag: string; messages: ChatMessage[]; keepAlive: KeepAlive }[] = [];
+  /** Every chat() call, including the think level and run options it carried. */
+  chatCalls: {
+    tag: string;
+    messages: ChatMessage[];
+    keepAlive: KeepAlive;
+    think?: ThinkLevel;
+    options?: RunOptions;
+  }[] = [];
+  private readonly archParamsByTag: Record<string, ArchParams>;
+
   private chatQueue: ChatChunk[] = [];
   private chatWaiter: ((chunk: ChatChunk) => void) | null = null;
 
@@ -127,6 +158,8 @@ export class FakeClient implements OllamaClient {
     this.pullEvents = options.pullEvents;
     this.failPull = options.failPull;
     this.failListGroups = options.failListGroups;
+    this.running = options.running;
+    this.archParamsByTag = options.archParamsByTag ?? {};
   }
 
   async version(): Promise<ServerStatus> {
@@ -138,6 +171,44 @@ export class FakeClient implements OllamaClient {
 
   async listModels(): Promise<Model[]> {
     return this.models;
+  }
+
+  /** Scripted /api/ps; undefined derives it from `models`. */
+  running: RunningModel[] | undefined;
+  /** Counts standalone /api/ps reads — the poll must never need one. */
+  listRunningCalls = 0;
+
+  async listRunning(): Promise<RunningModel[]> {
+    this.listRunningCalls += 1;
+    return this.runningNow();
+  }
+
+  /**
+   * The whole point of this method on the real client: /api/tags and /api/ps
+   * in ONE trip. It deliberately does not bump listRunningCalls, so a test
+   * can assert the poll adds no standalone /api/ps.
+   */
+  async listModelsWithRunning(): Promise<ModelSnapshot> {
+    return { models: this.models, running: this.runningNow() };
+  }
+
+  private runningNow(): RunningModel[] {
+    // A scripted readout supplies the numbers, but residency still comes from
+    // the model list — otherwise an ejected model keeps reporting itself as
+    // resident and the tray never empties.
+    if (this.running !== undefined) {
+      const resident = new Set(this.models.filter((m) => m.isLoaded).map((m) => m.tag));
+      return this.running.filter((r) => resident.has(r.tag));
+    }
+    return this.models
+      .filter((m) => m.isLoaded)
+      .map((m) => ({
+        tag: m.tag,
+        sizeBytes: m.sizeBytes,
+        sizeVramBytes: m.sizeBytes,
+        contextLength: m.contextLength,
+        expiresAt: null,
+      }));
   }
 
   /** Counts the expensive /api/show sweep, so tests can assert it's rare. */
@@ -188,15 +259,30 @@ export class FakeClient implements OllamaClient {
         quantizationLevel: model?.quantization ?? "",
       },
       contextLength: model?.contextLength ?? null,
+      capabilities: model?.capabilities ?? [],
+      archParams: this.archParamsByTag[tag] ?? null,
     };
   }
 
-  async load(tag: string, keepAlive: KeepAlive): Promise<void> {
+  async load(
+    tag: string,
+    keepAlive: KeepAlive,
+    _signal?: AbortSignal,
+    numCtx?: number,
+    numGpu?: number,
+  ): Promise<void> {
     if (this.failLoad !== undefined) {
       throw new Error(this.failLoad);
     }
-    this.loadCalls.push({ tag, keepAlive });
-    this.models = this.models.map((m) => ({ ...m, isLoaded: m.tag === tag }));
+    // Recorded only when set, so existing `toEqual({ tag, keepAlive })`
+    // assertions keep passing — an undefined key would fail them.
+    const call: { tag: string; keepAlive: KeepAlive; numCtx?: number; numGpu?: number } = { tag, keepAlive };
+    if (numCtx !== undefined) call.numCtx = numCtx;
+    if (numGpu !== undefined) call.numGpu = numGpu;
+    this.loadCalls.push(call);
+    // Additive, like Ollama: loading a model doesn't evict the others until
+    // OLLAMA_MAX_LOADED_MODELS forces it.
+    this.models = this.models.map((m) => (m.tag === tag ? { ...m, isLoaded: true } : m));
   }
 
   async unload(tag: string): Promise<void> {
@@ -241,9 +327,20 @@ export class FakeClient implements OllamaClient {
   async *chat(
     tag: string,
     messages: ChatMessage[],
-    opts: { keepAlive: KeepAlive; signal?: AbortSignal },
+    opts: {
+      keepAlive: KeepAlive;
+      signal?: AbortSignal;
+      think?: ThinkLevel;
+      options?: RunOptions;
+    },
   ): AsyncIterable<ChatChunk> {
-    this.chatCalls.push({ tag, messages: messages.map((m) => ({ ...m })), keepAlive: opts.keepAlive });
+    this.chatCalls.push({
+      tag,
+      messages: messages.map((m) => ({ ...m })),
+      keepAlive: opts.keepAlive,
+      think: opts.think,
+      options: opts.options === undefined ? undefined : { ...opts.options },
+    });
     if (this.failChat !== undefined) {
       throw new Error(this.failChat);
     }

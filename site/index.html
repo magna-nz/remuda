@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Remuda — a desktop app for running, testing and tuning local Ollama models</title>
+<meta name="description" content="Remuda closes the tuning loop for local Ollama models in one window: load, chat to test, edit the Modelfile beside the chat, save, and it rebuilds and reloads. With save history, side-by-side A/B on a pinned seed, and tool-call validation.">
+<link rel="icon" href="assets/mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/mark.svg" alt="">
+      <b>Remuda</b>
+    </a>
+    <nav class="sitenav">
+      <a href="index.html" class="active">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="modelfile-editor.html">Modelfile editor</a>
+      <a href="comparing.html">Comparing</a>
+      <a href="memory.html">Memory</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="eyebrow">Documentation</div>
+  <h1>Remuda</h1>
+  <p class="lede">A desktop app for running, testing and tuning your local Ollama models. Chats on the
+  left, the loaded model in the top bar, the Modelfile one click away.</p>
+
+  <h2>What it is</h2>
+  <p>Ollama is a good runtime with a terminal-shaped workflow: getting a model to behave means bouncing
+  between <code>ollama list</code>, <code>ollama run</code>, <code>ollama show</code>, and a Modelfile
+  in another editor — a round trip slow enough that most people try one system prompt and settle.</p>
+  <p><b>Remuda closes that loop in one window: load a model, chat to test it, edit its Modelfile beside
+  the chat, save.</b> Remuda rebuilds the model through <code>ollama create</code> and reloads it, so
+  your very next message uses the change.</p>
+  <p>Then it makes the loop worth running more than once. Every save is snapshotted and diffable. Two
+  configurations can answer the same prompt side by side on a pinned seed, so you're reading the
+  change and not sampling noise — and a benchmark does the same across a whole set of prompts, so
+  the verdict stops resting on the one example you happened to try. If a model claims tool support,
+  you can find out whether it actually emits well-formed calls.</p>
+  <p>Nothing leaves your machine. Remuda is a client for the Ollama you already run on
+  <code>127.0.0.1</code>.</p>
+
+  <div class="callout">
+    <p><b>Ollama runs separately.</b> Remuda owns no models and runs no inference itself. It talks to
+    an Ollama server you start yourself — by default <code>http://127.0.0.1:11434</code> — and if it
+    can't reach one, it says so plainly rather than pretending to work.</p>
+  </div>
+
+  <h2>Install</h2>
+  <pre><code>brew install --cask magna-nz/tap/remuda</code></pre>
+  <p>That pulls in <a href="https://github.com/magna-nz/homebrew-tap">magna-nz/homebrew-tap</a> on the
+  way through, so there's no separate <code>brew tap</code> step. The build is unsigned — no Apple
+  Developer program — so the cask clears the quarantine flag as part of the install, and the app just
+  launches.</p>
+  <pre><code>brew upgrade --cask remuda     # move to the latest release
+brew uninstall --cask remuda   # remove it</code></pre>
+  <p>Remuda needs Ollama itself, installed and running:</p>
+  <pre><code>brew install ollama
+ollama serve</code></pre>
+  <p>Requirements: macOS 12+ on Apple Silicon.</p>
+
+  <h2>What you get</h2>
+  <table>
+    <tr><th>Load pane</th><td>Every installed model, with tuned variants grouped under their base.
+      Pick a Modelfile, hit Load, watch real progress. Eject hands the memory back without waiting
+      out <code>keep_alive</code>.</td></tr>
+    <tr><th>Chat</th><td>Saved sessions that remember the model they ran on, and offer to load it
+      again rather than silently swapping. Streaming replies, cancel, and a warming indicator.</td></tr>
+    <tr><th>Modelfile editor</th><td>A form for the common fields, synced both ways with the raw text,
+      which stays the source of truth. Save or Save as…, plus a history of every save and restore.</td></tr>
+    <tr><th>Compare</th><td>Run two Modelfile configurations against the same prompt, side by side, on
+      a pinned seed — sequentially, so each lane's tokens per second still means something.</td></tr>
+    <tr><th>Benchmark</th><td>One saved set of prompts, run against several configurations at once
+      — two models against each other, or one model under two Modelfiles. One row per prompt, one
+      column per lane, every answer on the same pinned seed. It shows what differs and never scores
+      a lane.</td></tr>
+    <tr><th>Tool playground</th><td>For models that claim tool support: write schemas, chat against
+      them, and see every tool call validated field by field — wrong type, not in enum, unknown key,
+      missing. The verdict is the feature, not the pretty-printing.</td></tr>
+    <tr><th>Memory readout</th><td>The VRAM/RAM split for whatever is loaded, and a fit predictor that
+      estimates whether a model and context length will fit before you load it.</td></tr>
+    <tr><th>Pull</th><td>Per-layer progress, cancel and retry, plus a curated list of popular models
+      with the installed ones marked.</td></tr>
+    <tr><th>Per-reply stats</th><td>Generation and prompt-eval tokens per second, load time, total
+      time, and context used, under every reply.</td></tr>
+    <tr><th>Leave with it</th><td>Copy any reply as the <code>curl</code> or <code>ollama run</code>
+      that produced it, promote a good answer straight into <code>SYSTEM</code>, or re-roll holding
+      the seed — or changing only the seed.</td></tr>
+  </table>
+
+  <div class="grid-links">
+    <a href="getting-started.html">Getting started<span>Install Ollama, load a model, send your first chat.</span></a>
+    <a href="modelfile-editor.html">The Modelfile editor<span>Form vs. raw, Save vs. Save as…, and history.</span></a>
+    <a href="comparing.html">Comparing configurations<span>The A/B run and Benchmark: lanes, one seed.</span></a>
+    <a href="memory.html">Understanding memory<span>The runtime readout and the fit predictor.</span></a>
+    <a href="troubleshooting.html">Troubleshooting<span>Ollama not running, spilled models, full context.</span></a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Remuda is MIT-licensed.</span>
+    <a href="https://github.com/magna-nz/remuda">github.com/magna-nz/remuda</a>
+  </div>
+</footer>
+</body>
+</html>

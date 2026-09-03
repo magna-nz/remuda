@@ -7,7 +7,7 @@ name: Release
 # the tarball a Homebrew cask points `url` at; it does not build or upload a
 # .dmg. The cask is rendered from packaging/homebrew/remuda.rb with this
 # release's version and SHA-256 filled in, attached to the release, and — if
-# a TAP_GITHUB_TOKEN secret is configured — pushed to the tap repo.
+# a HOMEBREW_TAP_TOKEN secret is configured — pushed to the tap repo.
 on:
   push:
     tags:
@@ -17,13 +17,99 @@ permissions:
   contents: write
 
 jobs:
+  # Linux artifacts are built in their own job and handed to the publishing
+  # job below, rather than published separately: a release that carries the
+  # macOS tarball but not the .deb is worse than one that is a few minutes
+  # later, because the README advertises both.
+  #
+  # The coupling is deliberate and has a cost worth knowing: if this job
+  # fails, no release is published at all. That is the intended trade — a
+  # half-populated release is the failure mode this is avoiding.
+  build-linux:
+    name: Build Linux packages
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify tag matches the versions in the repo
+        run: ./scripts/version.sh --check "${GITHUB_REF_NAME}"
+
+      # Matches the CI bundle job. `libssl-dev` stays absent — reqwest is
+      # rustls, so there is no system OpenSSL in the tree.
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            xvfb
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      # Targets come from tauri.linux.conf.json (deb + appimage), the same
+      # file CI builds from, so a release cannot quietly differ from what
+      # was tested. APPIMAGE_EXTRACT_AND_RUN because the runner has no FUSE.
+      - name: Build the Linux bundles
+        working-directory: src-tauri
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: tauri build
+
+      # A Linux artifact that does not launch is the worst thing this
+      # workflow could publish, so the same headless launch test CI runs
+      # gates the release too. Installing the .deb first also proves apt is
+      # satisfied by the generated dependency list.
+      - name: Install the .deb
+        run: sudo apt-get install -y ./src-tauri/target/release/bundle/deb/*.deb
+
+      - name: Smoke test (headless launch)
+        run: ./scripts/smoke-linux.py /usr/bin/remuda
+
+      - name: Collect and checksum
+        id: package
+        run: |
+          set -euo pipefail
+          mkdir -p linux-dist
+          cp src-tauri/target/release/bundle/deb/*.deb linux-dist/
+          cp src-tauri/target/release/bundle/appimage/*.AppImage linux-dist/
+          cd linux-dist
+          for f in *; do
+            sha256sum "$f" > "$f.sha256"
+          done
+          ls -lh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-dist
+          path: linux-dist/*
+          if-no-files-found: error
+
   build-and-release:
     name: Build macOS app & publish release
+    needs: build-linux
     runs-on: macos-14
     env:
       # Read via env rather than the `secrets` context directly so the tap
       # step can be skipped with a plain `if:` when the secret isn't set.
-      TAP_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+      TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -31,39 +117,13 @@ jobs:
       # versions baked into the artifact. tauri.conf.json's version is what
       # stamps the .app's Info.plist, so a mismatch here ships a release
       # named v0.2.0 containing an app that reports 0.1.0.
+      #
+      # The check lives in scripts/version.sh rather than inline, so the gate
+      # and the bumper that satisfies it read the same six fields the same
+      # way. `version=` lands in $GITHUB_OUTPUT for the steps below.
       - name: Verify tag matches the versions in the repo
         id: version
-        run: |
-          set -euo pipefail
-          tag="${GITHUB_REF_NAME}"
-          version="${tag#v}"
-
-          tauri=$(jq -r '.version' src-tauri/tauri.conf.json)
-          npm_pkg=$(jq -r '.version' app/package.json)
-          cargo=$(grep -m1 '^version = ' src-tauri/Cargo.toml | sed 's/^version = "\(.*\)"$/\1/')
-
-          echo "tag                    ${tag} -> ${version}"
-          echo "src-tauri/tauri.conf.json  ${tauri}"
-          echo "src-tauri/Cargo.toml       ${cargo}"
-          echo "app/package.json           ${npm_pkg}"
-
-          fail=0
-          for pair in "src-tauri/tauri.conf.json:${tauri}" \
-                      "src-tauri/Cargo.toml:${cargo}" \
-                      "app/package.json:${npm_pkg}"; do
-            file="${pair%%:*}"
-            found="${pair#*:}"
-            if [ "$found" != "$version" ]; then
-              echo "::error file=${file}::version is ${found}, but the tag says ${version}"
-              fail=1
-            fi
-          done
-          if [ "$fail" -ne 0 ]; then
-            echo "Bump every version to ${version}, commit, and re-tag." >&2
-            exit 1
-          fi
-
-          echo "version=${version}" >> "$GITHUB_OUTPUT"
+        run: ./scripts/version.sh --check "${GITHUB_REF_NAME}"
 
       - uses: actions/setup-node@v4
         with:
@@ -118,11 +178,10 @@ jobs:
       # TODO: code signing & notarization.
       #
       # This build is UNSIGNED. Without a signing identity, Gatekeeper
-      # will refuse to open the .app on another Mac ("Remuda.app is
-      # damaged and can't be opened" / "unidentified developer"), which is
-      # why packaging/homebrew/remuda.rb's `caveats` block currently tells
-      # installers to run:
-      #   xattr -dr com.apple.quarantine /Applications/Remuda.app
+      # quarantines the .app on any other Mac and macOS refuses to launch
+      # it ("Remuda.app is damaged and can't be opened"), which is why
+      # packaging/homebrew/remuda.rb carries a `postflight` block that
+      # clears the quarantine attribute on install.
       #
       # To sign and notarize once a Developer ID is available, this step
       # would need, roughly:
@@ -136,8 +195,9 @@ jobs:
       #   3. After `tauri build` produces the signed .app, notarize it:
       #      `xcrun notarytool submit <bundle>.zip --apple-id ... --team-id ...
       #      --password ... --wait`, then `xcrun stapler staple Remuda.app`.
-      #   4. Only once that's in place should the cask's `caveats` note about
-      #      quarantine be removed.
+      #   4. Only once that's in place should the cask's `postflight`
+      #      quarantine strip — and the `caveats` note about it — be
+      #      removed. A signed, notarized build has no flag to clear.
       # --------------------------------------------------------------
 
       - name: Package the .app as a tarball
@@ -178,6 +238,24 @@ jobs:
           fi
           echo "Rendered cask: version ${got_version}, sha256 ${got_sha}"
 
+      # Works for both ways of cutting a release, because both end in a
+      # tag push:
+      #   - `git push origin v0.1.1` — no release exists yet, so this
+      #     creates one.
+      #   - *Draft a new release* in the GitHub UI with "create new tag on
+      #     publish" — the release already exists by the time this runs, so
+      #     this updates it and attaches the assets.
+      #
+      # `append_body` is what makes the second case safe: without it this
+      # step's `body` *replaces* whatever was typed in the UI, silently
+      # throwing away hand-written release notes. Appending instead leaves
+      # them intact and adds the checksum and cask note underneath.
+      - name: Fetch the Linux packages built alongside this
+        uses: actions/download-artifact@v4
+        with:
+          name: linux-dist
+          path: linux-dist
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
@@ -185,17 +263,23 @@ jobs:
             ${{ steps.package.outputs.asset }}
             ${{ steps.package.outputs.asset }}.sha256
             rendered-cask/remuda.rb
+            linux-dist/*
+          append_body: true
           body: |
             macOS (Apple Silicon / aarch64) build, **unsigned** — see the
-            signing TODO in .github/workflows/release.yml. Installers will
-            need to clear the quarantine attribute; see
+            signing TODO in .github/workflows/release.yml. The Homebrew cask
+            clears the Gatekeeper quarantine flag on install; see
             packaging/homebrew/remuda.rb.
 
             SHA-256: `${{ steps.package.outputs.sha256 }}`
 
+            Linux (x86-64) builds are attached as a `.deb` and an AppImage,
+            each with its own `.sha256`. Built on Ubuntu 22.04, so they need
+            glibc 2.35 or newer, GTK 3 and WebKitGTK 4.1.
+
             The `remuda.rb` asset on this release is the Homebrew cask with
             this version and checksum already filled in. It is pushed to
-            magna-nz/homebrew-tap automatically when the TAP_GITHUB_TOKEN
+            magna-nz/homebrew-tap automatically when the HOMEBREW_TAP_TOKEN
             secret is set; otherwise copy it to `Casks/remuda.rb` in the tap
             repo by hand. See packaging/homebrew/README.md.
 
@@ -204,7 +288,7 @@ jobs:
       # send `brew install` at a URL that 404s.
       #
       # Needs a PAT with write access to magna-nz/homebrew-tap in the
-      # TAP_GITHUB_TOKEN secret — the built-in GITHUB_TOKEN is scoped to this
+      # HOMEBREW_TAP_TOKEN secret — the built-in GITHUB_TOKEN is scoped to this
       # repo and cannot push to another one. Without the secret this step is
       # skipped and the tap is updated by hand from the release asset.
       - name: Push the cask to the tap repo
@@ -233,4 +317,4 @@ jobs:
       - name: Note when the tap was not updated
         if: env.TAP_TOKEN == ''
         run: |
-          echo "::notice::TAP_GITHUB_TOKEN is not set, so magna-nz/homebrew-tap was not updated. Copy the remuda.rb asset from this release into the tap's Casks/ directory."
+          echo "::notice::HOMEBREW_TAP_TOKEN is not set, so magna-nz/homebrew-tap was not updated. Copy the remuda.rb asset from this release into the tap's Casks/ directory."

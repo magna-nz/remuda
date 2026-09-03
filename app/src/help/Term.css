@@ -1,0 +1,91 @@
+/* Glossary term + its popover (R5 layer 3; mockup-proposals-2.html
+   `.termwrap`/`.term`/`.termpop`). Every colour is an index.css token. */
+
+.termwrap {
+  position: relative;
+  display: inline-block;
+}
+
+/* A button, not a <span>: that is what makes the definition reachable by
+   keyboard and by touch. Everything below undoes the browser's button
+   chrome so it still reads as a word inside a sentence. */
+.term {
+  appearance: none;
+  margin: 0;
+  padding: 0;
+  background: none;
+  border: 0;
+  border-bottom: 1px dotted var(--border-strong);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 0.92em;
+  line-height: inherit;
+  color: var(--ink);
+  cursor: help;
+}
+
+.term:hover,
+.term[aria-expanded="true"] {
+  color: var(--ember-ink);
+  border-bottom-color: var(--ember-ink);
+}
+
+.term:focus-visible {
+  outline: 2px solid var(--ember);
+  outline-offset: 2px;
+}
+
+/* Fixed, not absolute: a term sits inside panes that scroll
+   (`.benchmarkview` is `overflow-y: auto`), and an absolutely positioned
+   popover is cropped by the nearest such ancestor the moment the word is
+   near its edge — the definition loses its last line and the reader has no
+   way to reach it. Viewport coordinates come from `placeTerm.ts`; `left`
+   and `top` are set inline, so the values here are only the pre-placement
+   fallback. `max-height` is set inline too, and the overflow below is the
+   guarantee that a long definition scrolls rather than runs off-screen. */
+.termpop {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  display: block;
+  width: 290px;
+  max-width: 80vw;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 11px 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: 11px;
+  box-shadow: var(--shadow-lg);
+  /* The popover is prose, whatever the run of text around it was. */
+  text-align: left;
+  white-space: normal;
+  cursor: auto;
+}
+
+.termpop b {
+  display: block;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ember-ink);
+}
+
+.termpop .tp-def {
+  display: block;
+  margin-top: 5px;
+  font-family: var(--ui);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.55;
+  color: var(--ink-2);
+}
+
+.termpop .tp-more {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--ui);
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}

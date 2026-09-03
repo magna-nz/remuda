@@ -1,0 +1,190 @@
+/* The lane editor (docs/mockup-proposals-2.html §01 — the `.runbar` surface
+   and the mono type of `.runsel`, one row per lane). */
+.laneeditor {
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+  padding: 10px 16px 12px;
+}
+
+.laneeditor .le-h {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.laneeditor .le-h b {
+  font-size: 12px;
+}
+
+.laneeditor .le-note {
+  font-size: 11.5px;
+  color: var(--muted);
+  line-height: 1.5;
+  max-width: 62ch;
+}
+
+.laneeditor .lanelist {
+  list-style: none;
+  margin: 9px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* The row and the heading share one grid template, so the column labels sit
+   over the fields they name at any width. */
+.laneeditor .lane-head,
+.lanerow {
+  display: grid;
+  /* Column 3 is the memory hint. It is sized to its content and collapses to
+     nothing when there is none, so a row with no hint keeps the remove button
+     in the same place as one that has it. */
+  grid-template-columns: 52px minmax(0, 1fr) auto 20px;
+  gap: 8px;
+  align-items: center;
+}
+
+.laneeditor .lane-head {
+  margin: 9px 0 4px;
+}
+
+.laneeditor .lane-pair-h {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+}
+
+.laneeditor .lane-pair-h span {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding-left: 11px;
+}
+
+.lanerow .lane-n {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* A lane is one configuration, so its two selects share one capsule. The
+   border and the focus ring live here rather than on the fields, which is
+   what makes the pair read as a single control. */
+.lanerow .lane-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  overflow: hidden;
+  min-width: 0;
+  transition: border-color 0.12s ease;
+}
+
+.lanerow .lane-pair:focus-within {
+  border-color: var(--ember);
+  box-shadow: 0 0 0 3px var(--ember-tint);
+}
+
+/* `appearance: none` drops the OS stepper, which is grey-on-grey against
+   Embigo and drew twice per row. The chevron below is one glyph in
+   --muted, painted as a background so the select keeps its native
+   behaviour on every platform. */
+.lanerow .lane-sel {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--ink-2);
+  background-color: transparent;
+  background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='7' viewBox='0 0 10 7'%3E%3Cpath d='M1 1.5 5 5.5 9 1.5' fill='none' stroke='%23a29c91' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 9px center;
+  border: 0;
+  border-radius: 0;
+  padding: 6px 26px 6px 11px;
+  min-width: 0;
+  width: 100%;
+  cursor: pointer;
+  transition: background-color 0.12s ease;
+}
+
+.lanerow .lane-sel + .lane-sel {
+  border-left: 1px solid var(--border);
+}
+
+.lanerow .lane-sel:hover:not(:disabled) {
+  background-color: var(--surface);
+}
+
+/* The capsule owns the focus ring; a second one inside it would box the
+   field within the box. */
+.lanerow .lane-sel:focus-visible {
+  outline: none;
+}
+
+.lanerow .lane-sel:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.lanerow .lane-x {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: var(--faint);
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.lanerow .lane-x:hover:not(:disabled) {
+  background: var(--raised);
+  color: var(--ink);
+}
+
+.lanerow .lane-x:disabled {
+  opacity: 0.3;
+}
+
+.laneeditor .le-f {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.laneeditor .le-cap {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* The passive memory verdict on a lane row (docs/mockup-new-menu.html §05).
+   Never a blocker — Run asks the blocking form of the same question. */
+.lane-hint {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.lane-hint.ok {
+  background: var(--good-tint);
+  color: var(--good);
+}
+
+.lane-hint.bad {
+  background: var(--crit-tint);
+  color: var(--crit);
+}

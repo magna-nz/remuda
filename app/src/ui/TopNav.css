@@ -87,6 +87,62 @@
   color: var(--muted);
 }
 
+/*
+ * The runtime group (SPEC-tuning T7): the three chips beside the model
+ * control — placement, context used, keep_alive — and the popover they all
+ * open. Positioned relatively so the popover anchors under the chips rather
+ * than the whole titlebar.
+ */
+.runtime-group {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/*
+ * One runtime chip (SPEC §5.1, mockup-tuning.html §t7 `.rchip`) — neutral by
+ * default, green (`.good`) while placement/context read comfortably, amber
+ * (`.warn`) the moment either one needs attention.
+ */
+.rchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 9px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.rchip:hover {
+  background: var(--raised);
+}
+
+.rchip .d {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: 0 0 auto;
+}
+
+.rchip.good {
+  background: var(--good-tint);
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 26%, transparent);
+}
+
+.rchip.warn {
+  background: var(--warn-tint);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 32%, transparent);
+}
+
 .edit-modelfile {
   margin-left: 2px;
 }

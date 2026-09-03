@@ -6,17 +6,126 @@
  * in localStorage under a versioned key and are sorted most-recent first.
  * Corrupt or missing data degrades to an empty list, never a crash.
  */
-import type { ChatMessage } from "../api/types";
+import type { ChatMessage, RunOptions, ThinkLevel } from "../api/types";
+
+/**
+ * A transcript entry: the wire shape plus an optional local identity.
+ *
+ * `id` exists so a streamed reply can be routed to *a* message rather than
+ * to "whichever one is last" — which is the only thing that made a second
+ * concurrent generation impossible (SPEC-tuning T2). It is:
+ *
+ * - **optional**, because sessions written by every earlier build have none
+ *   and the storage key does not move (SPEC §6). A message without an id
+ *   loads intact and is never backfilled.
+ * - **local**, never sent to Ollama (`forWire` in ui/state.tsx strips it)
+ *   and never written to storage (`forStorage` below strips it too). Ids
+ *   are only meaningful for the lifetime of an in-flight generation, and
+ *   persisting them would change the stored bytes for no gain.
+ */
+export interface Message extends ChatMessage {
+  id?: string;
+  /**
+   * Which A/B lane produced this reply (SPEC-tuning T2). Absent on every
+   * single-lane message, and absent on the *user* message of a compare turn
+   * — one prompt is sent once and stored once; only the two assistant
+   * replies are lane-bound.
+   */
+  lane?: Lane;
+  /**
+   * True when this reply was generated with constrained output on (R2).
+   *
+   * Persisted, because the conformance card is judged on render and would
+   * otherwise appear under *older* replies the moment a schema is switched
+   * on — a red "not valid JSON" verdict on prose that was never asked to be
+   * JSON. Absent means unconstrained, which is every reply written before
+   * the field existed.
+   */
+  constrained?: boolean;
+}
+
+/** The two A/B lanes (SPEC-tuning T2). */
+export type Lane = "a" | "b";
+
+/** Everything that makes one lane of an A/B run its own configuration. */
+export interface LaneConfig {
+  /** Effective tag this lane runs. The two lanes may name different models. */
+  model: string;
+  /** Variant tag this lane runs; null means the base/"OG" model. Display only. */
+  modelfile: string | null;
+  /** Sampling overrides for this lane alone. */
+  options?: RunOptions;
+  /** Reasoning effort for this lane alone; absent means "off". */
+  think?: ThinkLevel;
+}
+
+/**
+ * Compare mode, per session and persisted with it (SPEC-tuning T2).
+ *
+ * `seed` is pinned for the *pair*: comparing two configurations under two
+ * different seeds measures sampling noise and nothing else. `null` means
+ * unpinned — each lane then runs on whatever seed its own options name, or
+ * none at all, and the bar says so.
+ */
+export interface CompareConfig {
+  seed: number | null;
+  lanes: [LaneConfig, LaneConfig];
+}
+
+/** A fresh message identity. Local and short-lived; see `Message.id`. */
+export function newMessageId(): string {
+  return `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** The three states of constrained output (docs/SPEC-round-two.md R2). */
+export type FormatMode = "off" | "json" | "schema";
+
+/**
+ * Constrained output for one chat — Ollama's `format` on /api/chat (R2).
+ *
+ * Per-chat and only per-chat: there is no `PARAMETER format`, so unlike run
+ * options this never has a Modelfile to be baked into.
+ *
+ * `text` is the user's raw schema JSON, held verbatim and *independently of
+ * the mode*, for the same reason tools/toolsets.ts holds its text that way:
+ * a half-typed schema must survive a reload, and a schema must survive being
+ * switched to `json` and back. The parsed schema is derived from it
+ * (format/format.ts `parseSchema`), never stored.
+ */
+export interface FormatConfig {
+  mode: FormatMode;
+  text: string;
+}
 
 export interface ChatSession {
   id: string;
   title: string;
   /** Effective tag it ran on — remembered across unloads. */
   model: string;
-  messages: ChatMessage[];
+  messages: Message[];
   updatedAt: string; // ISO 8601
+  /** Per-session sampling overrides sent on every request (SPEC §5.3). */
+  options?: RunOptions;
+  /** Reasoning effort for a thinking-capable model; absent means "off". */
+  think?: ThinkLevel;
+  /**
+   * A/B compare mode (SPEC-tuning T2). Its presence *is* the toggle: a
+   * session with no `compare` is an ordinary single-lane chat, which is
+   * every session written before this field existed.
+   */
+  compare?: CompareConfig;
+  /**
+   * Constrained output for this chat (R2). Absent means off, which is every
+   * session written before the field existed.
+   */
+  format?: FormatConfig;
 }
 
+/**
+ * Do not bump this. Every field added since v1 is optional, so a v1 payload
+ * parses unchanged; a new key would orphan — i.e. delete — every existing
+ * user's chat history for no gain.
+ */
 export const SESSIONS_STORAGE_KEY = "remuda.sessions.v1";
 
 /** Title before the first user message lands (SPEC §5.2). */
@@ -47,26 +156,197 @@ export function createSession(model: string, now: Date = new Date()): ChatSessio
   };
 }
 
-function isMessage(value: unknown): value is ChatMessage {
-  if (typeof value !== "object" || value === null) return false;
-  const m = value as Record<string, unknown>;
-  return (
-    (m.role === "system" || m.role === "user" || m.role === "assistant") &&
-    typeof m.content === "string"
-  );
+/**
+ * Reading persisted data is a two-tier job, and the tiers must not be
+ * confused.
+ *
+ * The *required* spine — id/title/model/updatedAt/messages, and each
+ * message's role and content — is what makes a session a session; if any of
+ * it is wrong the session is unreadable and gets dropped.
+ *
+ * The *optional* extras added after v1 — thinking, images, imageThumbs,
+ * id, options, think — are not. A malformed one of those is dropped on its
+ * own and the session survives, because throwing away a transcript over an
+ * unrecognised sidecar field would be a data-loss bug wearing a validator's
+ * clothes.
+ */
+function stringArrayOrUndefined(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  return value.every((v) => typeof v === "string") ? (value as string[]) : undefined;
 }
 
-function isSession(value: unknown): value is ChatSession {
-  if (typeof value !== "object" || value === null) return false;
+function coerceMessage(value: unknown): Message | null {
+  if (typeof value !== "object" || value === null) return null;
+  const m = value as Record<string, unknown>;
+  // "tool" included deliberately: ChatMessage.role was widened for T3, and a
+  // role this list rejects escalates to dropping the ENTIRE session below —
+  // a data-loss bug wearing a validator's clothes, exactly as this file warns.
+  if (m.role !== "system" && m.role !== "user" && m.role !== "assistant" && m.role !== "tool") {
+    return null;
+  }
+  if (typeof m.content !== "string") return null;
+  const message: Message = { role: m.role, content: m.content };
+  // Optional: a non-string or empty id is dropped on its own and the message
+  // survives (SPEC §6). Sessions written before ids existed have none, and
+  // one is never backfilled — inventing one would rewrite the user's history.
+  if (typeof m.id === "string" && m.id !== "") {
+    message.id = m.id;
+  }
+  // Same tier: an unrecognised lane is dropped and the reply stays, which is
+  // also what a session written before compare mode looks like.
+  if (m.lane === "a" || m.lane === "b") {
+    message.lane = m.lane;
+  }
+  // Same optional tier: anything other than `true` reads as unconstrained,
+  // which is also what every session written before R2 looks like.
+  if (m.constrained === true) {
+    message.constrained = true;
+  }
+  if (typeof m.thinking === "string") {
+    message.thinking = m.thinking;
+  }
+  // `images` is never written to storage (see saveSessions), but a payload
+  // from a build that did write them shouldn't be rejected for it.
+  const images = stringArrayOrUndefined(m.images);
+  if (images !== undefined) {
+    message.images = images;
+  }
+  const thumbs = stringArrayOrUndefined(m.imageThumbs);
+  if (thumbs !== undefined) {
+    message.imageThumbs = thumbs;
+  }
+  return message;
+}
+
+const RUN_OPTION_KEYS: Array<keyof RunOptions> = [
+  "temperature",
+  "topP",
+  "topK",
+  "seed",
+  "numPredict",
+  "repeatPenalty",
+  "numCtx",
+];
+
+function coerceOptions(value: unknown): RunOptions | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  const options: RunOptions = {};
+  let any = false;
+  for (const key of RUN_OPTION_KEYS) {
+    const v = raw[key];
+    if (typeof v === "number" && Number.isFinite(v)) {
+      options[key] = v;
+      any = true;
+    }
+  }
+  return any ? options : undefined;
+}
+
+function coerceThink(value: unknown): ThinkLevel | undefined {
+  return value === "off" || value === "low" || value === "medium" || value === "high"
+    ? value
+    : undefined;
+}
+
+/**
+ * Compare mode off a stored payload (SPEC-tuning T2).
+ *
+ * Optional-tier, like `options` and `think`: anything short of two complete
+ * lanes drops the whole `compare` block and leaves the transcript alone. A
+ * half-formed compare would render one lane against nothing, which is worse
+ * than falling back to the single-lane chat the session already is.
+ */
+function coerceLaneConfig(value: unknown): LaneConfig | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
+  const raw = value as Record<string, unknown>;
+  if (typeof raw.model !== "string" || raw.model === "") return null;
+  const lane: LaneConfig = {
+    model: raw.model,
+    modelfile: typeof raw.modelfile === "string" && raw.modelfile !== "" ? raw.modelfile : null,
+  };
+  const options = coerceOptions(raw.options);
+  if (options !== undefined) {
+    lane.options = options;
+  }
+  const think = coerceThink(raw.think);
+  if (think !== undefined) {
+    lane.think = think;
+  }
+  return lane;
+}
+
+function coerceCompare(value: unknown): CompareConfig | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (!Array.isArray(raw.lanes) || raw.lanes.length !== 2) return undefined;
+  const a = coerceLaneConfig(raw.lanes[0]);
+  const b = coerceLaneConfig(raw.lanes[1]);
+  if (a === null || b === null) return undefined;
+  // A non-finite seed is "not pinned", never NaN on the wire.
+  const seed = typeof raw.seed === "number" && Number.isFinite(raw.seed) ? raw.seed : null;
+  return { seed, lanes: [a, b] };
+}
+
+/**
+ * Constrained output off a stored payload (R2). Optional-tier, like
+ * `options` and `think`.
+ *
+ * The text is taken verbatim — **including text that doesn't parse**, which
+ * is the entire reason the session stores text rather than a schema. A
+ * missing or non-string text degrades to empty rather than dropping the
+ * mode: a chat that was set to `json` keeps constraining its replies even if
+ * whatever wrote the payload lost the editor contents.
+ */
+function coerceFormat(value: unknown): FormatConfig | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const raw = value as Record<string, unknown>;
+  if (raw.mode !== "off" && raw.mode !== "json" && raw.mode !== "schema") return undefined;
+  return { mode: raw.mode, text: typeof raw.text === "string" ? raw.text : "" };
+}
+
+function coerceSession(value: unknown): ChatSession | null {
+  if (typeof value !== "object" || value === null) return null;
   const s = value as Record<string, unknown>;
-  return (
-    typeof s.id === "string" &&
-    typeof s.title === "string" &&
-    typeof s.model === "string" &&
-    typeof s.updatedAt === "string" &&
-    Array.isArray(s.messages) &&
-    s.messages.every(isMessage)
-  );
+  if (
+    typeof s.id !== "string" ||
+    typeof s.title !== "string" ||
+    typeof s.model !== "string" ||
+    typeof s.updatedAt !== "string" ||
+    !Array.isArray(s.messages)
+  ) {
+    return null;
+  }
+  const messages: Message[] = [];
+  for (const raw of s.messages) {
+    const message = coerceMessage(raw);
+    if (message === null) return null;
+    messages.push(message);
+  }
+  const session: ChatSession = {
+    id: s.id,
+    title: s.title,
+    model: s.model,
+    messages,
+    updatedAt: s.updatedAt,
+  };
+  const options = coerceOptions(s.options);
+  if (options !== undefined) {
+    session.options = options;
+  }
+  const think = coerceThink(s.think);
+  if (think !== undefined) {
+    session.think = think;
+  }
+  const compare = coerceCompare(s.compare);
+  if (compare !== undefined) {
+    session.compare = compare;
+  }
+  const format = coerceFormat(s.format);
+  if (format !== undefined) {
+    session.format = format;
+  }
+  return session;
 }
 
 /** Load persisted sessions; corrupt or missing data starts empty. */
@@ -76,15 +356,54 @@ export function loadSessions(): ChatSession[] {
     if (raw === null) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
-    return sortSessions(parsed.filter(isSession));
+    const sessions: ChatSession[] = [];
+    for (const entry of parsed) {
+      const session = coerceSession(entry);
+      if (session !== null) sessions.push(session);
+    }
+    return sortSessions(sessions);
   } catch {
     return [];
   }
 }
 
+/**
+ * Storage-safe copy: raw base64 `images` are dropped, `imageThumbs` kept.
+ *
+ * localStorage caps around 5MB. A single full-size image is easily a megabyte
+ * of base64, so persisting `images` would blow the quota — and setItem
+ * failing is silent here, meaning one pasted screenshot would stop *all*
+ * session saving without a word. Thumbnails are the persisted record; a
+ * restored session shows the thumb and knows the full data is gone.
+ *
+ * `id` and `lane` *are* written, and that is a deliberate change from the
+ * build that introduced ids. Compare mode is per-session state that survives
+ * a restart (SPEC-tuning T2), and `lane` is what tells the two replies of a
+ * turn apart — strip it and a reloaded A/B session is two anonymous replies
+ * to one prompt. `lane` needs `id` beside it: the reply overflow menu and a
+ * regenerate both address a message by id. Both are optional on the way back
+ * in, so a session written by any earlier build still loads (SPEC §6).
+ */
+function forStorage(session: ChatSession): ChatSession {
+  if (!session.messages.some((m) => m.images !== undefined)) {
+    return session;
+  }
+  return {
+    ...session,
+    messages: session.messages.map((m) => {
+      if (m.images === undefined) return m;
+      const { images: _dropped, ...rest } = m;
+      return rest;
+    }),
+  };
+}
+
 export function saveSessions(sessions: ChatSession[]): void {
   try {
-    window.localStorage.setItem(SESSIONS_STORAGE_KEY, JSON.stringify(sessions));
+    window.localStorage.setItem(
+      SESSIONS_STORAGE_KEY,
+      JSON.stringify(sessions.map(forStorage)),
+    );
   } catch {
     // Quota/private-mode failures: sessions simply won't survive a restart.
   }

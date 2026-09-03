@@ -39,15 +39,24 @@
   flex-direction: row-reverse;
 }
 
-.msg.user .av {
-  background: var(--ink);
-  color: var(--surface);
-}
-
 .msg.bot .av {
   background: var(--ember-tint);
   color: var(--ember-ink);
   font-family: var(--mono);
+}
+
+.msg .col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.msg.user .col {
+  align-items: flex-end;
+}
+
+.msg.bot .col {
+  align-items: flex-start;
 }
 
 .bubble {
@@ -102,13 +111,59 @@
   }
 }
 
-.tokstat {
-  align-self: flex-start;
-  margin: -8px 0 0 40px;
+/* Full timings under a completed reply (mockup §04: .stats). */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-2);
+  overflow: hidden;
+  margin-top: 9px;
+  max-width: 560px;
+  align-self: stretch;
+}
+
+.stats .s {
+  flex: 1;
+  min-width: 104px;
+  padding: 8px 11px;
+  border-right: 1px solid var(--border);
+}
+
+.stats .s:last-child {
+  border-right: 0;
+}
+
+.stats .s .k {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.stats .s .v {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  margin-top: 1px;
+}
+
+.stats .s .v small {
+  color: var(--faint);
+  font-weight: 400;
+  font-size: 10.5px;
+}
+
+/* Which per-session overrides the run used (mockup §04). */
+.runnote {
+  margin-top: 7px;
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--faint);
-  font-variant-numeric: tabular-nums;
+  color: var(--ember-ink);
 }
 
 .chat-error {
@@ -123,6 +178,7 @@
   flex: 0 0 auto;
   border-top: 1px solid var(--border);
   padding: 12px 16px;
+  position: relative;
 }
 
 .composer .box {
@@ -183,17 +239,72 @@
 }
 
 .note-strip {
-  font-size: 12px;
+  font-size: 11.5px;
   color: var(--muted);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 9px;
+  flex-wrap: wrap;
   margin-top: 8px;
+}
+
+.note-strip .spacer {
+  flex: 1;
+}
+
+.note-strip .note {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .note-strip b {
   font-weight: 600;
   color: var(--ink-2);
+}
+
+.note-strip .hint {
+  color: var(--faint);
+}
+
+/* Think-level segmented control (mockup §03: .seg). */
+.seg {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--raised);
+  border: 1px solid var(--border);
+}
+
+.seg button {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-family: var(--mono);
+}
+
+.seg button:hover {
+  color: var(--ink);
+}
+
+.seg button.on {
+  background: var(--ember);
+  color: var(--ink);
+}
+
+.seg .lbl {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  padding: 0 6px 0 4px;
 }
 
 /* unloaded banner (SPEC §5.3) */
@@ -224,4 +335,405 @@
 .chat-banner .bt b,
 .chat-banner .bt code {
   font-family: var(--mono);
+}
+
+/* Drop target for vision attachments (mockup §05). */
+.chatmain.dropping {
+  outline: 2px dashed var(--ember);
+  outline-offset: -6px;
+}
+
+/* Embedding model: no composer, an explanation instead (mockup §02). */
+.gate {
+  margin: 14px;
+  padding: 14px;
+  border-radius: 11px;
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 32%, transparent);
+  display: flex;
+  gap: 11px;
+  align-items: flex-start;
+}
+
+.gate > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--warn);
+  flex: 0 0 auto;
+  margin-top: 1px;
+}
+
+.gate b {
+  font-size: 13px;
+  font-family: var(--mono);
+}
+
+.gate p {
+  margin: 3px 0 0;
+  font-size: 12.5px;
+  color: var(--ink-2);
+}
+
+.gate code {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  background: var(--raised);
+  padding: 1px 5px;
+  border-radius: 5px;
+}
+
+.gate-foot {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--faint);
+  font-size: 12.5px;
+  padding: 30px;
+}
+
+.gate-foot code {
+  font-family: var(--mono);
+  color: var(--muted);
+}
+
+/* num_ctx is applied at load time, so the warning outlives the popover. */
+.note-strip .ctx-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 8px;
+  background: var(--warn-tint);
+  border: 1px solid color-mix(in srgb, var(--warn) 40%, transparent);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.note-strip .ctx-chip svg {
+  width: 12px;
+  height: 12px;
+  color: var(--warn);
+  flex: 0 0 auto;
+}
+
+/* ── A/B compare (docs/mockup-tuning.html #t2) ───────────────────────── */
+
+.chathead {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.chathead .spacer {
+  flex: 1;
+}
+
+.cmpbtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.cmpbtn:hover {
+  color: var(--ink);
+  border-color: var(--border-strong);
+}
+
+.cmpbtn.on {
+  border-color: color-mix(in srgb, var(--ember) 45%, transparent);
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+}
+
+/* "one prompt · both lanes" — the rule that separates the shared prompt
+   from the two answers to it. */
+.sharedtag {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin: 0 0 12px;
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.sharedtag:before,
+.sharedtag:after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* Two equal columns, stretched: the lanes' stats have to land in the same
+   grid positions or the numbers aren't comparable at a glance. */
+.lanes {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: stretch;
+}
+
+.lane {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--bg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.lane.a {
+  border-top: 2px solid var(--ember);
+}
+
+.lane.b {
+  border-top: 2px solid var(--cap-vision);
+}
+
+.lanehead {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.lanehead .spacer {
+  flex: 1;
+}
+
+.lanetag {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 800;
+  flex: 0 0 auto;
+  background: var(--ember);
+  color: #fff;
+}
+
+.lane.b .lanetag,
+.cmpbar .lanepick:last-of-type .lanetag {
+  background: var(--cap-vision);
+  color: #241a28;
+}
+
+.cfgchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cfgchip:hover,
+.cfgchip[aria-expanded="true"] {
+  border-color: var(--ember);
+  color: var(--ink);
+}
+
+.lanename {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+/* flex:1 is what keeps the two footers level when one reply is longer. */
+.lanebody {
+  flex: 1;
+  padding: 11px 12px;
+  font-size: 12.5px;
+  line-height: 1.62;
+  color: var(--ink-2);
+  min-height: 96px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lanebody.queued {
+  color: var(--faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11.5px;
+}
+
+/* Fixed 2×2 so gen sits above gen in both lanes, reported or not. */
+.lanestats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--surface-2);
+}
+
+.lanestats .stat {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  display: flex;
+  gap: 5px;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.lanestats .stat b {
+  color: var(--ink-2);
+  font-weight: 600;
+}
+
+.lanestats .stat.win b {
+  color: var(--good);
+}
+
+.lanestats .stat.win:after {
+  content: "▲";
+  color: var(--good);
+  font-size: 8px;
+}
+
+.lanefoot {
+  padding: 9px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.lanefoot .lanemodel {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The run's shared facts: which models, which seed, and what it costs. */
+.cmpbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  flex-wrap: wrap;
+  padding: 9px 14px;
+  border-top: 1px solid var(--border);
+  background: var(--bg);
+}
+
+.cmpbar .spacer {
+  flex: 1;
+}
+
+.cmpbar .lanepick {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cmpbar select {
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 3px 6px;
+  max-width: 190px;
+}
+
+.pin {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+  border: 1px solid color-mix(in srgb, var(--ember) 32%, transparent);
+}
+
+.pin.warn {
+  background: var(--warn-tint);
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 32%, transparent);
+}
+
+.pin.calm {
+  background: var(--surface-2);
+  color: var(--muted);
+  border-color: var(--border);
+}
+
+/* Two scoped popovers side by side — comparing the knob panels is the point. */
+.lanepops {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 64px;
+  z-index: 20;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.runpop.scoped {
+  position: static;
+  width: 330px;
+  max-width: 50%;
+  max-height: min(60vh, 460px);
+}
+
+/* The reply overflow menu sits under the bubble it acts on. */
+.msgfoot {
+  display: flex;
+  margin-top: 2px;
+}
+
+/* A lane's own failure, shown inside the lane that produced it. The app-wide
+   streamError strip can't serve this: the sibling lane clears that slot when
+   it starts (SPEC-tuning T2). */
+.lane-error {
+  margin: 8px 0 0;
+  padding: 7px 9px;
+  border-radius: 8px;
+  background: var(--crit-tint);
+  border: 1px solid color-mix(in srgb, var(--crit) 32%, transparent);
+  color: var(--crit);
+  font-size: 12px;
+  line-height: 1.5;
 }

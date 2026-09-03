@@ -1,173 +1,172 @@
 <div align="center">
   <img src="docs/remuda-mark.svg" alt="Remuda logo" width="104" />
   <h1>Remuda</h1>
-  <p><strong>Your stable of local models, saddled and ready.</strong></p>
-  <p>A chat-first desktop UI for Ollama — load models, test them in chat, and tweak or fork their Modelfiles in place.</p>
+  <p><strong>A desktop app for running, testing and tuning your local Ollama models.</strong></p>
   <p>
     <a href="https://github.com/magna-nz/remuda/actions/workflows/ci.yml"><img src="https://github.com/magna-nz/remuda/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
     <a href="https://github.com/magna-nz/remuda/releases/latest"><img src="https://img.shields.io/github/v/release/magna-nz/remuda?sort=semver&label=release" alt="Latest release" /></a>
-    <a href="https://github.com/magna-nz/remuda/releases"><img src="https://img.shields.io/github/downloads/magna-nz/remuda/total?label=downloads" alt="Total downloads" /></a>
-    <!-- PLACEHOLDER: swap for a real license badge once a LICENSE is chosen -->
-    <img src="https://img.shields.io/badge/license-TBD-lightgrey" alt="License TBD" />
+    <a href="https://ollama.com"><img src="https://img.shields.io/badge/Ollama-000000?logo=ollama&logoColor=white" alt="Talks to a local Ollama" /></a>
+    <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="Runs on macOS and Linux" />
+    <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="MIT License" /></a>
   </p>
-  <p><a href="#install">Install</a> · <a href="#quick-start">Quick start</a> · <a href="#the-load-pane">The load pane</a> · <a href="SPEC.md">Spec</a></p>
+  <p>
+    <a href="#-install">Install</a> ·
+    <a href="#-quick-start">Quick start</a> ·
+    <a href="#-what-you-get">Features</a> ·
+    <a href="https://magna-nz.github.io/remuda/">Docs</a> ·
+    <a href="SPEC.md">Spec</a>
+  </p>
 </div>
 
 <br />
 
 <div align="center">
-  <!-- Rendered from docs/mockup.html, which the app mirrors 1:1.
-       PLACEHOLDER: swap for a capture of the running app once one is nicer. -->
-  <img src="docs/screenshot.png" alt="Remuda chat view" width="820" />
+  <img src="docs/demo.gif" alt="Starting a chat in Remuda: picking a model to load, chatting with it, then running that prompt as a benchmark" width="820" />
   <br />
-  <sub><strong>Chats on the left, the loaded model in the top bar, the Modelfile one click away.</strong></sub>
+  <sub><strong>Start a chat and it asks which model to load. Then send any prompt to a benchmark and run it.</strong> Real time, nothing sped up.</sub>
 </div>
 
 <br />
 
-Running models with Ollama means juggling `ollama list`, `ollama run`, `ollama show`, and a
-Modelfile in a text editor — and remembering which flags do what. Remuda puts that workflow in
-one window: pick a model, load it, chat to test it, and when the answers aren't right, open its
-Modelfile *next to the chat*, tweak it, and save — Remuda re-creates the model through Ollama
-and reloads it so your next message uses the change. Everything stays local: Remuda is a client
-of your own Ollama at **`127.0.0.1`**, and nothing leaves your machine.
+## 🤔 Why
 
----
+Tuning a model on Ollama means bouncing between `ollama list`, `ollama run`, `ollama show` and a
+Modelfile in another editor — slow enough that most people try one system prompt and settle.
 
-## Why Remuda
+**Remuda closes the loop in one window: load a model, chat to test it, edit its Modelfile beside
+the chat, save.** It rebuilds through `ollama create` and reloads, so your next message uses the
+change. Other Ollama GUIs are chat windows; this one is for the tuning.
 
-A *remuda* is the herd of horses a ranch hand picks their mount from each day. That's the
-mental model: your installed models are the herd, one is saddled at a time, and switching —
-or re-shoeing one with a new Modelfile — should take seconds, not a terminal session.
+And then for knowing whether the tuning worked. Any prompt you have already chatted can be sent to
+a **benchmark** and replayed across several configurations at once, on one pinned seed. One good
+answer is luck; a column of them is a reason.
 
-Remuda is a *management and tinkering* surface, not an IDE: anything you'd do with
-`ollama list / run / show / create / pull / rm`, without remembering the flags.
+Nothing leaves your machine — Remuda is a client for the Ollama you already run on `127.0.0.1`.
 
-## The load pane
+> A *remuda* is the herd of horses a ranch hand picks their mount from each day.
 
-Remuda opens on a global **model control** in the top bar. Click it and the load pane shows
-every installed model — with **tuned variants grouped under their base** — plus a Modelfile
-picker (*Original* or any variant) and a **Load** button with real progress. Loading is always
-the explicit act: the model you picked is the model that's hot.
+## ✨ What you get
 
-Next to Load, **Eject** hands the loaded model's memory straight back instead of waiting out
-`keep_alive` — useful when you want the VRAM for something else. It only shows while something
-is loaded, and it names the tag it frees. Nothing is lost: the next chat or Load warms the
-weights again.
+* 📝 **Modelfile editor** — opens beside the chat. Form and raw text stay in sync; the text is the
+  source of truth and round-trips byte for byte. Save rebuilds and reloads.
+* 🕰️ **Modelfile history** — every save snapshotted with a line diff. Restore loads a draft rather
+  than rebuilding behind your back; outside edits show up as drift.
+* 🏁 **Benchmark** — keep a set of prompts and run them against several configurations at once: two
+  models against each other, or one model under two Modelfiles. One row per prompt, one column per
+  lane, every answer on the same pinned seed. It shows you what differs and never scores a lane.
+  Before it loads anything it checks whether the lane fits beside whatever you already have in
+  memory, and offers to unload rather than letting a five-minute load fail.
+* 🔀 **Compare (A/B)** — the same idea for a single prompt and two configurations, when you want the
+  answer now rather than a table.
+* 🧰 **Tool playground** — for models that claim `tools`: write schemas and see every `tool_call`
+  validated field by field.
+* 🎛️ **Per-chat parameters** — temperature, seed and the rest for the current chat only, with **Bake
+  into Modelfile** when one earns its place.
+* 🍴 **Save as…** — fork a tuned variant, optionally quantised, as a real file on disk.
+* 📊 **Fit predictor and telemetry** — will this model at this context fit in GPU memory, and once
+  loaded, where it actually landed. Figures that can't be read honestly are absent, never zero.
+* ➕ **The rest** — model load pane with variants grouped under their base, saved chats, streaming
+  with cancel, folded reasoning blocks, vision, pull with per-layer progress, per-reply stats, and
+  **Copy as `curl`** / **Promote to `SYSTEM`** / **Re-roll**.
 
-## What you can do
+The [docs site](https://magna-nz.github.io/remuda/) covers all of it in detail.
 
-### 💬 Chat with the model you loaded
+## 📋 Requirements
 
-Chats live down the left. Each is a saved session that **remembers the model it ran on** — if
-that model isn't in memory when you reopen it, Remuda says so and offers to load it, never
-silently swapping. Streaming replies, cancel, tok/s, and a warming indicator while weights load.
-
-### 🛠 Tweak the Modelfile without leaving the chat
-
-The editor opens in the same window, chat list still visible. A friendly form (system prompt,
-temperature, context length, stop sequences) syncs both ways with the raw Modelfile — and the
-raw text is the source of truth. Content the form doesn't model (`LICENSE`, `ADAPTER`,
-`MESSAGE`, comments) is **never silently dropped**; the parser round-trips byte-for-byte.
-
-### 🔁 Save, and it's live
-
-**Save** overwrites; **Save as…** forks a new tuned variant. Either way Remuda runs
-`ollama create`, stops the old model, and reloads the new one — a toast walks through each
-step, and your next message uses the new Modelfile.
-
-### 📦 Pull new models
-
-Pull from the Ollama registry with per-layer progress, cancel and retry, plus a curated list
-of popular models — already-installed ones marked.
-
-### 🔒 Local by default
-
-Remuda binds to nothing and phones nowhere. It talks to Ollama's API on
-`http://127.0.0.1:11434` (configurable in Settings), and your chats persist locally.
-
-## Look & feel
-
-Single-theme dark: a warm-neutral ground with an indigo→violet brand (the **Embigo**
-palette), set in **Inter** with **IBM Plex Mono** for everything machine-facing — model
-tags, Modelfiles, parameters, the token stream.
-
-## Requirements
-
-- **[Ollama](https://ollama.com)** running locally — Remuda is a client; it doesn't bundle
-  models or run inference itself:
-
-  ```sh
-  brew install ollama
-  ollama serve
-  ```
-
-- macOS 12+ on Apple Silicon. <!-- PLACEHOLDER: Intel/universal + Linux/Windows builds — planned -->
-
-## Install
-
-**Homebrew** (macOS) — available from the first tagged release:
+[Ollama](https://ollama.com) running locally, plus either macOS 12+ on Apple Silicon or a
+glibc-based x86-64 Linux with GTK 3 and WebKitGTK 4.1 (Ubuntu 22.04 and newer, and equivalents).
+Remuda is a client — it doesn't bundle models or run inference itself.
+<!-- PLACEHOLDER: Intel/universal macOS and Windows builds are planned -->
 
 ```sh
-brew install --cask magna-nz/tap/remuda
+brew install ollama
+ollama serve
 ```
 
-The build is unsigned by design (no Apple Developer program). Skip the one-time Gatekeeper
-prompt by installing with `--no-quarantine` instead:
+## 📦 Install
+
+### macOS
 
 ```sh
-brew install --cask --no-quarantine magna-nz/tap/remuda
+brew install --cask --force magna-nz/tap/remuda
 ```
 
-<sub>Alternatives to the flag: right-click <strong>Remuda.app → Open → Open</strong> once, or
-<code>xattr -dr com.apple.quarantine /Applications/Remuda.app</code>. See
-<a href="packaging/homebrew/README.md">packaging/homebrew</a> for release + tap mechanics.</sub>
+That pulls in [magna-nz/homebrew-tap](https://github.com/magna-nz/homebrew-tap) on the way, so
+there's no separate `brew tap` step. The build is unsigned, but the cask clears the quarantine
+flag, so the app just launches. Then `brew upgrade --cask --force remuda` and `brew uninstall
+--cask remuda` do what you'd expect.
 
-**From source:**
+### Linux
+
+x86-64, glibc 2.35+ (Ubuntu 22.04 and newer, Debian 12, Fedora 36+, and equivalents). Grab the
+`.deb` or the AppImage from the [latest release](https://github.com/magna-nz/remuda/releases/latest):
+
+```sh
+sudo apt install ./Remuda_*_amd64.deb
+```
+
+Or, for anything not Debian-based, the AppImage runs as-is:
+
+```sh
+chmod +x Remuda_*_amd64.AppImage && ./Remuda_*_amd64.AppImage
+```
+
+Ollama on Linux usually runs as a systemd service. If Remuda says it isn't running:
+
+```sh
+sudo systemctl start ollama
+```
+
+Or from source:
 
 ```sh
 git clone https://github.com/magna-nz/remuda.git
 cd remuda/app && npm install
-cargo tauri dev        # full desktop shell, run from src-tauri/
+cd ../src-tauri && cargo tauri dev
 ```
 
-## Quick start
+## 🚀 Quick start
 
-1. Start Ollama (`ollama serve`) — Remuda's connection pill goes green.
-2. Click the **model control** in the top bar, pick a model, **Load**.
-3. **＋ New chat** and say hello.
-4. Not the behavior you want? Hit the **pencil** next to the model control, edit the system
-   prompt, **Save** — the model reloads and your next message uses it.
-5. Like the result? **Save as…** keeps it as a named tuned variant, original intact.
+1. Start Ollama with `ollama serve`. Remuda's connection pill goes green.
+2. Hit **＋ New → New chat**. With nothing in memory it asks which model to load and binds the
+   chat to it; with one already loaded it just starts. (The model control in the top bar still
+   loads one directly if you'd rather.)
+3. Say hello.
+4. Not the behaviour you wanted? Click the pencil, edit the system prompt, **Save**. The model
+   reloads and your next message uses it.
+5. Happy with it? **Save as…** keeps it as a named variant, original left alone.
+6. Sure it's better? Put the variant and the original in a **benchmark** as two lanes and run your
+   prompts through both. One good answer is luck; a column of them is a reason.
 
 No models installed yet? The load pane offers **Pull your first model**.
 
-## Documentation
+First run offers a five-step tour, and every pane has a **?** if you'd rather read one later.
 
-- [`SPEC.md`](SPEC.md) — the full product spec: every surface, the Ollama API calls behind
-  it, the Modelfile sync contract, and open questions.
-- [`docs/mockup.html`](docs/mockup.html) — the interactive design mockup the app is built to.
-- [`packaging/homebrew/`](packaging/homebrew/README.md) — release and tap mechanics.
+## 📚 Documentation
 
-## Contributing
+* **[magna-nz.github.io/remuda](https://magna-nz.github.io/remuda/)** — the user guide.
+* [`SPEC.md`](SPEC.md) — full product spec: every surface, the Ollama calls behind it, the
+  Modelfile sync contract.
+* [`docs/SPEC-tuning.md`](docs/SPEC-tuning.md) — the tuning loop, with the build log at the end.
+* [`docs/SPEC-round-two.md`](docs/SPEC-round-two.md) — layer offload, constrained output, the
+  rendered prompt, the help layer and Benchmark, with that round's build log.
+* [`docs/mockup.html`](docs/mockup.html) — the design mockup the app is built to.
+* [`docs/mockup-new-menu.html`](docs/mockup-new-menu.html) — the **＋ New** menu and the memory
+  check before a benchmark run, with the reasoning behind each call.
+* [`packaging/homebrew/`](packaging/homebrew/README.md) — release and tap mechanics.
 
-Requirements: [Node](https://nodejs.org) 22+ and a [Rust](https://rustup.rs) toolchain.
-Web app gates, from `app/`:
+## 🛠️ Contributing
+
+You'll need [Node](https://nodejs.org) 22+ and a [Rust](https://rustup.rs) toolchain.
 
 ```sh
-npm run typecheck   # tsc --noEmit
-npm test            # vitest
-npm run build       # tsc && vite build
+cd app
+npm run typecheck && npm test && npm run build
 ```
 
-Desktop shell, from `src-tauri/`: `cargo check` / `cargo tauri dev`.
+For the desktop shell, `cargo check` or `cargo tauri dev` from `src-tauri/`. CI runs both sets of
+gates plus `cargo fmt --check` and `cargo clippy -D warnings`.
 
-CI runs both sets of gates — the web ones above, plus `cargo fmt --check`, `cargo clippy -D
-warnings` and `cargo check` — on every pull request and on pushes to `main`. The release
-workflow builds the macOS app on a `v*` tag, and refuses to build if the tag disagrees with
-the versions in `tauri.conf.json`, `Cargo.toml` and `package.json`.
+## ⚖️ License
 
-## License
-
-<!-- PLACEHOLDER: choose a license (currently all-rights-reserved by default) -->
-TBD — no license chosen yet; all rights reserved until one is added.
+[MIT](LICENSE).

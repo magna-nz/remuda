@@ -1,0 +1,203 @@
+/* Format pane (docs/SPEC-round-two.md R2, docs/mockup-proposals-2.html §02):
+   the schema on the left of the chat, the mode control in its header. */
+
+/* The split the pane and the chat share. ChatView wraps its own root in
+   this only while the pane is open, so a closed pane costs no layout. */
+.fmtsplit {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.fmtsplit > .chatmain {
+  flex: 1;
+  min-width: 0;
+}
+
+.fmtpane {
+  flex: 0 0 352px;
+  max-width: 352px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.fmtpane-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  font-size: 13px;
+  color: var(--ink);
+}
+
+.fmtpane-h .spacer {
+  flex: 1;
+}
+
+.fmtpane-h .hint {
+  font-size: 11px;
+  color: var(--faint);
+}
+
+.fmtseg {
+  display: inline-flex;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.fmtseg button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  padding: 3px 9px;
+  cursor: pointer;
+}
+
+.fmtseg button + button {
+  border-left: 1px solid var(--border-strong);
+}
+
+.fmtseg button.on {
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+}
+
+.fmtclose {
+  background: transparent;
+  border: 0;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 4px;
+}
+
+.fmtclose:hover {
+  color: var(--ink);
+}
+
+.fmtbox {
+  flex: 1;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  padding: 14px;
+  background: transparent;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.55;
+  outline: none;
+  tab-size: 2;
+}
+
+.fmtfoot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 13px;
+  border-top: 1px solid var(--border);
+  font-size: 11.5px;
+}
+
+.fmtfoot .spacer {
+  flex: 1;
+}
+
+.fmtfoot .ok {
+  color: var(--good);
+}
+
+.fmtfoot .bad {
+  color: var(--crit);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.fmtmode {
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.fmtnote {
+  margin: 0;
+  padding: 8px 13px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.5;
+}
+
+/* Layer 1 — the empty state (R5, mockup-proposals-2.html §05 `.emptyfeat`).
+   Shown while `format` is off, so the pane a user opens before turning
+   anything on explains itself rather than sitting there as a bare editor. */
+.fmtempty {
+  flex: 0 0 auto;
+  padding: 16px 16px 18px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.fmtempty .ef-ic {
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--ember-tint);
+  color: var(--ember-ink);
+  display: grid;
+  place-items: center;
+  margin-bottom: 9px;
+  border: 1px solid color-mix(in srgb, var(--ember) 34%, transparent);
+}
+
+.fmtempty .ef-ic svg {
+  width: 15px;
+  height: 15px;
+}
+
+.fmtempty h3 {
+  font-size: 13px;
+  color: var(--ink);
+  margin: 0 0 5px;
+}
+
+.fmtempty > p {
+  margin: 0;
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.6;
+}
+
+.fmtempty .ef-how {
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fmtempty .ef-how li {
+  display: flex;
+  gap: 9px;
+  font-size: 12px;
+  color: var(--ink-2);
+  line-height: 1.5;
+}
+
+.fmtempty .ef-how b {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ember-ink);
+  flex: 0 0 auto;
+  padding-top: 2px;
+  width: 13px;
+}

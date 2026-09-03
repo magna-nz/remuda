@@ -43,11 +43,11 @@ function submitPull(tag: string) {
 }
 
 /**
- * A catalog row by its model name — scoped to `.regrow .rt b`, since the
+ * A catalog row by its model name — scoped to `.regrow-meta b`, since the
  * name also appears (as an example) in the note-strip's `<code>`.
  */
 function catalogRow(name: string): HTMLElement {
-  const heading = screen.getAllByText(name, { selector: ".regrow .rt b" })[0];
+  const heading = screen.getAllByText(name, { selector: ".regrow-meta b" })[0];
   return heading.closest(".regrow") as HTMLElement;
 }
 
@@ -225,6 +225,16 @@ describe("PullView", () => {
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
     expect(screen.getByText("All models")).toBeInTheDocument();
+  });
+
+  it("renders catalog capability chips via the shared Capabilities component", async () => {
+    const client = new FakeClient({ models: [] });
+    renderPull(client);
+    await untilChecked();
+
+    const row = catalogRow("qwen3");
+    expect(within(row).getByText("tools")).toHaveClass("cap", "cap-tools");
+    expect(within(row).getByText("thinking")).toHaveClass("cap", "cap-thinking");
   });
 
   it("Sidebar's Get Models button switches to the Pull view, keeping the chats sidebar", async () => {

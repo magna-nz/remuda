@@ -1,0 +1,187 @@
+/* Modelfile history pane — timeline + unified diff (docs/mockup-tuning.html #t1). */
+
+.histwrap {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.histwrap.empty {
+  align-items: center;
+  justify-content: center;
+  padding: 30px;
+  text-align: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.histwrap.empty code {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.timeline {
+  width: 250px;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--border);
+  padding: 8px;
+  overflow: auto;
+  background: var(--bg);
+}
+
+.hentry {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: 9px;
+  padding: 9px 10px;
+  display: block;
+  margin-bottom: 2px;
+}
+
+.hentry:hover {
+  background: var(--raised);
+}
+
+.hentry.on {
+  background: var(--surface-2);
+  border-color: var(--border-strong);
+}
+
+.hentry .hr1 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.hentry .hkind {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--faint);
+}
+
+.hentry.on .hkind {
+  color: var(--ember-ink);
+}
+
+.hentry .htime {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.hentry .hsum {
+  margin-top: 4px;
+  display: block;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.hbadge {
+  display: inline-block;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 5px;
+  background: var(--good-tint);
+  color: var(--good);
+}
+
+.hbadge.drift {
+  background: var(--warn-tint);
+  color: var(--warn);
+}
+
+.diffpane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.diffbar {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.diffbar .dt {
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.diffbar .dt b {
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.diffbar .spacer {
+  flex: 1;
+}
+
+.diff {
+  flex: 1;
+  overflow: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  line-height: 1.75;
+  padding: 10px 0;
+}
+
+.dl {
+  display: flex;
+  padding: 0 14px 0 0;
+}
+
+.dl .gut {
+  width: 52px;
+  flex: 0 0 auto;
+  text-align: right;
+  padding-right: 12px;
+  color: var(--faint);
+  font-size: 11px;
+  user-select: none;
+}
+
+.dl .txt {
+  white-space: pre-wrap;
+  color: var(--ink-2);
+}
+
+.dl.add {
+  background: color-mix(in srgb, var(--good) 11%, transparent);
+}
+
+.dl.add .txt {
+  color: var(--good);
+}
+
+.dl.del {
+  background: color-mix(in srgb, var(--crit) 11%, transparent);
+}
+
+.dl.del .txt {
+  color: var(--crit);
+}
+
+.dl.hunk {
+  background: var(--surface-2);
+}
+
+.dl.hunk .txt {
+  color: var(--faint);
+}

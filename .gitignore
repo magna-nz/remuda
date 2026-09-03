@@ -8,3 +8,13 @@ app/.vite/
 # src-tauri (Rust)
 src-tauri/target/
 src-tauri/gen/
+
+# Local-only tooling: records docs/demo.gif from the running app.
+# Kept out of the repo because it needs playwright-core (13 MB) that CI
+# would otherwise install on every run.
+scripts/record-demo.mjs
+
+# Claude Code local state: settings and scratch worktrees. Already excluded
+# per-machine, but neither ~/.config/git/ignore nor .git/info/exclude survives
+# a clone, so the rule lives here too.
+.claude/

@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Getting started — Remuda</title>
+<meta name="description" content="Install Ollama, install Remuda, load a model and send your first chat.">
+<link rel="icon" href="assets/mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/mark.svg" alt="">
+      <b>Remuda</b>
+    </a>
+    <nav class="sitenav">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html" class="active">Getting started</a>
+      <a href="modelfile-editor.html">Modelfile editor</a>
+      <a href="comparing.html">Comparing</a>
+      <a href="memory.html">Memory</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="eyebrow">Guide</div>
+  <h1>Getting started</h1>
+  <p class="lede">The whole loop: start Ollama, load a model, chat, edit its Modelfile, save.</p>
+
+  <h2>1. Start Ollama</h2>
+  <p>Remuda is a client — it doesn't bundle Ollama or run inference itself. Install and start it
+  first:</p>
+  <pre><code>brew install ollama
+ollama serve</code></pre>
+  <p>Remuda's connection pill goes green once it can reach the server, by default at
+  <code>http://127.0.0.1:11434</code>.</p>
+
+  <h2>2. Install Remuda</h2>
+  <pre><code>brew install --cask magna-nz/tap/remuda</code></pre>
+  <p>See the <a href="index.html#install">overview</a> for the upgrade and uninstall commands, and
+  what to do if macOS quarantines the app anyway.</p>
+
+  <h2>3. Load a model</h2>
+  <p>Click the model control in the top bar. It opens the load pane: every model
+  <code>ollama list</code> knows about, with tuned variants grouped under their base. Pick a model
+  and a Modelfile — the base ("Original"), or a tuned variant — and hit <b>Load</b>. A progress bar
+  tracks the warm request; the pane's runtime readout then shows the VRAM/RAM split, the context the
+  runner started with, and a countdown to <code>keep_alive</code> expiry.</p>
+  <p>No models installed yet? The load pane offers <b>Pull your first model</b>, with per-layer
+  progress and a curated list of popular models.</p>
+
+  <h2>4. Chat to test it</h2>
+  <p>Hit <b>＋ New chat</b> — it opens on whatever model is currently loaded — and say hello. Replies
+  stream in; <code>Enter</code> sends, <code>Shift+Enter</code> starts a new line. Messages test the
+  model; they never change its saved Modelfile.</p>
+
+  <h2>5. Tune it</h2>
+  <p>Not the behaviour you wanted? Open the <a href="modelfile-editor.html">Modelfile editor</a>
+  without leaving the chat — the chat list stays visible. Edit the system prompt or a parameter, hit
+  <b>Save</b>. Remuda stops the model, rebuilds it through <code>ollama create</code>, and reloads it,
+  so your next message uses the change.</p>
+  <p>Happy with a variant and want to keep the original untouched? <b>Save as…</b> forks it under a new
+  name.</p>
+
+  <div class="pager">
+    <a href="index.html">&larr; Overview</a>
+    <a href="modelfile-editor.html">The Modelfile editor &rarr;</a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Remuda is MIT-licensed.</span>
+    <a href="https://github.com/magna-nz/remuda">github.com/magna-nz/remuda</a>
+  </div>
+</footer>
+</body>
+</html>

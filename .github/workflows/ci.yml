@@ -15,6 +15,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # The six version fields only get compared against a tag once Release runs,
+  # which is after the tag is already pushed — too late to fix without moving
+  # it. Checking they agree with *each other* on every PR catches a partial
+  # bump while it's still just a commit.
+  version:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./scripts/version.sh --check
+
   web:
     name: Web (app/)
     runs-on: ubuntu-latest
@@ -36,20 +47,46 @@ jobs:
       - run: npm run build
 
   rust:
-    name: Rust (src-tauri/)
-    # macOS, not ubuntu-latest: the Tauri shell links WebKitGTK + GTK on
-    # Linux and the Ubuntu runner doesn't have those system packages. On a
-    # macOS runner the system webview is already present, so the Rust side
-    # needs no extra provisioning.
+    name: Rust (src-tauri/) — ${{ matrix.os }}
+    # Both targets, because the cfg-gated code in host.rs is exactly what a
+    # single-platform job cannot see: `#[cfg(unix)]` compiles on macOS but the
+    # Linux-only paths around process discovery do not get exercised there.
     #
-    # macos-14 matches the release runner (arm64), so what CI checks is the
-    # target the release actually builds for.
-    runs-on: macos-14
+    # macos-14 matches the release runner (arm64). ubuntu-22.04 is pinned
+    # rather than ubuntu-latest for the same reason: it is the oldest image
+    # Tauri 2 supports (it needs webkit2gtk 4.1), so it is what a Linux
+    # release would have to build on to keep the glibc floor low.
+    #
+    # fail-fast is off so a Linux failure still reports the macOS result —
+    # while Linux support is in progress, one red leg should not hide the
+    # other.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, ubuntu-22.04]
+    runs-on: ${{ matrix.os }}
     defaults:
       run:
         working-directory: src-tauri
     steps:
       - uses: actions/checkout@v4
+
+      # The Tauri shell links WebKitGTK and GTK on Linux; the runner image
+      # does not carry them. `libssl-dev` is deliberately absent — reqwest is
+      # built with rustls (see Cargo.toml), so there is no system OpenSSL in
+      # the tree to satisfy.
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        working-directory: .
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -67,13 +104,144 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-cargo-check-
 
+      # Formatting is platform-independent, so one leg is enough — running it
+      # on both would just report the same failure twice.
       - name: Formatting
+        if: matrix.os == 'macos-14'
         run: cargo fmt --all --check
 
-      # No `npm run build` beforehand: `cargo check`/`clippy` don't need
-      # app/dist to exist — only `tauri build` reads the bundled frontend.
+      # No `npm run build` beforehand: `cargo check`/`clippy`/`cargo test`
+      # don't need app/dist to exist — only `tauri build` reads the bundled
+      # frontend.
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
       - name: Check
         run: cargo check --all-targets
+
+      # The unit tests in host.rs and registry.rs have never run in CI. They
+      # are the only automated check on the process-matching and
+      # model-reference parsing rules, and they are what tells us whether the
+      # host telemetry contract holds on Linux as well as macOS.
+      #
+      # The `#[ignore]`d tests need a live `ollama serve` and stay excluded.
+      - name: Test
+        run: cargo test --all-targets
+
+  # Proves the thing the `rust` job cannot: that the app actually *bundles*
+  # on Linux. `cargo check`/`clippy`/`test` compile and link the crate, but
+  # they never run the frontend build, never invoke the Tauri bundler, and
+  # never produce an installable artifact.
+  #
+  # Deliberately a separate job rather than another step on the `rust`
+  # matrix: this is a full release-profile build (minutes, not seconds) and
+  # it should not sit in front of the fast feedback that fmt/clippy/test give.
+  bundle-linux:
+    name: Bundle (linux)
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      # Same set as the `rust` job's Linux leg. `libssl-dev` stays absent —
+      # reqwest is rustls (see Cargo.toml).
+      - name: Install Linux system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            xvfb
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry & build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-bundle-${{ hashFiles('src-tauri/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-bundle-
+
+      # `tauri build` shells out to `npm run build` in app/ via
+      # `beforeBuildCommand`, which needs the dependencies present first.
+      - name: Install frontend dependencies
+        working-directory: app
+        run: npm ci
+
+      # Installed via npm rather than `cargo install tauri-cli`, matching
+      # release.yml — the npm artifact is a prebuilt binary, so it's cheaper
+      # than rebuilding tauri-cli here.
+      - name: Install Tauri CLI
+        run: npm install -g @tauri-apps/cli@^2
+
+      # Bundle targets come from tauri.linux.conf.json (deb + appimage),
+      # which Tauri merges over tauri.conf.json on Linux — so this builds
+      # exactly what a Linux release would, with no CLI-only override that
+      # could drift from the committed config.
+      #
+      # APPIMAGE_EXTRACT_AND_RUN: the AppImage tooling mounts itself with
+      # FUSE, which isn't available on a runner. Extracting instead is the
+      # supported workaround.
+      - name: Build
+        working-directory: src-tauri
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: tauri build
+
+      # A zero exit code from the bundler is not proof that a usable package
+      # came out of it. Assert both artifacts exist, and read the .deb's
+      # control metadata back — that catches a malformed package, a missing
+      # icon or a broken dependency list, none of which fail the build.
+      - name: Inspect artifacts
+        run: |
+          set -euo pipefail
+          # `|| true`: with `set -e`, find failing on a missing directory
+          # would abort here and hide the explicit message below, which is
+          # the one that actually says which bundle is missing.
+          deb=$(find src-tauri/target/release/bundle/deb -name '*.deb' -print -quit 2>/dev/null || true)
+          app=$(find src-tauri/target/release/bundle/appimage -name '*.AppImage' -print -quit 2>/dev/null || true)
+          test -n "$deb" || { echo "::error::no .deb produced"; exit 1; }
+          test -n "$app" || { echo "::error::no .AppImage produced"; exit 1; }
+          ls -lh "$deb" "$app"
+          echo "--- dpkg-deb --info ---"
+          dpkg-deb --info "$deb"
+          echo "--- dpkg-deb --contents (desktop entry and binary) ---"
+          dpkg-deb --contents "$deb" | grep -E '\.desktop|/bin/|\.png' || true
+
+      # Installing the .deb rather than running the binary straight out of
+      # target/ tests two more things for free: that apt is satisfied by the
+      # dependency list the bundler generated, and that the binary works from
+      # its installed location.
+      - name: Install the .deb
+        run: sudo apt-get install -y ./src-tauri/target/release/bundle/deb/*.deb
+
+      # The first thing in this repo's history to actually *launch* Remuda on
+      # Linux. Everything above proves it compiles and packages; this proves
+      # it runs, renders, and executes its own JavaScript. See the module
+      # docstring in scripts/smoke-linux.py for what the assertion covers.
+      - name: Smoke test (headless launch)
+        run: ./scripts/smoke-linux.py /usr/bin/remuda
+
+      - name: Upload bundles
+        uses: actions/upload-artifact@v4
+        with:
+          name: remuda-linux-bundles
+          path: |
+            src-tauri/target/release/bundle/deb/*.deb
+            src-tauri/target/release/bundle/appimage/*.AppImage
+          if-no-files-found: error
+          retention-days: 14

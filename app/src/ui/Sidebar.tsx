@@ -1,19 +1,37 @@
 /**
  * Chats rail (SPEC.md §5, §5.2; docs/mockup.html session rows).
  *
- * The saved-session list: each row shows the title, the model tag it ran on
- * with a status dot (green = loaded now, hollow amber + "unloaded" = not),
- * and a relative time. "+ New chat" binds a session to the currently loaded
- * model, so it needs one loaded. Search filters by title substring.
+ * The saved-session list. A row is one line — status dot (green = the model
+ * is loaded now, hollow amber = not), title, relative time — so the rail
+ * shows as much history as it can. The model tag itself only spells itself
+ * out on the open chat; elsewhere it lives in the row's tooltip, and in
+ * screen-reader text so the dot is never the only carrier of the state.
+ * "+ New" (NewMenu) is the rail's primary action and is never disabled: the
+ * model question lives behind it, and only the chat branch ever asks.
+ * Search filters by title substring.
+ *
+ * Two groups, not one: **Benches** (T5) sits above **Recent**, because a
+ * bench is a thing you reach for from wherever you are — most often from
+ * inside the Modelfile editor, having just saved a change.
  */
 import { useState } from "react";
 import "./Sidebar.css";
 import { relativeTime, shortTag, type ChatSession } from "../chat/sessions";
+// T5 / R4 — the Benches group. It lives in app/src/bench/ so the rail's own
+// file keeps to one job; the group is above Recent because the rail persists
+// across every surface, which is what makes a bench reachable from inside
+// the Modelfile editor.
+import { BenchmarkRail } from "../benchmark/BenchmarkRail";
+import { NewMenu } from "./NewMenu";
+import { useTourTarget } from "../tour/registry";
 import { useRemuda } from "./state";
 
 function SessionRow({ session, active }: { session: ChatSession; active: boolean }) {
   const { models, openSession, deleteSession } = useRemuda();
   const isLoaded = models.some((m) => m.tag === session.model && m.isLoaded);
+
+  const tag = shortTag(session.model);
+  const state = isLoaded ? "loaded" : "not loaded";
 
   return (
     <div className={active ? "sess active" : "sess"}>
@@ -22,14 +40,21 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
         className="sess-open"
         onClick={() => openSession(session.id)}
         aria-current={active || undefined}
+        title={`${tag}, ${state}`}
       >
-        <div className="stitle">{session.title}</div>
-        <div className="smodel">
+        <div className="strow">
           <span className={isLoaded ? "sdot" : "sdot off"} aria-hidden="true" />
-          {shortTag(session.model)}
-          {!isLoaded && <span className="stag">· unloaded</span>}
+          <span className="stitle">{session.title}</span>
           <span className="stime">{relativeTime(session.updatedAt)}</span>
         </div>
+        {/* The tag is spelled out on the open chat only — every other row
+            carries it in the tooltip and the screen-reader line below. */}
+        {active && (
+          <div className="smodel" aria-hidden="true">
+            <span className={isLoaded ? "smodel-tag" : "smodel-tag off"}>{tag}</span>
+          </div>
+        )}
+        <span className="sr-only">{`${tag}, ${state}`}</span>
       </button>
       <button
         type="button"
@@ -48,7 +73,20 @@ function SessionRow({ session, active }: { session: ChatSession; active: boolean
 }
 
 export function Sidebar() {
-  const { view, setView, sessions, activeSessionId, loaded, newChat } = useRemuda();
+  const {
+    view,
+    setView,
+    sessions,
+    activeSessionId,
+    benchmarks,
+    activeBenchmarkId,
+    openBenchmark,
+    createAndOpenBenchmark,
+    deleteBenchmark,
+  } = useRemuda();
+  // R6 step 3 rings the BENCHMARKS header; the rail takes the ref rather
+  // than registering it, so tour/steps.ts stays this side of the boundary.
+  const benchmarksRef = useTourTarget("benchmark");
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();
@@ -72,25 +110,25 @@ export function Sidebar() {
         </div>
       </div>
       <div className="side-new">
-        <button
-          type="button"
-          className="btn primary wide"
-          disabled={!loaded}
-          title={loaded ? undefined : "Load a model first"}
-          onClick={newChat}
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-          New chat
-        </button>
+        <NewMenu />
       </div>
+      {/* The rail's + and the "+ New ▸ New benchmark" menu item do exactly the
+          same thing: create, then open. Neither is gated on residency. */}
+      <BenchmarkRail
+        benchmarks={benchmarks}
+        activeBenchmarkId={activeBenchmarkId}
+        paneVisible={view === "benchmark"}
+        onOpen={openBenchmark}
+        onCreate={createAndOpenBenchmark}
+        onDelete={deleteBenchmark}
+        headerRef={benchmarksRef}
+      />
       <div className="side-label">Recent</div>
       <div className="sesslist">
         {filtered.length === 0 ? (
           <p className="empty-note">
             {sessions.length === 0
-              ? "No chats yet — load a model, then start one."
+              ? "No chats yet. Start one with + New."
               : "No chats match."}
           </p>
         ) : (

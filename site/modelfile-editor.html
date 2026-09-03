@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Modelfile editor — Remuda</title>
+<meta name="description" content="Form vs. raw, Save vs. Save as…, and Modelfile history: what is snapshotted and what Restore does.">
+<link rel="icon" href="assets/mark.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html">
+      <img src="assets/mark.svg" alt="">
+      <b>Remuda</b>
+    </a>
+    <nav class="sitenav">
+      <a href="index.html">Overview</a>
+      <a href="getting-started.html">Getting started</a>
+      <a href="modelfile-editor.html" class="active">Modelfile editor</a>
+      <a href="comparing.html">Comparing</a>
+      <a href="memory.html">Memory</a>
+      <a href="troubleshooting.html">Troubleshooting</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <div class="eyebrow">Guide</div>
+  <h1>The Modelfile editor</h1>
+  <p class="lede">Opens in the same window as the chat, with the chat list still visible, so tuning
+  never loses your place.</p>
+
+  <h2>Form and raw, side by side</h2>
+  <p>The editor shows two views of the same Modelfile:</p>
+  <ul>
+    <li><b>Form</b> — the common fields, each labelled with the Modelfile keyword it maps to:
+      base model (<code>FROM</code>), system prompt (<code>SYSTEM</code>), temperature and top-p
+      (<code>PARAMETER</code>), context length (<code>PARAMETER num_ctx</code>), stop sequences, and
+      the template.</li>
+    <li><b>Raw</b> — the exact Modelfile text sent to <code>ollama create</code>.</li>
+  </ul>
+  <p>The <b>raw text is the source of truth</b>; the form is a projection of it. Editing a form field
+  regenerates only the lines it owns — comments, <code>LICENSE</code>, <code>ADAPTER</code>,
+  <code>MESSAGE</code> and anything else the form doesn't model round-trip byte for byte. Editing the
+  raw text re-parses into the form. Content the form can't represent is never silently dropped.</p>
+
+  <h2>Save and Save as…</h2>
+  <p><b>Save</b> overwrites the current model's Modelfile. <b>Save as…</b> asks directly for a name
+  and a directory, writes the Modelfile there, and registers a new tuned variant with
+  <code>ollama create &lt;name&gt; -f &lt;path&gt;</code> — optionally quantising on the way in.
+  A tuned variant is a real, editable file on disk, not just an opaque entry in
+  <code>~/.ollama</code>.</p>
+  <p>Either action then stops the running model and reloads it with the new Modelfile — create,
+  unload, warm request — shown as a "stopping → reloading" toast. The reloaded model becomes the
+  loaded model, so any open or new chat uses it immediately.</p>
+  <p><b>Revert</b> discards unsaved edits back to the last-loaded Modelfile.</p>
+
+  <h2>Modelfile history</h2>
+  <p>Every successful save writes a snapshot: the raw text, what changed since the previous snapshot,
+  and whether it came from a Save or a Restore. The history pane shows a timeline on the left and a
+  diff against the previous snapshot on the right.</p>
+  <div class="callout">
+    <p><b>Restore loads a draft — it does not rebuild the model.</b> Clicking Restore on an old
+    snapshot only sets the editor's draft back to that text and switches you to the raw view; it makes
+    no call to Ollama and creates nothing. The model in memory is untouched until you hit
+    <b>Save</b> on the restored draft, same as any other edit.</p>
+  </div>
+  <p>If a Modelfile was hand-edited outside Remuda, the history notes the drift rather than pretending
+  its own record is complete.</p>
+
+  <div class="pager">
+    <a href="getting-started.html">&larr; Getting started</a>
+    <a href="comparing.html">Comparing configurations &rarr;</a>
+  </div>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap">
+    <span>Remuda is MIT-licensed.</span>
+    <a href="https://github.com/magna-nz/remuda">github.com/magna-nz/remuda</a>
+  </div>
+</footer>
+</body>
+</html>

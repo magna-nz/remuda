@@ -13,6 +13,8 @@
 import { useEffect, useState } from "react";
 import "./PullView.css";
 import { useRemuda } from "../ui/state";
+import { PaneHelp, PaneHelpToggle } from "../help/PaneHelp";
+import { Capabilities } from "../ui/Capabilities";
 import type { Model } from "../api/types";
 import { isProbeAvailable, probeModel, type ProbeResult } from "../api/registry";
 import { CATALOG, searchCatalog, type CatalogModel } from "./catalog";
@@ -90,18 +92,10 @@ function CatalogRow({ model, models, disabled, onPull }: CatalogRowProps) {
   const latestInstalled = isInstalled(models, model.name);
   return (
     <div className="regrow">
-      <div className="rt">
+      <div className="regrow-meta">
         <b>{model.name}</b>
         <div>{model.description}</div>
-        {model.capabilities.length > 0 && (
-          <div className="caps">
-            {model.capabilities.map((c) => (
-              <span className="cap" key={c}>
-                {c}
-              </span>
-            ))}
-          </div>
-        )}
+        <Capabilities capabilities={model.capabilities} />
       </div>
       <div className="sizes">
         {model.sizes.map((size) => {
@@ -164,7 +158,25 @@ export function PullView() {
 
   return (
     <section className="pullview" aria-label="Pull models">
-      <div className="eyebrow">Pull a model</div>
+      <div className="eyebrow">
+        Pull a model
+        <PaneHelpToggle paneId="pull" label="About getting models" />
+      </div>
+      <PaneHelp
+        paneId="pull"
+        title="Get models. Download one to run"
+        what="Fetches a model from Ollama's library onto this machine. Nothing here talks to anything but Ollama, and the download is Ollama's, not Remuda's."
+        why="Remuda runs models, it does not ship any. This is where you get one to tune."
+        steps={[
+          <>Search the list, or type an exact name like <code>llama3.2:3b</code>.</>,
+          <>
+            Press <b>Pull</b> and watch the per-layer progress. Big models take a while.
+          </>,
+          <>
+            When it lands, open the model control in the top bar and <b>Load</b> it.
+          </>,
+        ]}
+      />
       <div className="pullbar">
         <input
           className="pull-input"
@@ -187,8 +199,8 @@ export function PullView() {
         </button>
       </div>
       <div className="note-strip">
-        Filters the list as you type. Pull anything by name — <code>llama3.2</code>,{" "}
-        <code>gemma2:9b</code>, or a full URL — even if it isn’t listed below.
+        Filters the list as you type. Pull anything by name, <code>llama3.2</code>,{" "}
+        <code>gemma2:9b</code>, or a full URL. Even if it isn’t listed below.
       </div>
       {probe !== null && (probe.kind === "found" || probe.kind === "missing") && (
         <div className={`probe${probe.kind === "missing" ? " miss" : ""}`} role="status">
@@ -260,7 +272,7 @@ export function PullView() {
         {results.length === 0 ? (
           <div className="noresults">
             Nothing in the bundled catalog matches “{tagInput.trim()}”. If it’s a newer model,
-            the name still pulls — the catalog ships with the app and doesn’t know about it yet.
+            the name still pulls. The catalog ships with the app and doesn’t know about it yet.
           </div>
         ) : (
           results.map((m) => <CatalogRow key={m.name} model={m} models={models} disabled={disableStart} onPull={startPull} />)

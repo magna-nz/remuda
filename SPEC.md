@@ -24,8 +24,8 @@ A calm, local-first desktop app that lets a person:
    **Modelfile** (the base/"OG", or a tuned variant), click **Load**, and
    Remuda loads it in Ollama with a progress bar.
 2. **Chat to test it** — chats live down the left. Each is a saved session
-   that **remembers the model it ran on**; **New chat** opens on the
-   currently loaded model.
+   that **remembers the model it ran on**; **＋ New ▸ New chat** opens one,
+   asking which model only when the answer is ambiguous.
 3. **Tweak the Modelfile in place** — open the Modelfile editor without
    leaving the chat context (the chat list stays put). Edit the system
    prompt and parameters via a friendly form *or* the raw Modelfile.
@@ -33,12 +33,24 @@ A calm, local-first desktop app that lets a person:
    **Save as…** asks for a name and a directory and creates a new tuned
    variant. Either way Remuda **stops the model and reloads it** through
    Ollama so your chats immediately use the new Modelfile.
-5. **Pull new models** from the registry with visible progress.
-6. **Point at an Ollama server** and manage app settings.
+5. **Benchmark a set of prompts** across several configurations at once and
+   read the answers side by side (§5.7).
+6. **Pull new models** from the registry with visible progress.
+7. **Point at an Ollama server** and manage app settings.
 
 **Non-goals (v1):** training/fine-tuning weights, multi-user/remote hosting,
-prompt libraries or eval harnesses, cloud sync, GGUF import UI (deferred —
-§12). Remuda is a *management + tinkering* surface, not an IDE.
+eval harnesses, cloud sync, GGUF import UI (deferred — §12). Remuda is a
+*management + tinkering* surface, not an IDE.
+
+"Prompt libraries" used to sit in that list and no longer honestly can.
+**Benchmark** (§5.7) keeps a saved set of prompts and
+replays them across several configurations, which is a small prompt library
+by any fair reading. It stops short of the next line deliberately: a
+benchmark **never scores an answer**. It puts the lanes side by side, marks
+where they differ, and leaves the judgement to the person reading. Adding a
+grader, a rubric, or an LLM-as-judge is what would make it an eval harness,
+and that remains a non-goal — it would turn a tool you can trust into one
+whose verdicts you would have to audit.
 
 ## 2. Who it's for
 
@@ -72,6 +84,15 @@ reach the server, it is mostly inert and says so plainly (§9).
   brand — the brand is spent only on the primary action and active state.
 - Design tokens live in one place (CSS custom properties in the mockup);
   change the tokens, not scattered literals.
+- **No em dashes in copy the user reads.** Labels, help text, tooltips,
+  empty states, error messages and generated comments use a full stop or a
+  comma instead. Two deliberate exceptions: source comments keep theirs,
+  which is the house voice, and the lone `—` that stands in for a figure
+  nobody measured is a **glyph, not punctuation**, and must stay (§8).
+- **Copy names things the way a user would**, and the same thing keeps the
+  same name everywhere. A field the chips call a Modelfile is labelled
+  Modelfile in the editor above it, never a second word for the same
+  object.
 
 ## 5. Information architecture
 
@@ -81,9 +102,11 @@ reach the server, it is mostly inert and says so plainly (§9).
 ├──────────────┬───────────────────────────────────────────┤
 │ Chats        │ Chat · Modelfile                          │  ← section tabs
 │              │                                            │
-│ + New chat   │  (Chat, the in-context Modelfile editor,   │
-│ ─ Recent     │   Pull, or Settings — the Chats list stays │
-│  Undo a…  ●  │   visible for all of them)                 │
+│ + New     ▾  │  (Chat, the in-context Modelfile editor,   │
+│ ─ BENCHMARKS │   a benchmark, Pull, or Settings — the      │
+│  my prompts  │   Chats list stays visible for all of them) │
+│ ─ Recent     │                                            │
+│  Undo a…  ●  │                                            │
 │  Explain… ○  │                                            │
 │  …           │                                            │
 │ Get Models·⚙ │                                            │
@@ -95,7 +118,8 @@ reach the server, it is mostly inert and says so plainly (§9).
   connection status.
 - **Chats (left):** the saved-session list; a persistent rail that stays
   visible on every surface — Pull and Settings open in the main area beside
-  it, not over the whole window.
+  it, not over the whole window. A **BENCHMARKS** group sits above Recent and
+  opens a benchmark into that same main area (§5.7).
 - **Section tabs:** Chat · Modelfile. Pull and Settings are *not*
   tabs — they open from the Chats footer's **Get Models** button and gear.
 
@@ -117,20 +141,76 @@ The load pane is how a model becomes the *loaded* model.
   re-loads on demand, so the next chat or Load warms the weights again. It's
   unavailable while a reply is streaming (§8) and while the server is
   unreachable; a failure surfaces verbatim in the pane (§9) and the model
-  stays loaded.
+  stays loaded. It names the memory it frees, so the size is visible before
+  the click.
+- **Runtime readout** — while something is in memory, the pane shows what
+  `ollama ps` knows and Remuda used to discard: the **VRAM/RAM split** as a
+  two-segment bar with a `100% GPU` badge, the **context** the runner was
+  started with against the model's maximum, the **total size**, and a live
+  **countdown** to `keep_alive` expiry (*never*, for an infinite one).
+  - The split is the point. A model that fits entirely in VRAM and the same
+    model spilling to system RAM behave like different products, and before
+    this they showed the same green dot. Any spill turns the badge amber and
+    raises a warning naming the cost and the two ways out — a smaller quant,
+    or a lower `num_ctx`.
+  - A compact `100% GPU` chip rides in the top-bar model control, so the
+    answer is visible without opening the pane.
+  - Like Eject, the readout describes **whatever is in memory**, not the
+    pane's current selection — browsing another model doesn't change what is
+    loaded, so it must not change what the readout reports.
+- **Capabilities** — each model lists what the server says it can do
+  (`tools`, `thinking`, `vision`, `embedding`, …), from `/api/show`. The
+  same chips the Pull pane shows for registry models (§5.5), now shown for
+  installed ones, from one shared component.
 
 Source: `GET /api/tags` for the list, `GET /api/ps` for what's loaded.
 Loading = a warm request (`POST /api/generate` with an empty `prompt`, or
 `/api/chat`) with the configured `keep_alive`. Ejecting = the same request
 with `keep_alive: 0`.
 
+**Layer offload (`num_gpu`).** When the fit predictor says a model at this
+context will spill into system RAM, the load pane offers a cap on how many
+transformer layers go to the GPU, sent as `options.num_gpu` on the load. Like
+`num_ctx` it sizes what the runner allocates, so it is load-time only and has
+no place in the per-chat run controls. Unset, it is **omitted from the request
+entirely** rather than sent as `0`, which means "no layers on the GPU" and is
+a real and different instruction. The control hides when the model's layer
+count is unknown, because there is then no honest ceiling to offer.
+
 ## 5.2 Chats (left)
 
-- Each row: the conversation **title**, and **underneath it the model tag**
-  it ran on, with a status dot — **green** if that model is loaded now,
-  **hollow amber + "unloaded"** if not.
-- **＋ New chat** opens an empty session on the **currently loaded** model +
-  Modelfile.
+- Each row is **one line**: a status dot — **green** if the model that chat
+  ran on is loaded now, **hollow amber** if not — then the conversation
+  **title**, then a relative time. Density wins over restating the tag on
+  every row.
+- The **model tag** spells itself out **only under the open chat**. Every
+  other row carries it in the row's tooltip (`gemma-4-31b-coding-q5 —
+  not loaded`) and in screen-reader-only text, so the dot's colour is never
+  the sole carrier of the state.
+- **＋ New** is the rail's primary action and is **never disabled**. It opens
+  a two-item menu — **New chat**, then **New benchmark** — and the item's
+  description says what it will do with the models it can see ("Talk to
+  llama3.1:8b", "Choose from 3 models in memory", "Pick a model to load").
+- **New chat** binds a session to one model for its life, so it needs one. It
+  asks **only when the answer is ambiguous**:
+  - **one resident** — no question; binds to the active model, as before.
+  - **two or more** — a picker of the resident models, with the active one
+    preselected, so `Enter` reproduces the old behaviour exactly.
+  - **none resident** — the installed list, and the button reads **Load and
+    start chat**. §5.1's rule holds: opening the question loads nothing.
+  With models already resident the picker also offers **Load a different
+  model…**, which states that loading another *may* evict one — Ollama
+  decides, and no endpoint reports `OLLAMA_MAX_LOADED_MODELS`, so Remuda
+  claims no number.
+- **New benchmark** **never asks about a model.** A lane is a model *and* a
+  Modelfile, chosen on the benchmark page from every **installed** model, and
+  the weights are only needed at Run (§5.7). It creates and opens, whatever is
+  resident; the rail's `+` beside **BENCHMARKS** does exactly the same thing.
+- Both branches navigate away from the Modelfile editor, so both run §8's
+  unsaved-changes gate — **once, and before anything is committed or loaded.**
+  Refusing it creates no benchmark and loads no weights. Asking afterwards
+  would leave a benchmark nobody wanted, or a multi-gigabyte load nobody got a
+  chat for.
 - Sessions persist and are sorted most-recent first.
 
 ## 5.3 Chat / Test (main)
@@ -146,9 +226,56 @@ with `keep_alive: 0`.
   swaps the session to a different model — the session's identity is its
   model.
 
-Source: `POST /api/chat` with `{ model, messages, stream: true, options, keep_alive }`;
-`done: true` carries `eval_count`/`eval_duration` for tok/s. Cancel = abort
-the request.
+- **Reasoning, folded away.** A model whose capabilities include `thinking`
+  streams its reasoning in `message.thinking`, separate from `content`. It
+  renders in its own muted container *outside* the assistant bubble —
+  machinery, not answer, so copying the reply doesn't drag it along. It is
+  collapsed by default, expanded and live while generating, and never sent
+  back: Ollama does not take reasoning as conversation context. A
+  **think-level control** (`off · low · med · high`) appears in the composer
+  only for thinking-capable models.
+- **Run controls.** A popover overrides sampling for **this chat only** —
+  temperature, top-p, top-k, seed, num-predict, repeat-penalty — sent as
+  `/api/chat`'s `options`. Overrides are per-session, are never written to
+  the Modelfile, and are counted on the pill that opens the popover so they
+  can't be forgotten. **Bake into Modelfile** hands them to the editor
+  (§5.4), which stays the only place a change becomes permanent.
+  - `num_ctx` sits in the same popover but is **not** a sampling knob: it is
+    load-time, so changing it makes Ollama reload the model with a different
+    memory footprint. Because that collides with §5.1's "loading is always
+    the explicit act", it carries a warning that survives closing the
+    popover — a persistent chip in the composer naming the pending reload.
+- **Timings.** After a completed reply: generation tok/s, prompt-eval tok/s,
+  load time, total time, and context used. Prompt-eval rate is the figure
+  that matters when raising `num_ctx`. Servers that report only the two eval
+  fields render the rest as `—`, never as `NaN`.
+- **Images.** For `vision`-capable models the composer accepts attachments by
+  picker, paste or drop. Full base64 goes to the server; only a downscaled
+  thumbnail is persisted — `localStorage` caps around 5 MB, so a restored
+  session shows the thumbnail and says the full image is gone (§6).
+- **Embedding models can't chat.** A model whose capabilities are non-empty
+  and lack `completion` gets an explanatory panel instead of a composer,
+  rather than a composer that fails on the first message. It remains
+  loadable; Remuda just doesn't pretend.
+
+Source: `POST /api/chat` with
+`{ model, messages, stream: true, options, think, keep_alive }`;
+`done: true` carries `eval_count`/`eval_duration` for tok/s, plus
+`prompt_eval_*`, `load_duration` and `total_duration` for the rest of the
+readout. Cancel = abort the request.
+
+**Constrained output (`format`).** A per-chat JSON Schema sent as `format` on
+`/api/chat`, so a reply that does not fit the schema is unreachable rather
+than merely unlikely. Three states: a schema, `json` (valid JSON, no shape),
+and `off` — which omits `format` from the body rather than sending `""`. Each
+reply gets a conformance card under it, recomputed on render and never stored.
+A schema that does not parse is a local error and the send is **refused**,
+rather than made without the constraint that was asked for. Truncation is
+reported as truncation: under `format` a model cannot emit invalid JSON, but
+it can still be cut off when `num_predict` runs out, and naming that cause is
+the difference between a fixable setting and an apparent parse error. It is
+per-chat and never baked: there is no `PARAMETER format`, so there is nothing
+a Modelfile could hold.
 
 ## 5.4 Modelfile editor (in-context) — the core surface
 
@@ -187,6 +314,14 @@ maps to, so the mapping is learnable:
 - **Save as…** — a dialog that **asks directly** for a **name** (`name:tag`)
   and a **directory**, then writes the Modelfile there and registers a new
   **tuned variant** with `ollama create <name> -f <chosen-path>`.
+  - It also offers a **quantisation**, since `ollama create` can quantise on
+    the way in (`-q q4_K_M`). The default is **Keep**, which inherits the
+    base's level and sends no flag at all — passing the current level
+    explicitly is not the same as omitting it, because re-quantising a model
+    to what it already is costs minutes of CPU and degrades it further. The
+    dialog shows the exact command it will run, so the flag is never a
+    surprise. Forking *and* shrinking is the natural next move after the
+    runtime readout (§5.1) shows a model spilling out of VRAM.
 - Either action then **stops the running model and reloads it** with the new
   Modelfile — `ollama create` → unload (`keep_alive: 0`) → warm request —
   shown as a "stopping → reloading" toast. The reloaded model becomes the
@@ -207,6 +342,19 @@ Source: `POST /api/create` (legacy `modelfile` string or the newer structured
 body, whichever the server version accepts; derived from the same raw
 Modelfile). It streams status (`reading model metadata`, `creating new
 layer`, `writing manifest`, `success`).
+
+**The rendered prompt.** A fourth editor segment — `Form · Raw · Prompt ·
+History` — showing the model's `TEMPLATE` beside that template rendered with
+the current chat's content substituted, so the exact string the model receives
+is visible. Without it there is no way to tell "the model ignored the system
+prompt" from "the system prompt never arrived", which is what happens when a
+template does not reference `.System`. The template comes from the `/api/show`
+data already held, so this costs no new request. The renderer is a
+**documented subset** of Go's `text/template` — `if`, `range`, `.System`,
+`.Prompt`, `.Messages`, `.Role`, `.Content`, `.Tools` — and anything outside
+it renders as *"Unsupported template action {{ … }}. Showing the raw
+template."*
+rather than a guess, because a wrong render is worse than an absent one.
 
 ## 5.5 Pull (global)
 
@@ -261,6 +409,126 @@ Source: `POST /api/pull` `{ model, stream: true }`; aggregate
 
 ---
 
+**Help.** Three layers, all dismissible and all local. Every pane carries a
+**?** that opens a short explainer *above* the pane body rather than over it,
+and closing one is remembered; Settings can reopen them all. Jargon is defined
+in place: a dotted-underlined term shows its definition on hover or keyboard
+focus, and the same definitions are listed as a glossary in Settings. Help
+copy names things the way a user would, not the way the code does, and it
+carries no em dashes — full stops or commas instead.
+
+**Guided tour.** A five-step walk through the model control, the Modelfile
+editor, Benchmarks, Format and Prompt, offered once on first run and
+re-runnable from Settings. Each step spotlights the real control it describes
+rather than a picture of it, and Skip is available at every step.
+
+## 5.7 Benchmark (in-context)
+
+A **benchmark** is a saved set of prompts run against several configurations
+at once. A/B Compare (§5.3) answers *"which of these is better for this
+prompt"*; a benchmark asks the same question of a whole prompt set, so the
+answer stops depending on the one example that happened to be on screen.
+
+- A **lane** is one configuration under test: a model plus a Modelfile. Two
+  lanes on two models compare the models; two lanes on the **same** model with
+  different Modelfiles is just as normal, and is how a Modelfile change is
+  read across more than one example.
+- The **lane editor** picks the model and the Modelfile for each lane and adds
+  or removes lanes, up to four. Each lane is a full model load, which is the
+  ceiling's only reason.
+- Lane choices come from every **installed** model and never consult what is
+  resident, so a benchmark is fully configurable with nothing in memory. A
+  benchmark created before any model was picked carries one lane with **no
+  model chosen**; the editor is where that is resolved, and **Run all** stays
+  disabled until every lane has one.
+- The header carries the name, the prompt count and a **lane chip** per
+  configuration — `gemma-4-31b · Original`, `qwen3.8-27b · terse-v2`.
+- The table is **one row per prompt, one column per lane**. Expanding a row
+  word-diffs each lane against the first, which is marked as the reference.
+- Prompts are added from any chat message's ⋯ menu (**Add to benchmark**), on
+  the reply as well as the prompt, or from the **BENCHMARKS** rail group.
+
+**A lane is identified by the tag it loads.** A lane stores the model tag sent
+on the wire and, separately, the Modelfile name shown beside it. The tag is
+the truth: when the two disagree — as they do for a benchmark carried over
+from an earlier build, whose lane may hold a variant's own tag with no
+Modelfile name recorded — the lane is resolved against the installed models by
+its tag, and both the base model and the Modelfile shown are derived from
+whatever that resolves to. A chip that named the base model while the variant
+was the thing being run would credit every answer in the table to the wrong
+configuration, which for a feature whose whole value is knowing which
+configuration produced which answer is the one thing it must not do.
+
+### The run
+
+**Grouped by lane, not by prompt.** Lane 1's model is loaded, every prompt is
+answered against it, and only then is lane 2's model loaded. Interleaving
+would mean a full model load per prompt, which on a 20 GB model is the
+difference between two loads and twenty.
+
+- **One seed for the whole run**, across every lane *and* every prompt.
+  Comparing two lanes on two seeds measures sampling noise, which is the one
+  thing a benchmark must not do. The seed is shown beside the run.
+- **Sequential, and only ever one model resident.** §8's one-generation-at-a-
+  time rule is app-wide, and a benchmark run holds that slot.
+- **Loading is visible**, not hidden: *"Loading qwen3.8-27b (lane 2 of 2)"*
+  rather than a bar that looks hung for a minute. That wait is the honest
+  cost of the feature.
+- A **failed cell is a result**, kept in the table with its cause; the run
+  carries on.
+- **Cancel** keeps every finished cell and marks the run `partial`.
+
+#### The memory check, before anything loads
+
+Because lanes run one at a time, two lanes never have to be resident together
+— "lane A **plus** lane B won't fit" is not a state this feature can reach,
+and summing the lanes would invent a problem. What *can* collide is the model
+you were already chatting to. If **Y** is resident and a lane's model is not
+Y, both are in memory the moment that lane loads. So the check is **pairwise**,
+lane by lane:
+
+    lane.model === Y.tag  →  reuse; nothing loads
+    otherwise             →  Y.measured + lane.predicted > usable ?
+
+**Y is measured, not predicted.** It is resident, so `/api/ps` reports its
+real size — a fact, not an estimate. Only the lane about to load is predicted.
+
+**The context length is observed, not assumed.** KV cache is linear in
+context, and Remuda sends no `num_ctx` for a benchmark, so Ollama chooses —
+recent versions size the context to available memory rather than to a fixed
+default. The prediction therefore uses the context `/api/ps` reports for the
+resident runners (the largest of them, since under-estimating KV is the error
+that costs a wasted load), clamped to what each lane's model was trained for.
+A constant is used only when nothing is resident to observe, which is also the
+case where there is no collision to miss.
+
+- A **collision** opens a dialog before anything loads: **Unload and run** /
+  **Run anyway** / **Cancel**. Unloading does **not** reload Y afterwards —
+  that matches Eject (§7), and a surprise load landing after a long run is
+  nobody's request; the chat reloads it on its next message. When Y is
+  **pinned** (`keep_alive: -1`) the dialog says that unloading clears the pin.
+- A lane that does not fit **even on an empty machine** is named as its own
+  problem. Unloading would not save it, so it is not offered as the fix.
+- **Run anyway** always remains. A prediction is a prediction, and the
+  server's own error is a better answer than Remuda's refusal — a lane that
+  fails to load is a result (above), not the end of the run.
+- **No prediction is a first-class result.** With no host-memory reading, a
+  discrete GPU, or a server whose `model_info` omits the architecture fields,
+  the check reports that it could not be made and **Run is not blocked**. An
+  absent prediction is not a failed one.
+- The same verdicts appear **passively on each lane row** as lanes are edited.
+  They cost no extra request: the architecture fields ride the `POST
+  /api/show` sweep the model list already makes. The row hint can be scrolled
+  past, which is why Run still asks.
+
+### Different is a diff, never a verdict
+
+No lane is scored, no lane is called better, and the table is never ordered by
+anything but the order of the prompts. Remuda shows *where* the answers parted
+company and leaves the judgement to the reader. A grader, a rubric or an
+LLM-as-judge is what would make this an eval harness (§1) — and a tool whose
+verdicts you had to audit is worth less than one that never offers any.
+
 ## 6. Data model (client-side)
 
 ```
@@ -269,12 +537,21 @@ Model {
   family, parameterSize, quantization: string
   sizeBytes, contextLength: number
   isLoaded: boolean       // from /api/ps
+  capabilities: string[]  // from /api/show; [] means "server didn't say"
   base: string | null     // FROM target when it's another local model
   isVariant: boolean      // base !== null
   modelfilePath: string | null
   modifiedAt: datetime
 }
 // Modelfile picker grouping:  base → [ Original(base), ...tuned variants ]
+
+RunningModel {            // one entry per model in memory, from /api/ps
+  tag: string
+  sizeBytes: number       // total held (VRAM + system RAM)
+  sizeVramBytes: number   // 0 ⇒ running entirely on CPU
+  contextLength: number | null
+  expiresAt: datetime | null   // null ⇒ infinite keep_alive
+}
 
 ModelfileDraft {
   from, system: string
@@ -290,8 +567,70 @@ ChatSession {
   model: string           // effective tag it ran on — remembered across unloads
   messages: Message[]
   updatedAt: datetime
+  options?: RunOptions    // per-session sampling overrides (§5.3)
+  think?: "off" | "low" | "medium" | "high"
+}
+
+Message {
+  role: "system" | "user" | "assistant"
+  content: string
+  thinking?: string       // assistant reasoning; never merged into content,
+                          // never sent back to the server
+  images?: string[]       // raw base64 — IN MEMORY ONLY, see below
+  imageThumbs?: string[]  // small data: URLs — the only image data persisted
+}
+
+Benchmark {               // §5.7
+  id, name: string
+  prompts: { id, text }[]
+  lanes: Lane[]           // 1..4 configurations, in the order shown and run
+  runs: BenchmarkRun[]    // newest first, capped at 6
+}
+
+Lane {
+  id: string
+  model: string           // the tag actually loaded and sent to — the truth
+  modelfile: string | null   // display only; null means the base model
+}
+
+BenchmarkRun {
+  id, ranAt: datetime
+  seed: number            // pinned across every lane AND every prompt
+  partial: boolean        // cancelled before every cell was filled
+  cells: Cell[]
+}
+
+Cell {                    // one lane's answer to one prompt
+  promptId, laneId: string
+  content: string
+  thinking?: string
+  stats?: { evalCount: number, tokPerSec: number | null, ms: number }
+  error?: string          // a failed cell is still a result; both may be set
 }
 ```
+
+**Sessions persist to `localStorage`**, which caps around 5 MB — small enough
+that a couple of full-resolution attachments would exceed it and silently
+break saving for every session, not just the one with the images. So
+`images` is dropped on the way to storage and only `imageThumbs` survives. A
+restored session therefore shows its thumbnails and says plainly that the
+full images are gone, rather than appearing intact and failing on re-send.
+
+**Benchmarks persist under `remuda.benchmarks.v1`.** Runs are the bulk of that
+payload — every lane's full answer to every prompt — so answers are trimmed
+before storage and the run cap is lower than the history cap elsewhere.
+Benchmarks written by the earlier single-configuration build are read once
+from `remuda.benches.v1` and converted, each becoming a benchmark with one
+lane, and that key is **left in place rather than deleted** so a downgrade
+still finds its data. The conversion is keyed on the old id, so it is
+idempotent and never duplicates or overwrites a benchmark the user has since
+edited.
+
+The storage key stays `remuda.sessions.v1` across this change: every field
+added here is optional, so sessions written by an earlier build load
+unchanged. Validation coerces rather than rejects — a malformed *optional*
+field is dropped and the session survives; only a broken required field
+(id, title, model, messages, updatedAt) discards a session.
 
 ## 7. Ollama API surface used
 
@@ -299,15 +638,48 @@ ChatSession {
 | --- | --- | --- |
 | Health / version | `GET /api/version` | no |
 | List installed | `GET /api/tags` | no |
-| List loaded | `GET /api/ps` | no |
-| Model detail | `POST /api/show` | no |
-| Load a model | `POST /api/generate` empty prompt (or `/api/chat`) + `keep_alive` | no |
+| List loaded + runtime | `GET /api/ps` | no |
+| Model detail + capabilities | `POST /api/show` | no |
+| Load a model | `POST /api/generate` empty prompt (or `/api/chat`) + `keep_alive` (+ `options.num_gpu`) | no |
 | Unload a model | `POST /api/generate` with `keep_alive: 0` | no |
-| Create / save model | `POST /api/create` (`-f <chosen dir>`) | yes (status) |
-| Chat / test | `POST /api/chat` | yes (tokens) |
+| Create / save model | `POST /api/create` (+ `quantize`) | yes (status) |
+| Chat / test | `POST /api/chat` (+ `think`, `options`, `images`, `format`) | yes (tokens) |
 | Pull | `POST /api/pull` | yes (progress) |
 | Delete | `DELETE /api/delete` | no |
 | Copy / duplicate | `POST /api/copy` | no |
+
+Two of those rows carry more than their endpoint suggests, and the detail is
+load-bearing:
+
+- **`GET /api/ps`** is read in full, not reduced to "is it loaded". Its
+  `size`, `size_vram`, `context_length` and `expires_at` are the `SIZE`,
+  `PROCESSOR`, `CONTEXT` and `UNTIL` columns of `ollama ps`, and they drive
+  the runtime readout (§5.1). Every field past the tag is optional on the
+  wire — older servers omit them — so each has a floor: missing sizes read
+  as `0`, missing context and expiry as `null`. Ollama writes
+  `expires_at: "0001-01-01T00:00:00Z"` (Go's zero time) for an infinite
+  `keep_alive`; that is not an expiry a UI should render, so year 1 becomes
+  `null` and displays as *never*.
+
+- **`POST /api/show`** additionally yields `capabilities` — `completion`,
+  `tools`, `vision`, `thinking`, `embedding`, … Kept as free strings rather
+  than a closed union: Ollama adds capabilities between releases, and a
+  narrow type would fail to compile against a server newer than the build.
+  An empty list means "the server didn't say", which is **not** the same as
+  "this model can do nothing" — every gate keyed off capabilities is
+  one-sided for that reason (§8).
+
+`think` has **three** wire states, not two. Ollama declares it
+`omitempty` on a nil-distinguishable type, so *absent* and `false` are
+different values: absent means "use the model's default", and that default
+is reasoning **on** for models Ollama treats as always-thinking. So Remuda
+omits `think` only when nothing was ever chosen, and sends an explicit
+`false` when the user selects **off** — otherwise the control would not do
+the one thing it is named for. Levels go verbatim.
+
+`options` keys that aren't set are omitted rather than sent as `null`, and
+assistant `thinking` is stripped from outbound history — Ollama does not
+take reasoning back as conversation context.
 
 All Ollama requests are same-origin to the configured loopback host. Default
 Ollama needs no auth; a remote host requiring one would need an auth header
@@ -332,9 +704,37 @@ build-time catalog scrape is not part of the shipped app.
   Settings toggle is on (default on).
 - **Unsaved editor changes** prompt before navigating away.
 - **`num_ctx` guardrail:** slider max reflects the model's trained context;
-  exceeding it is allowed but warns.
+  exceeding it is allowed but warns. Changing it from the chat's run
+  controls additionally warns that the next message **reloads the model**
+  (§5.3) — it is a load-time parameter, not a sampling one.
+- **Capability gates fail toward the safe answer, which is not the same
+  answer for every gate.** An empty `capabilities` list means the server
+  didn't report — an older Ollama, or a path that never called
+  `/api/show` — not that the model can do nothing.
+  - **The composer is one-sided**: it hides only when the list is
+    **non-empty and lacks** `completion`. An empty list must degrade to a
+    working plain chat, because the cost of getting this backwards is a
+    user silently unable to chat at all.
+  - **Additive controls need positive evidence**: the think-level control
+    and the image attach button appear only when `thinking` / `vision` is
+    actually listed. Offering them on an unreported model would send
+    requests the server rejects, and the cost of omitting them is only a
+    feature the user can still reach another way.
+- **Run-control overrides are per-session and never implicit.** They are
+  counted on the pill that opens the popover and named under each reply they
+  affected; the Modelfile stays the source of truth until the user
+  deliberately bakes them in (§5.4).
 - **Concurrency:** one streamed generation at a time; pulls run in the
-  background.
+  background. A benchmark run (§5.7) holds that single slot for its whole
+  duration, and Run all says so rather than refusing silently when a chat or
+  a compare already has it.
+- **A benchmark run pins one seed** across every lane and every prompt, and
+  loads exactly one model per lane rather than one per prompt (§5.7).
+- **Different is a diff, never a verdict.** Nothing in Remuda scores a model's
+  answer or ranks one configuration above another (§5.7).
+- **A figure that cannot be read honestly is absent, never zero.** A missing
+  token rate, duration or memory split shows an em dash; it is never rendered
+  as `0`, which would read as a measurement.
 
 ## 9. Disconnected / error states
 
