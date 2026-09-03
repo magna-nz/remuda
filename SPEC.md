@@ -394,7 +394,10 @@ Source: `POST /api/pull` `{ model, stream: true }`; aggregate
 
 ## 5.6 Settings (global)
 
-- **Ollama server** URL + **Test connection**.
+- **Ollama server** URL + **Test connection** + **Apply**. The URL is
+  **persisted** in `localStorage` and used for **all** API calls. *Test*
+  probes the draft URL without committing; *Apply* commits it and
+  immediately reconnects.
 - **Connection** readout (version, model count, disk used).
 - **Keep models loaded** — `keep_alive` (5 min / 30 min / forever).
 - **Models directory** — read-only, with *Reveal*. Defaults to

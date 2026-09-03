@@ -16,7 +16,7 @@ import { Fragment, useState } from "react";
 import "./Settings.css";
 import { useRemuda } from "./state";
 import { createClient } from "../api/client";
-import { DEFAULT_BASE_URL, type KeepAlive } from "../api/types";
+import type { KeepAlive } from "../api/types";
 import { openExternal } from "../api/host";
 import { GLOSSARY } from "../help/glossary";
 import { reopenAll } from "../help/persistence";
@@ -48,19 +48,25 @@ const DOC_LINKS: DocLink[] = [
 ];
 
 export function Settings() {
-  const { status, models, keepAlive, setKeepAlive, confirmDeleteModel, setConfirmDeleteModel } = useRemuda();
-  const [serverUrl, setServerUrl] = useState(DEFAULT_BASE_URL);
+  const { status, models, keepAlive, setKeepAlive, confirmDeleteModel, setConfirmDeleteModel, serverUrl, setServerUrl } = useRemuda();
+  const [draftUrl, setDraftUrl] = useState(serverUrl);
   const [testResult, setTestResult] = useState<TestResult>("idle");
+  const urlChanged = draftUrl !== serverUrl;
   const [docsError, setDocsError] = useState<string | null>(null);
 
   async function handleTest() {
     setTestResult("testing");
     try {
-      const result = await createClient(serverUrl).version();
+      const result = await createClient(draftUrl).version();
       setTestResult(result.connected ? "healthy" : "unreachable");
     } catch {
       setTestResult("unreachable");
     }
+  }
+
+  function handleApply() {
+    setServerUrl(draftUrl);
+    setTestResult("idle");
   }
 
   function handleOpenDoc(url: string) {
@@ -83,14 +89,19 @@ export function Settings() {
           </div>
           <input
             className="input"
-            value={serverUrl}
-            onChange={(e) => setServerUrl(e.target.value)}
+            value={draftUrl}
+            onChange={(e) => setDraftUrl(e.target.value)}
             spellCheck={false}
             aria-label="Ollama server URL"
           />
           <button type="button" className="btn sm" onClick={() => void handleTest()}>
             Test
           </button>
+          {urlChanged && (
+            <button type="button" className="btn sm" onClick={handleApply}>
+              Apply
+            </button>
+          )}
           {testResult !== "idle" && (
             <span className={`test-result ${testResult}`} role="status">
               {testResult === "testing" ? "Testing…" : testResult === "healthy" ? "Healthy" : "Unreachable"}

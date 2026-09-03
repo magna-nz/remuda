@@ -21,6 +21,7 @@ import {
   type ReactNode,
 } from "react";
 import { createClient } from "../api/client";
+import { DEFAULT_BASE_URL } from "../api/types";
 import type {
   ChatFormat,
   ChatMessage,
@@ -113,9 +114,11 @@ const SETTINGS_STORAGE_KEY = "remuda.settings.v1";
 interface PersistedSettings {
   /** "Confirm before deleting a model" (SPEC §5.6, §8): also gates Save-over-existing. */
   confirmDeleteModel: boolean;
+  /** Ollama server URL (SPEC §5.6): persisted, used for all API calls. */
+  serverUrl: string;
 }
 
-const DEFAULT_SETTINGS: PersistedSettings = { confirmDeleteModel: true };
+const DEFAULT_SETTINGS: PersistedSettings = { confirmDeleteModel: true, serverUrl: DEFAULT_BASE_URL };
 
 function loadSettings(): PersistedSettings {
   try {
@@ -123,8 +126,15 @@ function loadSettings(): PersistedSettings {
     if (raw === null) return DEFAULT_SETTINGS;
     const parsed: unknown = JSON.parse(raw);
     if (typeof parsed !== "object" || parsed === null) return DEFAULT_SETTINGS;
-    const value = (parsed as Record<string, unknown>).confirmDeleteModel;
-    return { confirmDeleteModel: typeof value === "boolean" ? value : DEFAULT_SETTINGS.confirmDeleteModel };
+    const obj = parsed as Record<string, unknown>;
+    return {
+      confirmDeleteModel: typeof obj.confirmDeleteModel === "boolean"
+        ? obj.confirmDeleteModel
+        : DEFAULT_SETTINGS.confirmDeleteModel,
+      serverUrl: typeof obj.serverUrl === "string" && obj.serverUrl.trim() !== ""
+        ? obj.serverUrl
+        : DEFAULT_SETTINGS.serverUrl,
+    };
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -294,6 +304,9 @@ export interface RemudaContextValue {
   /** "Confirm before deleting a model" (SPEC §5.6): persisted, default on. */
   confirmDeleteModel: boolean;
   setConfirmDeleteModel: (value: boolean) => void;
+  /** Ollama server URL (SPEC §5.6): persisted, used for all API calls. */
+  serverUrl: string;
+  setServerUrl: (url: string) => void;
   view: View;
   setView: (view: View) => void;
   loadPaneOpen: boolean;
@@ -715,7 +728,8 @@ export function RemudaProvider({
   client: injectedClient,
   pollIntervalMs = 5000,
 }: RemudaProviderProps) {
-  const client = useMemo(() => injectedClient ?? createClient(), [injectedClient]);
+  const [serverUrl, setServerUrlState] = useState(() => loadSettings().serverUrl);
+  const client = useMemo(() => injectedClient ?? createClient(serverUrl), [injectedClient, serverUrl]);
   const [status, setStatus] = useState<ServerStatus>({ connected: false, version: null });
   const [checked, setChecked] = useState(false);
   const [groups, setGroups] = useState<ModelGroup[]>([]);
@@ -730,8 +744,12 @@ export function RemudaProvider({
   );
   const setConfirmDeleteModel = useCallback((value: boolean) => {
     setConfirmDeleteModelState(value);
-    saveSettings({ confirmDeleteModel: value });
-  }, []);
+    saveSettings({ confirmDeleteModel: value, serverUrl });
+  }, [serverUrl]);
+  const setServerUrl = useCallback((url: string) => {
+    setServerUrlState(url);
+    saveSettings({ confirmDeleteModel, serverUrl: url });
+  }, [confirmDeleteModel]);
   const [view, setViewState] = useState<View>("chat");
   // Callbacks declared before setView (newChat/openSession) also need the
   // current view without taking it as a dep; a ref avoids both the TDZ and
@@ -2127,6 +2145,8 @@ export function RemudaProvider({
     setKeepAlive,
     confirmDeleteModel,
     setConfirmDeleteModel,
+    serverUrl,
+    setServerUrl,
     view,
     setView,
     loadPaneOpen,
@@ -2197,7 +2217,8 @@ export function RemudaProvider({
     cancelBenchmarkRun,
   }), [
     client, status, checked, models, groups, running, loaded, activeModel, keepAlive,
-    confirmDeleteModel, setConfirmDeleteModel, view, setView, loadPaneOpen,
+    confirmDeleteModel, setConfirmDeleteModel, serverUrl, setServerUrl,
+    view, setView, loadPaneOpen,
     openLoadPane, closeLoadPane, refreshModels, load, unload, unloadAll, setKept,
     checkHealth, sessions,
     activeSessionId, streamingSessionId, streamError, errorsByMessage, lastStats, statsByMessage,

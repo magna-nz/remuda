@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DOCS_BASE_URL, Settings } from "./Settings";
 import { RemudaProvider } from "./state";
 import { FakeClient } from "./test/FakeClient";
+import { DEFAULT_BASE_URL } from "../api/types";
 import { GLOSSARY } from "../help/glossary";
 import { isPaneHelpOpen, setPaneHelpOpen } from "../help/persistence";
 import { isTourRunning, stopTour } from "../tour/controller";
@@ -128,6 +129,7 @@ describe("Settings", () => {
     expect(toggle).toHaveAttribute("aria-checked", "false");
     expect(JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? "{}")).toEqual({
       confirmDeleteModel: false,
+      serverUrl: DEFAULT_BASE_URL,
     });
     unmount();
 
@@ -141,6 +143,54 @@ describe("Settings", () => {
       "aria-checked",
       "false",
     );
+  });
+
+  it("Apply button appears only when the draft differs from the active URL", () => {
+    const client = new FakeClient({ connected: true });
+    render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    // Initially, the draft matches the committed URL — no Apply button.
+    expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
+
+    // Edit the URL — Apply should appear.
+    fireEvent.change(screen.getByLabelText("Ollama server URL"), {
+      target: { value: "http://10.0.0.5:11434" },
+    });
+    expect(screen.getByRole("button", { name: "Apply" })).toBeInTheDocument();
+
+    // Click Apply — it should disappear and the URL should be persisted.
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(screen.queryByRole("button", { name: "Apply" })).not.toBeInTheDocument();
+    const stored = JSON.parse(window.localStorage.getItem(SETTINGS_KEY) ?? "{}") as Record<string, unknown>;
+    expect(stored.serverUrl).toBe("http://10.0.0.5:11434");
+  });
+
+  it("server URL persists and is loaded on remount (SPEC §5.6)", () => {
+    const client = new FakeClient({ connected: true });
+    const { unmount } = render(
+      <RemudaProvider client={client} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+
+    // Change and apply a non-default URL.
+    fireEvent.change(screen.getByLabelText("Ollama server URL"), {
+      target: { value: "http://remote:11434" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    unmount();
+
+    // A fresh mount should load the persisted URL into the input.
+    render(
+      <RemudaProvider client={new FakeClient({ connected: true })} pollIntervalMs={1_000_000}>
+        <Settings />
+      </RemudaProvider>,
+    );
+    expect(screen.getByLabelText("Ollama server URL")).toHaveValue("http://remote:11434");
   });
 });
 
